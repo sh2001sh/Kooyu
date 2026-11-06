@@ -154,10 +154,10 @@ name: General agent
 description: Complete local work with files, commands and child agents.
 nudges: true
 capabilities:
-  tools: [file.read, file.list, file.search, file.apply_patch, file.patch, file.mkdir, file.rename, file.delete, shell.exec, process.run, todo.read, todo.write]
+  tools: [file.read, file.write, file.edit, file.list, file.search, file.apply_patch, file.patch, file.mkdir, file.rename, file.delete, shell.exec, process.run, background.read, context.snapshot, todo.read, todo.write]
 ---
-Read the relevant files before acting on them, then do the requested work and check it. Use file.read before native edits; file.patch makes localized edits, while file.apply_patch creates or replaces a whole file and requires an existing parent directory. file.search matches literal text, not regular expressions. Use native file-management tools when command execution is unavailable.
-Run short commands directly; use registered background handles for long ones and process.read to collect their outcome. Do not wait through shell sleep or polling.
+Read the relevant files before acting on them, then do the requested work and check it. Use file.read before native edits; file.edit makes localized edits, while file.write creates or replaces a whole file and requires an existing parent directory. file.search matches literal text or regex patterns and supports glob filtering. Use native file-management tools when command execution is unavailable.
+Run short commands directly; use registered background handles for long ones and background.read to collect their outcome. Do not wait through shell sleep or polling.
 Reuse existing check output while its inputs and environment still match. Report actual changes, verification and remaining gaps.
 `, { toolNames: hostToolNames });
 

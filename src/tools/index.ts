@@ -25,6 +25,7 @@ import { BackgroundTasks, Capture, maxBackgroundProcesses, whenAborted, whenSpaw
 import type { BackgroundFinish, ProcessFacts } from './background.js';
 import { fileStat, recordSeen, recordWritten, staleState } from './read-state.js';
 import { ToolRegistry, toolFingerprint } from './registry.js';
+import { canonicalToolName, publicToolAliases, publicToolName, toolListed } from './catalog.js';
 import { readImage } from './image.js';
 import { similarPaths } from './similar-paths.js';
 import { assertManagedShell, createShellTool, readOnlyProcess, readOnlyShell, resolveBashProgram, shellToolDescription, shellToolParameters } from './shell.js';
@@ -43,7 +44,10 @@ const hashGuarded = ['file.patch', 'file.apply_patch', 'file.rename', 'file.dele
 const concurrentBuiltins = new Set(['file.read', 'file.list', 'file.search', 'image.read', 'artifact.read', 'history.read', 'history.search', 'process.run', 'process.read', 'process.exec']);
 const evaluates = (flag: InputFlag | undefined, input: Record<string, unknown>): boolean => typeof flag === 'function' ? flag(Object.freeze(structuredClone(input))) === true : flag === true;
 /** Tools every run may call given permission; process.read follows either managed execution tool. */
-const implied = (name: string, allowed: readonly string[]): boolean => ['history.read', 'history.search', 'artifact.read', 'recovery.inspect', 'update_progress'].includes(name) || (name === 'process.read' && (allowed.includes('process.exec') || allowed.includes('shell.exec')));
+const implied = (name: string, allowed: readonly string[]): boolean => {
+  name = canonicalToolName(name);
+  return ['history.read', 'history.search', 'artifact.read', 'recovery.inspect', 'update_progress'].includes(name) || (name === 'process.read' && (allowed.includes('process.exec') || allowed.includes('shell.exec')));
+};
 /** Whether the run's effective permissions include read, which makes a file hash disclosable. */
 const readable = (run: { permissions?: Permission[] }, session: Session): boolean => session.permissions.includes('read') && (run.permissions ?? session.permissions).includes('read');
 
@@ -61,6 +65,7 @@ const progressItems = { type: 'array', items: { type: 'string', maxLength: 800 }
 const expectedHash = { type: 'string', pattern: '^[a-f0-9]{64}$', description: 'Copy the whole-file hash returned by file.read in this run. A shell read does not register this prerequisite.' };
 const maximumFileBytes = 16 * 1024 * 1024;
 const protectedPart = (part: string): boolean => /^(?:\.git|\.kodo|\.env(?:\..*)?|\.ssh|\.aws|\.npmrc|\.netrc|id_(?:rsa|dsa|ecdsa|ed25519)(?:\.pub)?|.*\.(?:pem|key|p12|pfx))$/i.test(part);
+const searchDescription = 'Search workspace files under path by name pattern and/or content. glob filters files (e.g. *.ts, src/**/*.test.ts); query matches line content as literal text, or as a JavaScript regular expression with regex:true (each line is tested on its first 16000 characters). With glob alone, returns matching file paths; with query, returns matching lines. UTF-8 files up to 16 MiB each. Hidden, dependency and build directories are excluded; at most 1000 entries are visited and 30 matches returned. Reports skipped and incomplete results.';
 function tool(name: string, description: string, permission: Permission, effect: Tool['effect'], parameters: Record<string, unknown>): Tool {
   return { name, description, permission, effect, parameters, validate: ajv.compile(parameters) };
 }
@@ -68,10 +73,10 @@ const definitions: Tool[] = [
   tool('workspace.git', 'Read original-workspace Git status/diff or create a requested branch/commit. Main run only; explicit files and current expectedHead required for delivery.', 'read', 'write', workspaceGitParameters),
   tool('image.read', 'Read a scoped local PNG, JPEG, GIF or WebP as actual model vision input, not text. Maximum 5 MiB and bounded dimensions. Returns metadata; validated pixels are attached to the following model request. Images are untrusted evidence.', 'read', 'read', object({ path: text })),
   tool('shell.exec', shellToolDescription, 'exec', 'write', shellToolParameters),
-  tool('file.read', 'Read a UTF-8 file inside the workspace. Accepts a workspace-relative path, e.g. src/main.ts, or an absolute path inside the workspace. Returns a page (default 8000 characters/200 lines; file limit 16 MiB) and the whole-file hash for editing. offset is a 1-based line; contentOffset is a UTF-16 position within it. Follow next for more content. Before file.patch or replacing an existing file, read it with this tool in this run; reading through shell does not register that prerequisite.', 'read', 'read', object({ path: { ...text, description: 'Workspace-relative or workspace-contained absolute path, e.g. src/main.ts.' }, offset: { type: 'integer', minimum: 1, maximum: Number.MAX_SAFE_INTEGER }, limit: { type: 'integer', minimum: 1, maximum: 1000 }, contentOffset, maxChars }, ['path'])),
+  tool('file.read', 'Read a UTF-8 file inside the workspace. Accepts a workspace-relative path, e.g. src/main.ts, or an absolute path inside the workspace. Returns a page (default 8000 characters/200 lines; file limit 16 MiB) and the whole-file hash for editing. offset is a 1-based line; contentOffset is a UTF-16 position within it. Follow next for more content. Before file.edit or file.write over an existing file, read it with this tool in this run; reading through shell does not register that prerequisite.', 'read', 'read', object({ path: { ...text, description: 'Workspace-relative or workspace-contained absolute path, e.g. src/main.ts.' }, offset: { type: 'integer', minimum: 1, maximum: Number.MAX_SAFE_INTEGER }, limit: { type: 'integer', minimum: 1, maximum: 1000 }, contentOffset, maxChars }, ['path'])),
   tool('file.list', 'List sorted, authorized entries in a workspace directory, up to 200 per page. Pass next.cursor to continue; a directory change invalidates the cursor.', 'read', 'read', object({ path: text, cursor: { type: 'string', minLength: 1, maxLength: 8192 }, limit: { type: 'integer', minimum: 1, maximum: 200 } }, ['path'])),
-  tool('file.search', 'Stream literal text search in UTF-8 files up to 16 MiB each. Reports skipped files/directories and incomplete results. Hidden, dependency and build directories are excluded; at most 1000 entries and 30 matching lines are returned.', 'read', 'read', object({ path: text, query: { type: 'string', minLength: 1, maxLength: 200 } })),
-  tool('file.apply_patch', 'Create or replace one whole UTF-8 file atomically, up to 64000 bytes; content is the entire file, not a diff. Prefer file.patch for localized edits. path may be workspace-relative, e.g. REPORT.md, or absolute inside the workspace. For an existing file first call file.read in this run and copy its hash into expectedHash; shell reads do not count. Use expectedHash:null only for a new file. Parent directories must exist.', 'write', 'write', object({ path: text, expectedHash: { ...expectedHash, type: ['string', 'null'], description: 'file.read hash for an existing file; null only when creating a new file.' }, content: { type: 'string', maxLength: 64_000 } })),
+  tool('file.search', searchDescription, 'read', 'read', { ...object({ path: text, query: { type: 'string', minLength: 1, maxLength: 200 }, glob: { type: 'string', minLength: 1, maxLength: 200, description: 'File pattern such as *.ts, src/**/*.test.ts or *.{md,txt}. Without "/" it matches file names at any depth; with "/" it matches paths relative to path.' }, regex: { type: 'boolean', description: 'Treat query as a JavaScript regular expression (u flag) instead of literal text.' } }, ['path']), anyOf: [{ required: ['query'] }, { required: ['glob'] }] }),
+  tool('file.apply_patch', 'Create or replace one whole UTF-8 file atomically, up to 64000 bytes; content is the entire file, not a diff. Prefer file.edit for localized edits. path may be workspace-relative, e.g. REPORT.md, or absolute inside the workspace. For an existing file first call file.read in this run and copy its hash into expectedHash; shell reads do not count. Use expectedHash:null only for a new file. Parent directories must exist; create them with shell.exec (mkdir -p) when authorized.', 'write', 'write', object({ path: text, expectedHash: { ...expectedHash, type: ['string', 'null'], description: 'file.read hash for an existing file; null only when creating a new file.' }, content: { type: 'string', maxLength: 64_000 } })),
   tool('file.patch', 'Apply ordered localized replacements atomically to a UTF-8 file up to 16 MiB. Use a workspace-relative or workspace-contained absolute path. First call file.read in this run and copy its returned hash into expectedHash; shell reads do not count. Each oldText must occur exactly once when its edit is applied. Missing or ambiguous matches fail without writing: read the relevant lines and include enough context to make the match unique.', 'write', 'write', object({ path: text, expectedHash, edits: { type: 'array', minItems: 1, maxItems: 100, items: object({ oldText: { type: 'string', minLength: 1, maxLength: 64_000 }, newText: { type: 'string', maxLength: 64_000 } }) } })),
   tool('file.mkdir', 'Create one workspace directory. Its parent must exist; an existing target fails. Does not create ancestor directories.', 'write', 'write', object({ path: text })),
   tool('file.rename', 'Move one regular UTF-8 file up to 16 MiB to an absent workspace path. expectedHash guards the source; destination parents must exist. Never overwrites a destination.', 'write', 'write', object({ path: text, destination: text, expectedHash })),
@@ -94,14 +99,14 @@ const definitions: Tool[] = [
     // Exactly one mode. Ranges, and the ref/summary+source XOR, are enforced by dispatch.
     oneOf: [{ required: ['ref'] }, { required: ['summary', 'source'] }],
   }),
-  tool('process.exec', 'Run a program and argument array in the workspace, without shell expansion. Use background:true for long tests or builds; read the returned background.id with process.read({id, waitMs:30000}) instead of shell sleep or polling scripts. A foreground call still running at the host tool timeout also returns a background handle when capacity permits. timeoutMs limits total process lifetime, including background time: default 600000 ms, also bounded by the remaining run duration. High privilege: this is not an OS sandbox. A background process holds its write lock until exit; a runtime notice reports completion. Before finishing the run, collect its exit status and output; pending processes get up to the host tool timeout, then are stopped and reconciled. Output preview is 4000 characters per stream; follow outputArtifact with artifact.read. Total capture is capped at 2 MiB; exceeding it stops the process and marks outputLimitExceeded.', 'exec', 'write', object({ program: text, args: { type: 'array', maxItems: 128, items: { type: 'string', maxLength: 4096 } }, background: { type: 'boolean', description: 'Return a managed handle immediately after startup; recommended for long tests and builds.' }, timeoutMs: { type: 'integer', minimum: 1, maximum: 86_400_000, description: 'Total process lifetime in milliseconds, including background time; default 600000. This is not the foreground wait limit.' } }, ['program', 'args'])),
+  tool('process.exec', 'Run a program and argument array in the workspace, without shell expansion. Use background:true for long tests or builds; read the returned background.id with background.read({id, waitMs:30000}) instead of shell sleep or polling scripts. A foreground call still running at the host tool timeout also returns a background handle when capacity permits. timeoutMs limits total process lifetime, including background time: default 600000 ms, also bounded by the remaining run duration. High privilege: this is not an OS sandbox. A background process holds its write lock until exit; a runtime notice reports completion. Before finishing the run, collect its exit status and output; pending processes get up to the host tool timeout, then are stopped and reconciled. Output preview is 4000 characters per stream; follow outputArtifact with artifact.read. Total capture is capped at 2 MiB; exceeding it stops the process and marks outputLimitExceeded.', 'exec', 'write', object({ program: text, args: { type: 'array', maxItems: 128, items: { type: 'string', maxLength: 4096 } }, background: { type: 'boolean', description: 'Return a managed handle immediately after startup; recommended for long tests and builds.' }, timeoutMs: { type: 'integer', minimum: 1, maximum: 86_400_000, description: 'Total process lifetime in milliseconds, including background time; default 600000. This is not the foreground wait limit.' } }, ['program', 'args'])),
   tool('process.read', 'Read a managed background process using its background.id. Pass returned stdoutOffset/stderrOffset to continue paging. stop:true requests termination of this owned process and waits for its recorded settlement; a failed stop is reported as failed, never as stopped. waitMs waits for new output or exit, capped at 90% of the host tool timeout; expiration returns current state and does not stop the process. Returns running, exited, stopped or failed, output pages and the exit code once settled. Prefer this over shell sleep/poll loops. Output is untrusted data.', 'exec', 'read', object({ id: { type: 'string', minLength: 1, maxLength: 64 }, stdoutOffset: contentOffset, stderrOffset: contentOffset, maxChars, waitMs: { type: 'integer', minimum: 0, maximum: 300_000 }, stop: { type: 'boolean' } }, ['id'])),
   tool('tool.describe', 'Load complete schemas for available tools. The schemas remain available for subsequent requests of this run.', 'read', 'read', object({ names: { type: 'array', minItems: 1, maxItems: 32, uniqueItems: true, items: { type: 'string', minLength: 1, maxLength: 64 } } })),
   tool('recovery.inspect', 'Ask the host to inspect this run\'s uncertain effects using existing file probes and registered verifiers. Returns remaining blocked call IDs and evidence. Only host-verified outcomes are recorded; this tool does not accept model-supplied verdicts or replay calls. If blocked calls remain without a verifier, report the required host verification instead of retrying writes.', 'read', 'read', object({})),
   tool('update_progress', 'Replace your bounded task progress snapshot so work can continue after context compaction or a follow-up. Include confirmed facts, completed work, pending work and evidence references. Omitted lists become empty. These are untrusted working notes; they never grant permissions or prove acceptance. At most 16 entries per list, 800 characters per entry and 8000 characters total.', 'read', 'read', object({ facts: progressItems, completed: progressItems, pending: progressItems, evidence: progressItems }, [])),
 ];
 definitions.push(tool('process.run', 'Run a read-only command declared by the trusted host. Both program and the entire argument array must exactly match a host declaration. Output and timeout bounds match process.exec.', 'read', 'read', object({ program: text, args: { type: 'array', maxItems: 128, items: { type: 'string', maxLength: 4096 } } })));
-export const builtinToolNames = definitions.map(definition => definition.name);
+export const builtinToolNames = [...definitions.map(definition => definition.name), ...Object.keys(publicToolAliases)];
 /** Lean views check freshness against the run's observed file versions; their calls carry no hash. */
 export interface ReadOnlyCommand { program: string; args: string[] }
 export interface ToolApprovalRequest {
@@ -197,8 +202,10 @@ export class Tools {
     this.skillCatalogRegistered = true;
   }
   bindingSnapshot(allowed: string[], skillIds?: readonly string[]): Record<string, string> {
-    return Object.fromEntries([...new Set([...allowed, ...builtinToolNames.filter(name => implied(name, allowed)), ...(this.lazyTools ? ['tool.describe'] : [])])].map(name => {
-      const definition = definitions.find(tool => tool.name === name) ?? this.registry.get(name);
+    // Keys keep the card's spelling; an implied builtin already listed under its other name is not repeated.
+    const names = [...allowed, ...definitions.map(tool => tool.name).filter(name => implied(name, allowed) && !toolListed(allowed, name)), ...(this.lazyTools ? ['tool.describe'] : [])];
+    return Object.fromEntries([...new Set(names)].map(name => {
+      const definition = definitions.find(tool => tool.name === canonicalToolName(name)) ?? this.registry.get(name);
       if (!definition) throw new KodoError('CAPABILITY_CHANGED', 'a required tool is not registered by the current host');
       const description = this.describe(name, definition.description);
       if ((name === 'skill.list' || name === 'skill.load') && this.skillCatalogRegistered) {
@@ -280,6 +287,7 @@ export class Tools {
    * scope of a sandboxed process, otherwise the whole workspace.
    */
   effectRoots(runId: string, name: string, args: Record<string, unknown>): string[] {
+    name = canonicalToolName(name);
     const run = this.store.run(runId);
     const workspace = runWorkspace(this.store, run);
     const canonical = (target: string): string => {
@@ -357,11 +365,13 @@ export class Tools {
   }
   /** Whether calls of this tool may run in one parallel batch; unknown and write tools never do. */
   concurrencySafe(name: string, args: Record<string, unknown> = {}): boolean {
+    name = canonicalToolName(name);
     if (name === 'skill.load') return false;
     if (this.effect(name, args) !== 'read') return false;
     return definitions.some(definition => definition.name === name) ? concurrentBuiltins.has(name) || (name === 'shell.exec' && readOnlyShell(args.command)) : evaluates(this.registry.get(name)?.concurrencySafe, args);
   }
   effect(name: string, args?: Record<string, unknown>): Tool['effect'] {
+    name = canonicalToolName(name);
     const definition = definitions.find(x => x.name === name) ?? this.registry.get(name);
     if (definition?.effect === 'read') return 'read';
     if (args === undefined) return 'write';
@@ -371,16 +381,18 @@ export class Tools {
     return evaluates(this.registry.get(name)?.readOnly, args) ? 'read' : 'write';
   }
   destructive(name: string, args: Record<string, unknown> = {}): boolean {
+    name = canonicalToolName(name);
     if (this.effect(name, args) === 'read') return false;
     const declared = this.registry.get(name)?.destructive;
     return declared === undefined ? true : evaluates(declared, args);
   }
-  interrupt(name: string): 'cancel' | 'block' { return this.registry.get(name)?.interrupt ?? 'cancel'; }
-  permission(name: string): Permission | undefined { return (definitions.find(x => x.name === name) ?? this.registry.get(name))?.permission; }
+  interrupt(name: string): 'cancel' | 'block' { return this.registry.get(canonicalToolName(name))?.interrupt ?? 'cancel'; }
+  permission(name: string): Permission | undefined { name = canonicalToolName(name); return (definitions.find(x => x.name === name) ?? this.registry.get(name))?.permission; }
   validate(name: string, args: string, allowed: string[], session: Session, run: Pick<Run, 'parentId'> = {}): Record<string, unknown> {
+    name = canonicalToolName(name);
     if (!roleAllows(run, session, name)) throw new KodoError('TOOL_DENIED', `${name} is unavailable in this run's tool view. Use the advertised tools; ordinary file-management commands can use shell.exec when authorized.`);
     const definition = definitions.find(x => x.name === name) ?? this.registry.get(name);
-    if (!definition || (!implied(name, allowed) && !allowed.includes(name) && !(this.lazyTools && name === 'tool.describe')) || (name === 'tool.describe' && !this.lazyTools) || !session.permissions.includes(definition.permission)) throw new KodoError('TOOL_DENIED', 'tool is not authorized for this run');
+    if (!definition || (!implied(name, allowed) && !toolListed(allowed, name) && !(this.lazyTools && name === 'tool.describe')) || (name === 'tool.describe' && !this.lazyTools) || !session.permissions.includes(definition.permission)) throw new KodoError('TOOL_DENIED', 'tool is not authorized for this run');
     let value: unknown;
     try { value = JSON.parse(args); } catch { throw new KodoError('TOOL_ARGUMENTS', 'arguments must be complete JSON'); }
     const check = definition.validate;
@@ -413,7 +425,7 @@ export class Tools {
    * foreground part: a process still running then continues in the background.
    */
   async execute(runId: string, name: string, args: Record<string, unknown>, signal: AbortSignal, onEffectStart: () => void = () => {}, options: ExecuteOptions = {}): Promise<unknown> {
-    return await this.executeInner(runId, name, args, signal, onEffectStart, options);
+    return await this.executeInner(runId, canonicalToolName(name), args, signal, onEffectStart, options);
   }
   private async executeInner(runId: string, name: string, args: Record<string, unknown>, signal: AbortSignal, onEffectStart: () => void, options: ExecuteOptions): Promise<unknown> {
     this.store.assertWritable();
@@ -489,7 +501,7 @@ export class Tools {
       if (name === 'tool.describe') {
         const available = this.specs(run.card.tools, { ...session, permissions: session.permissions.filter(permission => (run.permissions ?? session.permissions).includes(permission)) }).filter(spec => roleAllows(run, session, spec.name));
         const names = args.names as string[];
-        const selected = names.map(name => { const spec = available.find(spec => spec.name === name); if (!spec) throw new KodoError('TOOL_NOT_FOUND', `tool ${name} is not available to this run`); return spec; });
+        const selected = names.map(name => { const spec = available.find(spec => canonicalToolName(spec.name) === canonicalToolName(name)); if (!spec) throw new KodoError('TOOL_NOT_FOUND', `tool ${name} is not available to this run`); return spec; });
         this.store.event(runId, 'tool.described', { names });
         return { tools: selected };
       }
@@ -591,7 +603,7 @@ export class Tools {
                   onFinish: finish => this.finishBackground(finish),
                   onSettled: releaseExecution,
                 });
-                return { background: { id, state: 'running', reason: mode.start ? 'requested' : 'foreground time limit reached', readWith: 'process.read', note: `The process continues and holds its ${effect === 'read' ? 'read' : 'write'} lock until it exits; a runtime notice reports its exit.` } };
+                return { background: { id, state: 'running', reason: mode.start ? 'requested' : 'foreground time limit reached', readWith: 'background.read', note: `The process continues and holds its ${effect === 'read' ? 'read' : 'write'} lock until it exits; a runtime notice reports its exit.` } };
               }
               // A foreground limit reached before the process existed stops the start.
               if (moved) controller.abort(mode.foreground?.reason);
@@ -628,7 +640,7 @@ export class Tools {
         return page;
       }
       if (name === 'file.list') return await this.list(runId, file, args, signal);
-      if (name === 'file.search') return await this.search(runId, file, args.query as string, signal);
+      if (name === 'file.search') return await this.search(runId, file, args.query as string | undefined, args.glob as string | undefined, args.regex === true, signal);
       if (name === 'file.mkdir') {
         try { await lstat(file); throw new KodoError('FILE_CONFLICT', 'directory target already exists'); }
         catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
@@ -835,7 +847,7 @@ export class Tools {
    * hash when the run may read it, so a mistyped hash is corrected without another file.read.
    */
   async expectedHashHint(runId: string, name: string, rawArgs: string, signal: AbortSignal): Promise<string | undefined> {
-    if (!hashGuarded.includes(name)) return undefined;
+    if (!hashGuarded.includes(canonicalToolName(name))) return undefined;
     let args: unknown;
     try { args = JSON.parse(rawArgs); } catch { return undefined; }
     if (!args || typeof args !== 'object' || typeof (args as { path?: unknown }).path !== 'string' || (args as { expectedHash?: unknown }).expectedHash === null) return undefined;
@@ -889,15 +901,20 @@ export class Tools {
     if (!privateRelative || (!privateRelative.startsWith(`..${path.sep}`) && privateRelative !== '..' && !path.isAbsolute(privateRelative))) throw new KodoError('PATH_DENIED', 'runtime data is not a workspace tool resource');
     return resolved;
   }
-  private async search(runId: string, start: string, query: string, signal: AbortSignal): Promise<unknown> {
+  private async search(runId: string, start: string, queryStr: string | undefined, globPattern: string | undefined, isRegex: boolean, signal: AbortSignal): Promise<unknown> {
+    if (isRegex && !queryStr) throw new KodoError('TOOL_ARGUMENTS', 'regex:true requires a query string');
+    const query = queryStr !== undefined ? (isRegex ? searchPattern(queryStr) : queryStr) : undefined;
     const run = this.store.run(runId);
     const workspace = runWorkspace(this.store, run);
     const queue = [start];
+    const matchFiles: string[] = [];
     const matches: { path: string; line: number; text: string }[] = [];
     const reasons: Record<string, number> = {};
     const skip = (reason: string): void => { reasons[reason] = (reasons[reason] ?? 0) + 1; };
+    const maxFiles = query === undefined ? 200 : 1000;
+    const maxMatches = query === undefined ? 200 : 30;
     let visited = 0;
-    while (queue.length && visited < 1000 && matches.length < 30) {
+    while (queue.length && visited < maxFiles && matches.length < maxMatches && (query !== undefined || matchFiles.length < maxMatches)) {
       signal.throwIfAborted();
       const file = queue.shift()!;
       visited++;
@@ -935,9 +952,15 @@ export class Tools {
         }
       } else if (info.isFile()) {
         if (info.size > maximumFileBytes) { skip('size'); continue; }
+        const relative = path.relative(workspace, file);
+        if (globPattern && !globMatches(globPattern, relative)) { skip('glob'); continue; }
+        if (query === undefined) {
+          matchFiles.push(relative);
+          continue;
+        }
         try {
           const found = await searchText(file, query, 30 - matches.length, signal);
-          matches.push(...found.map(match => ({ path: path.relative(workspace, file), ...match })));
+          matches.push(...found.map(match => ({ path: relative, ...match })));
         } catch (error) {
           const code = (error as NodeJS.ErrnoException).code;
           if (error instanceof KodoError && ['FILE_ENCODING', 'FILE_SIZE'].includes(error.code)) { skip(error.code === 'FILE_SIZE' ? 'size' : 'encoding'); continue; }
@@ -947,8 +970,10 @@ export class Tools {
       } else skip('not_regular');
     }
     const skipped = Object.values(reasons).reduce((sum, count) => sum + count, 0);
-    const truncated = Boolean(queue.length) || matches.length >= 30 || Boolean(reasons.entry_limit);
-    return { matches, visited, truncated, incomplete: truncated || skipped > 0, skipped: { count: skipped, reasons } };
+    const truncated = Boolean(queue.length) || matches.length >= maxMatches || matchFiles.length >= maxMatches || Boolean(reasons.entry_limit);
+    return query === undefined
+      ? { files: matchFiles, visited, truncated, incomplete: truncated || skipped > 0, skipped: { count: skipped, reasons } }
+      : { matches, visited, truncated, incomplete: truncated || skipped > 0, skipped: { count: skipped, reasons } };
   }
 }
 /** UTF-16 cursors match JavaScript strings, but pages never split a surrogate pair. */
@@ -1036,27 +1061,44 @@ async function readText(file: string, maximum = 64_000, signal?: AbortSignal): P
   return { content, hash: createHash('sha256').update(buffer).digest('hex') };
 }
 
-/** Keep only a query overlap and a preview for even multi-megabyte single lines. */
-async function searchText(file: string, query: string, maximumMatches: number, signal: AbortSignal): Promise<{ line: number; text: string }[]> {
+/** Regex queries test only this prefix of each line, which bounds backtracking work per line. */
+const regexLineChars = 16_000;
+/** Compiles a model-supplied pattern, rejecting nested quantifiers such as (a+)+ that backtrack exponentially. */
+export function searchPattern(query: string): RegExp {
+  if (/\((?:[^()\\]|\\.)*[+*}](?:[^()\\]|\\.)*\)[+*{]/u.test(query)) throw new KodoError('TOOL_ARGUMENTS', 'regex has a quantified group containing a quantifier, which can backtrack exponentially; simplify the pattern');
+  try { return new RegExp(query, 'u'); }
+  catch (error) { throw new KodoError('TOOL_ARGUMENTS', `invalid regex: ${errorText(error)}`); }
+}
+/** Whether a file path relative to the search root matches: a pattern without "/" matches the file name at any depth. */
+export function globMatches(pattern: string, relative: string): boolean {
+  const target = relative.replaceAll('\\', '/');
+  return path.posix.matchesGlob(pattern.includes('/') ? target : path.posix.basename(target), pattern);
+}
+/** Keep only a query overlap and a preview for even multi-megabyte single lines; a regex sees each line's bounded prefix. */
+async function searchText(file: string, query: string | RegExp, maximumMatches: number, signal: AbortSignal): Promise<{ line: number; text: string }[]> {
   const matches: { line: number; text: string }[] = [];
   const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
   let bytes = 0;
   let line = 1;
   let preview = '';
   let tail = '';
+  let prefix = '';
   let matched = false;
   const finish = (): void => {
+    if (typeof query !== 'string') matched = query.test(prefix.replace(/\r$/, ''));
     if (matched && matches.length < maximumMatches) matches.push({ line, text: boundedSlice(preview.replace(/\r$/, ''), 0, 300) });
-    line++; preview = ''; tail = ''; matched = false;
+    line++; preview = ''; tail = ''; prefix = ''; matched = false;
   };
   const consume = (content: string): void => {
     if (content.includes('\0')) throw new KodoError('FILE_ENCODING', 'binary data is not supported');
     const parts = content.split('\n');
     for (let index = 0; index < parts.length; index++) {
       const part = parts[index]!;
-      if (!matched) matched = (tail + part).includes(query);
+      if (typeof query === 'string') {
+        if (!matched) matched = (tail + part).includes(query);
+        tail = query.length > 1 ? (tail + part).slice(-(query.length - 1)) : '';
+      } else if (prefix.length < regexLineChars) prefix += part.slice(0, regexLineChars - prefix.length);
       if (preview.length < 301) preview += part.slice(0, 301 - preview.length);
-      tail = query.length > 1 ? (tail + part).slice(-(query.length - 1)) : '';
       if (index < parts.length - 1) finish();
     }
   };
