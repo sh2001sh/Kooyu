@@ -13,7 +13,7 @@ export interface ShellToolOptions {
   executeProcess(context: ToolExecutionContext, invocation: ShellInvocation, signal: AbortSignal): Promise<unknown>;
 }
 
-export const shellToolDescription = 'Run Bash in the workspace. For long tests use background:true, then process.read({id: background.id, waitMs:30000}) to collect output and exit status. Do not start jobs with nohup ... & or bare &: the host must register them. A foreground command still running at the host tool timeout moves to the background when capacity permits. timeoutMs is total process lifetime including background time, default 600000 ms, bounded by the remaining run budget. Supports pipes and redirects. Each call starts a fresh host-selected Bash with profiles disabled and pipefail enabled. Possible writes still require effect reconciliation after an interrupted lifetime.';
+export const shellToolDescription = 'Run Bash in the workspace. For long tests use background:true, then background.read({id: background.id, waitMs:30000}) to collect output and exit status. Do not start jobs with nohup ... & or bare &: the host must register them. A foreground command still running at the host tool timeout moves to the background when capacity permits. timeoutMs is total process lifetime including background time, default 600000 ms, bounded by the remaining run budget. Supports pipes and redirects. Each call starts a fresh host-selected Bash with profiles disabled and pipefail enabled. Possible writes still require effect reconciliation after an interrupted lifetime.';
 export const shellToolParameters = { type: 'object', additionalProperties: false, properties: {
   command: { type: 'string', minLength: 1, maxLength: 32_000 },
   background: { type: 'boolean', description: 'Return a managed background handle immediately after startup; read it with process.read.' },
@@ -54,7 +54,7 @@ export function assertManagedShell(command: string): void {
     if (c !== '&') continue;
     if (command[i + 1] === '&') { i++; continue; }
     if (command[i + 1] === '>' || /[<>|]/.test(command[i - 1] ?? '')) continue;
-    throw new KodoError('SHELL_BACKGROUND', 'shell & jobs are not registered; remove nohup and the trailing &, use shell.exec with background:true, then process.read with the returned background.id');
+    throw new KodoError('SHELL_BACKGROUND', 'shell & jobs are not registered; remove nohup and the trailing &, use shell.exec with background:true, then background.read with the returned background.id');
   }
 }
 

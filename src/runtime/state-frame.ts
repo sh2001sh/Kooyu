@@ -81,7 +81,7 @@ export function stateFrame(host: StepHost, run: Run, session: Session, pressure?
     calls: unsettled.slice(0, stateFrameCalls).map(call => ({ id: call.id, name: call.name, status: call.status, effect: call.effect, decisionVersion: call.decisionVersion ?? 0 })),
     ...(unsettledCount > stateFrameCalls ? { moreCalls: unsettledCount - stateFrameCalls } : {}),
     pendingMessages: store.countInbox(run.id),
-    ...(pressure && pressure.inputTokens > pressure.triggerTokens ? { context: { ...pressure, unit: 'estimated tokens', note: 'Context remains above the compaction trigger. Finish the current subtask or record its progress with update_progress.' } } : {}),
+    ...(pressure && pressure.inputTokens > pressure.triggerTokens ? { context: { ...pressure, unit: 'estimated tokens', note: 'Context remains above the compaction trigger. Finish the current subtask or record its progress with context.snapshot.' } } : {}),
     knowledge: knowledge.slice(-4).map(use => ({ id: excerpt(use.id, 128), revision: use.revision, purpose: excerpt(use.purpose, 80) })),
     omitted: { children: Math.max(0, children.length - 8), waits: Math.max(0, waits.length - 4), knowledge: Math.max(0, knowledge.length - 4), deliverables: 0 },
     note: 'Runtime status, not task acceptance. Deliverable observations are refreshed after writes; completion checks current files independently. Unknown writes require reconciliation, never repetition. Use inspect_run for bounded evidence; knowledge versions are fixed.',

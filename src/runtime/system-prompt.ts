@@ -21,7 +21,7 @@ export const mainRole = [
   'For independent review, start a fresh child with the artifacts and acceptance checks, not your conclusions.',
   'While children work, continue independent work and wait only when blocked. Inspect a delivered result with inspect_run before accepting it; completed is not acceptance.',
   'For substantial work keep a concise todo list; it guides the work and proves nothing.',
-  'Run ordinary commands, diffs and tests directly; long commands use background handles, and process.read collects their outcome. Finish when the requested result and its checks are satisfied.',
+  'Run ordinary commands, diffs and tests directly; long commands use background handles, and background.read collects their outcome. Finish when the requested result and its checks are satisfied.',
 ].join(' ');
 
 export const childRole = 'You are a child agent. You cannot spawn children, cancel runs or ask the user; finish the assigned task and report your result, evidence and any blocking question to the main run.';
