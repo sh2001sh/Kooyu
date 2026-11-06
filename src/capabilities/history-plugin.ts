@@ -1,4 +1,5 @@
-import type { CapabilityPlugin, RuntimeCore, ToolContext, ToolPlugin } from '../plugins/index.js';
+import type { CapabilityPlugin, ToolContext, ToolPlugin } from '../plugins/index.js';
+import type { RuntimeCore } from '../core/runtime.js';
 import type { Store } from '../storage/index.js';
 import { KodoError } from '../runtime/types.js';
 import { readHistory, searchHistory } from '../runtime/history.js';
@@ -19,6 +20,7 @@ export function createHistoryPlugin(): CapabilityPlugin & ToolPlugin {
 
   return {
     name: 'history',
+    version: '1.0.0',
     tools: [
       {
         name: 'history.read',

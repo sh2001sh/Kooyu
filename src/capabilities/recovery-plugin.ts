@@ -1,5 +1,5 @@
-import type { CapabilityPlugin, RuntimeCore, ToolContext, ToolPlugin } from '../plugins/index.js';
-import type { Store as _UnusedStore } from '../storage/index.js';
+import type { CapabilityPlugin, ToolContext, ToolPlugin } from '../plugins/index.js';
+import type { RuntimeCore } from '../core/runtime.js';
 import { KodoError } from '../runtime/types.js';
 
 /**
@@ -14,6 +14,7 @@ import { KodoError } from '../runtime/types.js';
 export function createRecoveryPlugin(): CapabilityPlugin & ToolPlugin {
   return {
     name: 'recovery',
+    version: '1.0.0',
     tools: [
       {
         name: 'recovery.inspect',
@@ -21,20 +22,13 @@ export function createRecoveryPlugin(): CapabilityPlugin & ToolPlugin {
         parameters: { type: 'object' },
       },
     ],
-
     async initialize(runtime: RuntimeCore): Promise<void> {
-      if (!runtime.store) {
-        throw new KodoError('PLUGIN_CONFIG', 'recovery plugin requires a Store');
-      }
-      const _unused: _UnusedStore = runtime.store;
-      void _unused;
+      if (!runtime.store) throw new KodoError('PLUGIN_CONFIG', 'recovery plugin requires a Store');
       // TODO: integrate with native-recovery.ts and recovery-resolution.ts
     },
-
-    async execute(_name: string, _args: unknown, _context: ToolContext): Promise<unknown> {
-      if (_name !== 'recovery.inspect') {
-        throw new KodoError('TOOL_NOT_FOUND', `Unknown tool: ${_name}`);
-      }
+    async execute(name: string, _args: unknown, _context: ToolContext): Promise<unknown> {
+      if (name !== 'recovery.inspect') throw new KodoError('TOOL_NOT_FOUND', `Unknown tool: ${name}`);
+      void _args; void _context;
       // TODO: delegate to inspectUncertainEffects from recovery.ts
       return { blockedCalls: [], evidence: [] };
     },

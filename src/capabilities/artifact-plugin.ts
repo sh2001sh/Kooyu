@@ -1,4 +1,5 @@
-import type { CapabilityPlugin, RuntimeCore, ToolContext, ToolPlugin } from '../plugins/index.js';
+import type { CapabilityPlugin, ToolContext, ToolPlugin } from '../plugins/index.js';
+import type { RuntimeCore } from '../core/runtime.js';
 import type { Store } from '../storage/index.js';
 import { KodoError } from '../runtime/types.js';
 
@@ -17,6 +18,7 @@ export function createArtifactPlugin(): CapabilityPlugin & ToolPlugin {
 
   return {
     name: 'artifact',
+    version: '1.0.0',
     tools: [
       {
         name: 'artifact.read',
@@ -24,7 +26,7 @@ export function createArtifactPlugin(): CapabilityPlugin & ToolPlugin {
         parameters: {
           type: 'object',
           properties: {
-            id: { type: 'string', pattern: '^[a-f0-9]{64}$' },
+            id: { type: 'string', pattern: '^[a-f0-9-]{36}$' },
             contentOffset: { type: 'integer', minimum: 0 },
             maxChars: { type: 'integer', minimum: 1, maximum: 256_000 },
           },
@@ -54,7 +56,6 @@ export function createArtifactPlugin(): CapabilityPlugin & ToolPlugin {
 
     async execute(name: string, args: unknown, context: ToolContext): Promise<unknown> {
       const run = store.run(context.runId);
-      const session = store.session(run.sessionId);
 
       switch (name) {
         case 'artifact.read': {
@@ -62,27 +63,22 @@ export function createArtifactPlugin(): CapabilityPlugin & ToolPlugin {
           if (!Number.isSafeInteger(contentOffset) || contentOffset < 0 || !Number.isSafeInteger(maxChars) || maxChars < 1 || maxChars > 256_000) {
             throw new KodoError('TOOL_ARGUMENTS', 'contentOffset must be non-negative and maxChars between 1 and 256000');
           }
-          const entry = store.readArtifact(session.id, id);
-          if (!entry) throw new KodoError('ARTIFACT_NOT_FOUND', `artifact ${id} not found in this session`);
-          let data: string;
-          try { data = store.readBlob<string>(entry.ref); }
-          catch (error) {
-            if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw new KodoError('ARTIFACT_MISSING', `artifact ${id} blob no longer retained`);
-            throw error;
+          const data = store.readArtifact(run.id, id);
+          if (typeof data === 'string') {
+            const complete = contentOffset + maxChars >= data.length;
+            const text = data.slice(contentOffset, contentOffset + maxChars);
+            return { text, complete, totalChars: data.length };
           }
-          const complete = contentOffset + maxChars >= data.length;
-          const text = data.slice(contentOffset, contentOffset + maxChars);
-          return { text, complete, totalChars: data.length };
+          return data;
         }
         case 'artifact.write': {
-          const { content, note } = args as { content: string; note?: string };
+          const { content } = args as { content: string; note?: string };
           if (typeof content !== 'string' || content.length > 2_000_000) {
             throw new KodoError('TOOL_ARGUMENTS', 'content must be a string up to 2MB');
           }
           context.markEffectStarted();
           const ref = store.blob(content);
-          const id = ref;
-          store.writeArtifact(session.id, id, ref, note);
+          const id = store.artifact(run.id, ref);
           return { id, chars: content.length };
         }
         default:

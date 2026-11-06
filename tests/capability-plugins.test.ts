@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { Store } from '../src/storage/store.js';
+import { Store } from '../src/storage/index.js';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { defaultBudget } from '../src/runtime/types.js';
 import { fullToolCard, binding, answer, scripted } from './helpers.js';
-import { createRuntime } from '../src/core/run.js';
+import { createRuntime } from '../src/factory.js';
+import type { CapabilityPlugin } from '../src/plugins/index.js';
 import {
   createHistoryPlugin,
   createArtifactPlugin,
@@ -59,12 +60,12 @@ describe('capability plugins', () => {
       binding,
       store,
       capabilities: [
-        createHistoryPlugin(),
-        createArtifactPlugin(),
-        createTodoPlugin(),
-        createCompactionPlugin(),
-        createRecoveryPlugin(),
-        createMessagingPlugin(),
+        createHistoryPlugin() as CapabilityPlugin,
+        createArtifactPlugin() as CapabilityPlugin,
+        createTodoPlugin() as CapabilityPlugin,
+        createCompactionPlugin() as CapabilityPlugin,
+        createRecoveryPlugin() as CapabilityPlugin,
+        createMessagingPlugin() as CapabilityPlugin,
       ],
     });
 

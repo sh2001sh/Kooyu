@@ -1,5 +1,5 @@
-import type { CapabilityPlugin, RuntimeCore } from '../plugins/index.js';
-import type { Store as _UnusedStore } from '../storage/index.js';
+import type { CapabilityPlugin } from '../plugins/index.js';
+import type { RuntimeCore } from '../core/runtime.js';
 import { KodoError } from '../runtime/types.js';
 
 /**
@@ -13,19 +13,10 @@ import { KodoError } from '../runtime/types.js';
 export function createCompactionPlugin(): CapabilityPlugin {
   return {
     name: 'compaction',
-
+    version: '1.0.0',
     async initialize(runtime: RuntimeCore): Promise<void> {
-      if (!runtime.store) {
-        throw new KodoError('PLUGIN_CONFIG', 'compaction plugin requires a Store');
-      }
+      if (!runtime.store) throw new KodoError('PLUGIN_CONFIG', 'compaction plugin requires a Store');
       // TODO: integrate with CompactionPolicy and compaction-trigger
-      const _unused: _UnusedStore = runtime.store;
-      void _unused;
-    },
-
-    async beforeModelCall() {
-      // TODO: check if compaction is needed and trigger summarizeContext
-      return {};
     },
   };
 }

@@ -1,4 +1,5 @@
-import type { CapabilityPlugin, RuntimeCore } from '../plugins/index.js';
+import type { CapabilityPlugin } from '../plugins/index.js';
+import type { RuntimeCore } from '../core/runtime.js';
 import { KodoError } from '../runtime/types.js';
 
 /**
@@ -15,17 +16,10 @@ import { KodoError } from '../runtime/types.js';
 export function createMessagingPlugin(): CapabilityPlugin {
   return {
     name: 'messaging',
-
+    version: '1.0.0',
     async initialize(runtime: RuntimeCore): Promise<void> {
-      if (!runtime.store) {
-        throw new KodoError('PLUGIN_CONFIG', 'messaging plugin requires a Store');
-      }
+      if (!runtime.store) throw new KodoError('PLUGIN_CONFIG', 'messaging plugin requires a Store');
       // TODO: integrate with Mailbox and agent-lifecycle
-    },
-
-    async beforeModelCall() {
-      // TODO: inject mailbox attachment
-      return {};
     },
   };
 }

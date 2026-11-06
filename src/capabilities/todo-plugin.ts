@@ -1,8 +1,9 @@
-import type { ToolPlugin, RuntimeCore, ToolContext } from '../plugins/index.js';
+import type { ToolPlugin, ToolContext } from '../plugins/index.js';
+import type { RuntimeCore } from '../core/runtime.js';
 import type { Store } from '../storage/index.js';
 import { KodoError } from '../runtime/types.js';
 import { todoTools } from '../tools/todo.js';
-import type { ToolExecutionContext } from '../runtime/types.js';
+import type { ToolExecutionContext } from '../tools/registry.js';
 import type { ToolRegistration } from '../tools/registry.js';
 
 /**
