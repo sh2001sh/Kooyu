@@ -110,7 +110,7 @@ export class BackgroundTasks {
     if (!task || task.runId !== runId) throw new KodoError('PROCESS_HANDLE', 'no background process with this id belongs to this run');
     signal.throwIfAborted();
     if (args.stop && !task.settled) {
-      task.stopReason = 'requested through process.read';
+      task.stopReason = 'requested through background.read';
       task.controller.abort(new KodoError('CANCELLED', task.stopReason));
       const stopped = whenAborted(signal);
       try { await Promise.race([task.done, stopped.promise.then(() => { throw signal.reason; })]); }
