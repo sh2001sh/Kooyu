@@ -5,3 +5,6 @@ export { createCompactionPlugin } from './compaction-plugin.js';
 export { createRecoveryPlugin } from './recovery-plugin.js';
 export { createMessagingPlugin } from './messaging-plugin.js';
 export { createTodoPlugin } from './todo-plugin.js';
+export { createFilePlugin } from './file-plugin.js';
+export { createShellPlugin } from './shell-plugin.js';
+export { createBackgroundPlugin } from './background-plugin.js';
