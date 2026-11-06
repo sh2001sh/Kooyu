@@ -20,6 +20,7 @@ export const attachmentKinds = {
   memory: { tag: 'kodo-runtime', maxChars: 8_000, persist: true, order: 25, trigger: 'recorded memory changed' },
   'completion-check': { tag: 'kodo-runtime', maxChars: 16_000, persist: true, order: 90, trigger: 'host completion check' },
   'delivery-audit': { tag: 'kodo-runtime', maxChars: 16_000, persist: true, order: 90, trigger: 'delivery audit' },
+  'task-analysis': { tag: 'kodo-runtime', maxChars: 4_000, persist: true, order: 85, trigger: 'task-analysis plugin: plan has a delegation opportunity and the advice changed' },
 } as const;
 export type AttachmentKind = keyof typeof attachmentKinds;
 
