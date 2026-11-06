@@ -25,7 +25,7 @@ import { BackgroundTasks, Capture, maxBackgroundProcesses, whenAborted, whenSpaw
 import type { BackgroundFinish, ProcessFacts } from './background.js';
 import { fileStat, recordSeen, recordWritten, staleState } from './read-state.js';
 import { ToolRegistry, toolFingerprint } from './registry.js';
-import { canonicalToolName, publicToolAliases, publicToolName, toolListed } from './catalog.js';
+import { canonicalToolName, publicToolAliases, toolListed } from './catalog.js';
 import { readImage } from './image.js';
 import { similarPaths } from './similar-paths.js';
 import { assertManagedShell, createShellTool, readOnlyProcess, readOnlyShell, resolveBashProgram, shellToolDescription, shellToolParameters } from './shell.js';
