@@ -90,24 +90,24 @@ for (const mobile of [false, true])
         await section("引擎").click();
         const engine = page
           .locator(".sx-engine")
-          .filter({ has: page.locator("summary strong").filter({ hasText: /^Codex$/ }) });
+          .filter({ has: page.locator("summary strong").filter({ hasText: /^pi$/ }) });
         await engine.locator(":scope > summary").click();
         await engine
-          .locator('select[id="src-codex"]')
+          .locator('select[id="src-pi"]')
           .selectOption(provider.id + ":" + provider.endpoints[0].id);
         await expect
           .poll(
             async () =>
               (await (await page.request.get("/api/snapshot")).json()).bindingDefaults
-                .harnessBindingIds.codex,
+                .harnessBindingIds.pi,
           )
           .toBeTruthy();
         const bound = (await (await page.request.get("/api/snapshot")).json()).bindingDefaults
-          .harnessBindingIds.codex;
+          .harnessBindingIds.pi;
         await page.getByRole("button", { name: mobile ? "会话" : "返回对话", exact: true }).click();
         await page.getByRole("button", { name: "新建会话", exact: true }).click();
         await page.getByRole("button", { name: "Harness", exact: true }).click();
-        await page.locator('.ios-popover [role="option"][data-value="codex"]').click();
+        await page.locator('.ios-popover [role="option"][data-value="pi"]').click();
         await page.getByRole("button", { name: "模型配置", exact: true }).click();
         await page.getByRole("option").filter({ hasText: "settings-model-b" }).click();
         await page.getByRole("button", { name: "创建会话", exact: true }).click();

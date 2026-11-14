@@ -29,6 +29,7 @@ test("desktop and phone persist model/effort changes without opening or replacin
     const reasoningPopover = page.locator(".ms-popover--reasoning");
     await expect(reasoningPopover.locator(".reasoning-slider__scale")).not.toContainText("xhigh");
     const slider = reasoningPopover.getByRole("slider", { name: "会话思考强度" });
+    await expect(slider).toBeEnabled();
     await slider.focus();
     await slider.press("End");
     await expect
