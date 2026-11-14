@@ -1,0 +1,34 @@
+{
+  "brand": "Koomi",
+  "status": "proposal_with_known_name_overlap",
+  "preferred_domain_on_typing_grounds": "koomiai.com",
+  "date": "2026-11-13",
+  "queries": [
+    {
+      "domain": "koomiai.com",
+      "source": "https://rdap.verisign.com/com/v1/domain/koomiai.com",
+      "checked_at_utc": "2026-11-13T03:58:47.822666+00:00",
+      "http_status": 404,
+      "outcome": "no_registration_record_returned"
+    },
+    {
+      "domain": "koomi-ai.com",
+      "source": "https://rdap.verisign.com/com/v1/domain/koomi-ai.com",
+      "checked_at_utc": "2026-11-13T03:58:47.823095+00:00",
+      "http_status": 404,
+      "outcome": "no_registration_record_returned"
+    }
+  ],
+  "known_overlap": {
+    "site": "https://koomi.ai/",
+    "brand_displayed": "Koomi AI",
+    "positioning": "Customer support and feedback connected to coding agents through Multica.",
+    "ownership_user_answer": "Not the user website.",
+    "interpretation": "Adjacent AI/software field; this is a naming overlap observation, not a finding of trademark infringement."
+  },
+  "limits": [
+    "No domain bought or reserved.",
+    "RDAP 404 does not guarantee registration price or checkout availability.",
+    "Trademark and phonetic-name clearance incomplete."
+  ]
+}

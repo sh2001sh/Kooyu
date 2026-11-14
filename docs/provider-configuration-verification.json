@@ -1,0 +1,412 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-12",
+  "recordedAt": "2026-11-12T03:09:46Z",
+  "report": "docs/test-results-2026-11-12-providers.md",
+  "scope": "Three-layer Provider/model-library/harness-binding implementation. Native proofs cover only the explicitly recorded versions, models, routes and operations.",
+  "checks": {
+    "typecheck": "passed",
+    "build": "passed",
+    "lint": "passed",
+    "format": "passed",
+    "domainAndAdapterTests": {
+      "passed": 137,
+      "failed": 0
+    },
+    "browserTests": {
+      "passed": 18,
+      "failed": 0,
+      "viewports": [
+        "1440x960",
+        "390x844"
+      ]
+    },
+    "realPhone": "not-verified",
+    "electronNewForms": {
+      "result": "passed",
+      "harnessDefaults": ["deepseek-harness", "zcode", "gemini", "kimi-code", "grok-build"],
+      "cursorUnsupportedShown": true,
+      "sourceReport": ".local/verification/electron-1794449747866/report.json",
+      "limitation": "Playwright close timed out; native Electron process exited and Host remained alive."
+    }
+  },
+  "catalog": {
+    "source": "https://models.dev/catalog.json",
+    "modelCount": 8988,
+    "revision": "d77a5ee25f723d11f7f9fcba4822c5610b812541f7785b763169612c31914ca1",
+    "sourceKind": "community-aggregate-not-universal-official-specifications",
+    "ttlHours": 24,
+    "etag304": "contract-tested-and-earlier-public-fetch-verified",
+    "unknownMetadata": "kept-unknown-no-fuzzy-ID-aliases"
+  },
+  "nativeRuns": [
+    {
+      "harnessId": "pi",
+      "result": "passed",
+      "route": "direct",
+      "startedAt": "2026-11-11T17:22:14.529Z",
+      "model": "deepseek-v4-flash",
+      "protocol": "anthropic-messages",
+      "nativeSessionId": "01a1cba1-bf9b-770f-9a3c-ec2524792427",
+      "checksPassed": 16,
+      "turns": 2,
+      "nativeReadTool": false,
+      "checks": {
+        "remoteCatalog": true,
+        "keyringReference": true,
+        "manualOverride": true,
+        "restoreAutomatic": true,
+        "bindingPinned": true,
+        "noSecretsInConfiguration": true,
+        "nativeIdentityCreated": true,
+        "frozenContextVisible": true,
+        "turn0Confirmed": true,
+        "turn0NativeReply": true,
+        "turn0NoErrors": true,
+        "turn0SameIdentity": true,
+        "turn1Confirmed": true,
+        "turn1NativeReply": true,
+        "turn1NoErrors": true,
+        "turn1SameIdentity": true
+      },
+      "sourceReport": ".local/verification/provider-pi-1794417734500/report.json"
+    },
+    {
+      "harnessId": "kodo",
+      "result": "passed",
+      "route": "direct",
+      "startedAt": "2026-11-11T17:27:08.121Z",
+      "model": "deepseek-v4-flash",
+      "protocol": "anthropic-messages",
+      "nativeSessionId": "01a1cba6-3a09-7133-a397-633bb0d94cba",
+      "checksPassed": 16,
+      "turns": 2,
+      "nativeReadTool": false,
+      "checks": {
+        "remoteCatalog": true,
+        "keyringReference": true,
+        "manualOverride": true,
+        "restoreAutomatic": true,
+        "bindingPinned": true,
+        "noSecretsInConfiguration": true,
+        "nativeIdentityCreated": true,
+        "frozenContextVisible": true,
+        "turn0Confirmed": true,
+        "turn0NativeReply": true,
+        "turn0NoErrors": true,
+        "turn0SameIdentity": true,
+        "turn1Confirmed": true,
+        "turn1NativeReply": true,
+        "turn1NoErrors": true,
+        "turn1SameIdentity": true
+      },
+      "sourceReport": ".local/verification/provider-kodo-1794418028099/report.json"
+    },
+    {
+      "harnessId": "codex",
+      "result": "passed",
+      "route": "direct",
+      "startedAt": "2026-11-11T17:23:24.580Z",
+      "model": "gpt-6.1-sol",
+      "protocol": "openai-responses",
+      "nativeSessionId": "01a1cba2-d3ee-7090-a675-7d807cab026f",
+      "checksPassed": 16,
+      "turns": 2,
+      "nativeReadTool": false,
+      "checks": {
+        "remoteCatalog": true,
+        "keyringReference": true,
+        "manualOverride": true,
+        "restoreAutomatic": true,
+        "bindingPinned": true,
+        "noSecretsInConfiguration": true,
+        "nativeIdentityCreated": true,
+        "frozenContextVisible": true,
+        "turn0Confirmed": true,
+        "turn0NativeReply": true,
+        "turn0NoErrors": true,
+        "turn0SameIdentity": true,
+        "turn1Confirmed": true,
+        "turn1NativeReply": true,
+        "turn1NoErrors": true,
+        "turn1SameIdentity": true
+      },
+      "sourceReport": ".local/verification/provider-codex-1794417804548/report.json"
+    },
+    {
+      "harnessId": "claude-code",
+      "result": "passed",
+      "route": "direct",
+      "startedAt": "2026-11-11T17:25:02.949Z",
+      "model": "claude-sonnet-5-5[1M]",
+      "protocol": "anthropic-messages",
+      "nativeSessionId": "24c5c2ea-bed2-4a74-a3cb-9b11a3bb690e",
+      "checksPassed": 14,
+      "turns": 2,
+      "nativeReadTool": false,
+      "checks": {
+        "remoteCatalog": true,
+        "keyringReference": true,
+        "bindingPinned": true,
+        "noSecretsInConfiguration": true,
+        "nativeIdentityCreated": true,
+        "frozenContextVisible": true,
+        "turn0Confirmed": true,
+        "turn0NativeReply": true,
+        "turn0NoErrors": true,
+        "turn0SameIdentity": true,
+        "turn1Confirmed": true,
+        "turn1NativeReply": true,
+        "turn1NoErrors": true,
+        "turn1SameIdentity": true
+      },
+      "sourceReport": ".local/verification/provider-claude-code-1794417902927/report.json"
+    },
+    {
+      "harnessId": "opencode",
+      "result": "passed",
+      "route": "direct",
+      "startedAt": "2026-11-11T17:29:04.836Z",
+      "model": "deepseek-v4-flash",
+      "protocol": "anthropic-messages",
+      "nativeSessionId": "ses_e34578152ffeA8r6QBaliWTQFM",
+      "checksPassed": 16,
+      "turns": 2,
+      "nativeReadTool": false,
+      "checks": {
+        "remoteCatalog": true,
+        "keyringReference": true,
+        "manualOverride": true,
+        "restoreAutomatic": true,
+        "bindingPinned": true,
+        "noSecretsInConfiguration": true,
+        "nativeIdentityCreated": true,
+        "frozenContextVisible": true,
+        "turn0Confirmed": true,
+        "turn0NativeReply": true,
+        "turn0NoErrors": true,
+        "turn0SameIdentity": true,
+        "turn1Confirmed": true,
+        "turn1NativeReply": true,
+        "turn1NoErrors": true,
+        "turn1SameIdentity": true
+      },
+      "sourceReport": ".local/verification/provider-opencode-1794418144812/report.json"
+    },
+    {
+      "harnessId": "claude-code",
+      "result": "passed",
+      "route": "gateway",
+      "startedAt": "2026-11-11T17:33:12.759Z",
+      "model": "deepseek-v4-flash",
+      "protocol": "openai-completions",
+      "nativeSessionId": "c768c86a-4926-45dd-97cf-2a6f427775d0",
+      "checksPassed": 16,
+      "turns": 2,
+      "nativeReadTool": false,
+      "checks": {
+        "remoteCatalog": true,
+        "keyringReference": true,
+        "manualOverride": true,
+        "restoreAutomatic": true,
+        "bindingPinned": true,
+        "noSecretsInConfiguration": true,
+        "nativeIdentityCreated": true,
+        "frozenContextVisible": true,
+        "turn0Confirmed": true,
+        "turn0NativeReply": true,
+        "turn0NoErrors": true,
+        "turn0SameIdentity": true,
+        "turn1Confirmed": true,
+        "turn1NativeReply": true,
+        "turn1NoErrors": true,
+        "turn1SameIdentity": true
+      },
+      "sourceReport": ".local/verification/provider-claude-code-gateway-1794418392737/report.json"
+    },
+    {
+      "harnessId": "claude-code",
+      "result": "passed",
+      "route": "gateway",
+      "startedAt": "2026-11-11T17:41:17.125Z",
+      "model": "deepseek-v4-flash",
+      "protocol": "openai-completions",
+      "nativeSessionId": "6df24612-8e9b-4648-aac1-599c87e63e19",
+      "checksPassed": 17,
+      "turns": 2,
+      "nativeReadTool": true,
+      "checks": {
+        "remoteCatalog": true,
+        "keyringReference": true,
+        "manualOverride": true,
+        "restoreAutomatic": true,
+        "bindingPinned": true,
+        "noSecretsInConfiguration": true,
+        "nativeIdentityCreated": true,
+        "frozenContextVisible": true,
+        "turn0Confirmed": true,
+        "turn0NativeReply": true,
+        "turn0NoErrors": true,
+        "nativeToolCall": true,
+        "turn0SameIdentity": true,
+        "turn1Confirmed": true,
+        "turn1NativeReply": true,
+        "turn1NoErrors": true,
+        "turn1SameIdentity": true
+      },
+      "sourceReport": ".local/verification/provider-claude-code-gateway-tools-1794418877101/report.json"
+    },
+    {
+      "harnessId": "deepseek-harness",
+      "result": "passed",
+      "route": "direct",
+      "startedAt": "2026-11-12T02:08:17.495Z",
+      "model": "deepseek-v4-flash",
+      "protocol": "anthropic-messages",
+      "nativeSessionId": "f3495c6f-16bc-4ed9-a5d2-051c91a3f10c",
+      "checksPassed": 16,
+      "turns": 2,
+      "sourceReport": ".local/verification/provider-deepseek-harness-1794449297471/report.json"
+    },
+    {
+      "harnessId": "zcode",
+      "result": "passed",
+      "route": "direct-local-credential-relay",
+      "model": "deepseek-v4-flash",
+      "protocol": "anthropic-messages",
+      "nativeSessionId": "sess_622387d0-b3e4-4007-a445-fb894c93f81f",
+      "checksPassed": 16,
+      "turns": 2,
+      "sourceReport": ".local/verification/provider-zcode-1794447705275/report.json"
+    },
+    {
+      "harnessId": "kimi-code",
+      "result": "passed",
+      "route": "direct",
+      "nativeVersion": "2.5.2",
+      "model": "deepseek-v4-flash",
+      "protocol": "anthropic-messages",
+      "nativeSessionId": "session_e3a5834e-2e13-4ca0-936e-3b4c4911e961",
+      "checksPassed": 16,
+      "turns": 2,
+      "sourceReport": ".local/verification/provider-kimi-code-1794447932356/report.json"
+    },
+    {
+      "harnessId": "grok-build",
+      "result": "passed",
+      "route": "direct",
+      "nativeVersion": "1.0.80",
+      "model": "deepseek-v4-flash",
+      "protocol": "anthropic-messages",
+      "nativeSessionId": "01a1cd72-5205-7f93-98e2-3ecf439dfcfe",
+      "checksPassed": 16,
+      "turns": 2,
+      "sourceReport": ".local/verification/provider-grok-build-1794448174567/report.json"
+    },
+    {
+      "harnessId": "gemini",
+      "result": "passed",
+      "route": "gateway-google-api-to-openai-chat",
+      "nativeVersion": "0.67.0",
+      "model": "deepseek-v4-flash",
+      "protocol": "openai-completions",
+      "nativeSessionId": "94cd0e7b-3c1f-4ade-abe9-689f976c43f9",
+      "checksPassed": 16,
+      "turns": 2,
+      "nativeReadTool": false,
+      "sourceReport": ".local/verification/provider-gemini-gateway-1794452160114/report.json"
+    },
+    {
+      "harnessId": "gemini",
+      "result": "passed",
+      "route": "gateway-google-api-to-openai-chat",
+      "nativeVersion": "0.67.0",
+      "model": "deepseek-v4-flash",
+      "protocol": "openai-completions",
+      "nativeSessionId": "06b6ff13-fae9-4c7a-a1b3-46cf87750e0f",
+      "checksPassed": 17,
+      "turns": 2,
+      "nativeReadTool": true,
+      "sourceReport": ".local/verification/provider-gemini-gateway-tools-1794452304603/report.json"
+    }
+  ],
+  "nativeHandshakes": [
+    {
+      "harnessId": "gemini",
+      "nativeVersion": "0.67.0",
+      "result": "configuration-read-and-acp-session-created",
+      "inference": "not-tested-in-this-earlier-direct-handshake; later-chat-gateway-runs-passed",
+      "nativeSessionId": "8cd5cdbe-e701-41d4-9146-14af31eabb56",
+      "sourceReport": ".local/verification/provider-gemini-config-1794448325645/report.json"
+    }
+  ],
+  "disabledRoutes": [
+    {
+      "harnessId": "codex",
+      "upstream": "openai-completions",
+      "nativeResult": "failed-custom-grammar-tools-not-representable",
+      "behavior": "preview-save-runtime-reject-use-responses-direct",
+      "sourceReport": ".local/verification/provider-codex-gateway-1794418589234/report.json"
+    }
+  ],
+  "bindingMappings": {
+    "kodo": {
+      "implemented": true,
+      "nativeProof": "anthropic-messages"
+    },
+    "pi": {
+      "implemented": true,
+      "nativeProof": "anthropic-messages"
+    },
+    "codex": {
+      "implemented": true,
+      "nativeProof": "openai-responses"
+    },
+    "claude-code": {
+      "implemented": true,
+      "nativeProof": "messages-direct-and-chat-bridge"
+    },
+    "opencode": {
+      "implemented": true,
+      "nativeProof": "desktop-1.18.30-anthropic-messages"
+    },
+    "deepseek-harness": {
+      "implemented": true,
+      "nativeProof": "anthropic-messages-two-turns"
+    },
+    "zcode": {
+      "implemented": true,
+      "nativeProof": "desktop-runtime-anthropic-messages-two-turns-local-credential-relay"
+    },
+    "gemini": {
+      "implemented": true,
+      "nativeProof": "0.67.0-chat-gateway-two-turns-and-native-read-tool"
+    },
+    "cursor": {
+      "implemented": false,
+      "nativeProof": "unsupported-normal-cursor-agent-custom-provider-interface-unconfirmed"
+    },
+    "kimi-code": {
+      "implemented": true,
+      "nativeProof": "2.5.2-anthropic-messages-two-turns"
+    },
+    "grok-build": {
+      "implemented": true,
+      "nativeProof": "1.0.80-anthropic-messages-two-turns"
+    }
+  },
+  "limitations": [
+    "Normal Cursor Agent has no verified custom Provider endpoint and its binding is disabled; this does not disable native login and model selection.",
+    "Gemini CLI inference and native Read passed through the local Google-to-Chat gateway; direct Google protocol inference remains unverified for lack of a usable direct credential.",
+    "Bound sessions pin one model; model/Provider changes need a new bound session; declared effort may change next turn.",
+    "Toggle/budget metadata is stored but no general operation control or native mapping is implemented.",
+    "No Provider/model/binding deletion or independent configuration revision/receipt GC.",
+    "Provider model lists are refreshed on demand; no periodic refresh of every endpoint.",
+    "One public background feed only; OpenRouter can be selected as endpoint models URL.",
+    "Gemini gateway images, signed/encrypted thinking, Google Search, precise countTokens and non-equivalent thinking budgets are rejected; other hosted state and compaction remain unsupported.",
+    "Gateway native cancel/crash recovery and other tools/versions remain unverified.",
+    "All custom bound endpoint costs remain unknown; native catalog prices do not prove actual billing.",
+    "Official account model-list APIs were not all live tested.",
+    "No real phone/TLS; the Electron walkthrough covered five new binding/default flows, not every Provider form and native response."
+  ]
+}

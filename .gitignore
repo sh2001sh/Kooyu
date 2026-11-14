@@ -1,26 +1,37 @@
+# Build outputs
 node_modules/
 dist/
+out/
+release/
 coverage/
+*.tsbuildinfo
+**/.gradle/
+**/build/
+**/local.properties
+apps/ios/*.xcodeproj/
+**/xcuserdata/
+*.jks
+*.keystore
+*.mobileprovision
+*.p12
 *.tgz
+output/
+test-results/
+playwright-report/
+.playwright-cli/
+.impeccable/review/
+
+# Local credentials and runtime data
 .env
 .env.*
 !.env.example
-.kodo/
-src/sandbox/windows/build/
+.local/
+/image.txt
+.tmp-build/
+release-assets/
+*.log
 
-# external reference source, not part of this repository
-claude-code-main/
-
-# local agent/tool runtime state
-.helloagents/
-.playwright-cli/
-
-# local design previews and generated brand binaries
-design/
-brand/png/
-brand/*.png
-brand/*.zip
-
-# local credentials and API probe payloads
-test_api.json
-生图api.txt
+# Editor and OS files
+.idea/
+.DS_Store
+Thumbs.db

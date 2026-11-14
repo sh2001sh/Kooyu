@@ -1,0 +1,549 @@
+{
+  "date": "2026-11-12",
+  "scope": "本仓库开发机验收记录，不能代替当前设备与配置的验证。仅指记录中列出的能力。",
+  "harnesses": [
+    {
+      "id": "kodo",
+      "result": "Kodo 主 agent：原生 SDK 对话、恢复与六工具委派闭环通过",
+      "version": "Kodo / pi SDK 1.5.2",
+      "route": "已有 codegoai / deepseek-v4-flash；默认 openai 路由连接超时",
+      "verified": [
+        "create",
+        "text",
+        "turn-ended",
+        "settled",
+        "usage",
+        "identity-preserved",
+        "resume-reply",
+        "history-read",
+        "history-list",
+        "harness_list",
+        "harness_open",
+        "harness_send",
+        "harness_watch",
+        "harness_read",
+        "harness_stop",
+        "persistent-wake-from-codex",
+        "product-identity-kodo",
+        "abort-request",
+        "native-cancelled",
+        "native-settled-after-abort",
+        "real-message-queue-FIFO",
+        "pending-message-withdrawal",
+        "delivery-query",
+        "local-session-delete",
+        "native-steer-during-active-turn",
+        "native-model-catalog-or-route",
+        "native-model-effort-switch",
+        "native-context-after-model-switch",
+        "model-settings-receipt-and-persistence"
+      ],
+      "remaining": "运行中取消通过；其他目标 harness 的管理闭环待验收。内核使用已有 codegoai/deepseek-v4-flash；默认 openai 路由超时。",
+      "implementation": "implemented",
+      "messagingVerification": {
+        "result": "passed",
+        "checks": 25,
+        "report": "docs/test-results-2026-11-11-fixes.md"
+      },
+      "modelVerification": {
+        "result": "passed",
+        "checks": 17,
+        "report": "docs/test-results-2026-11-11-models.md",
+        "nativeIdPreserved": true,
+        "nativeContextPreserved": true
+      },
+      "providerConfigurationVerification": {
+        "date": "2026-11-12",
+        "report": "docs/test-results-2026-11-12-providers.md",
+        "implemented": true,
+        "nativeProof": "anthropic-messages"
+      }
+    },
+    {
+      "id": "pi",
+      "result": "独立 pi harness：对话、历史读取/列表、原 ID 恢复通过",
+      "version": "SDK 1.5.2",
+      "route": "已有 codegoai / deepseek-v4-flash；默认 openai 路由连接超时",
+      "verified": [
+        "create",
+        "text",
+        "turn-ended",
+        "settled",
+        "usage",
+        "identity-preserved",
+        "resume-reply",
+        "history-read",
+        "history-list",
+        "abort-request",
+        "native-cancelled",
+        "native-settled-after-abort",
+        "real-message-queue-FIFO",
+        "pending-message-withdrawal",
+        "delivery-query",
+        "local-session-delete",
+        "native-steer-during-active-turn",
+        "native-model-catalog-or-route",
+        "native-model-effort-switch",
+        "native-context-after-model-switch",
+        "model-settings-receipt-and-persistence"
+      ],
+      "remaining": "独立直接聊天与基础工具，不装配 Kodo 管理工具。运行中取消通过；默认 openai 路由超时。",
+      "implementation": "implemented",
+      "messagingVerification": {
+        "result": "passed",
+        "checks": 25,
+        "report": "docs/test-results-2026-11-11-fixes.md"
+      },
+      "modelVerification": {
+        "result": "passed",
+        "checks": 17,
+        "report": "docs/test-results-2026-11-11-models.md",
+        "nativeIdPreserved": true,
+        "nativeContextPreserved": true
+      },
+      "providerConfigurationVerification": {
+        "date": "2026-11-12",
+        "report": "docs/test-results-2026-11-12-providers.md",
+        "implemented": true,
+        "nativeProof": "anthropic-messages"
+      }
+    },
+    {
+      "id": "codex",
+      "result": "已通过原生对话、恢复、Kodo 委派及双视口 UI",
+      "version": "CLI 0.161.0",
+      "verified": [
+        "initialize",
+        "thread/start",
+        "turn/start",
+        "text",
+        "usage",
+        "turn-ended",
+        "identity-preserved",
+        "resume-reply",
+        "history-read",
+        "history-list",
+        "interrupt-request",
+        "native-interrupted",
+        "real-message-queue-FIFO",
+        "pending-message-withdrawal",
+        "delivery-query",
+        "local-session-delete",
+        "native-steer-during-active-turn",
+        "native-model-catalog-or-route",
+        "native-model-effort-switch",
+        "native-context-after-model-switch",
+        "model-settings-receipt-and-persistence",
+        "pending-message-edit-real-ui",
+        "pending-send-now-native-steer-real-ui",
+        "edited-original-request-dedup",
+        "running-model-change-queued-dispatch-real-ui"
+      ],
+      "remaining": "交互待验证；后台静止未知；额度接口实测要求 ChatGPT 登录，当前 API 认证不可用",
+      "implementation": "implemented",
+      "messagingVerification": {
+        "result": "passed",
+        "checks": 25,
+        "report": "docs/test-results-2026-11-11-fixes.md"
+      },
+      "modelVerification": {
+        "result": "passed",
+        "checks": 17,
+        "report": "docs/test-results-2026-11-11-models.md",
+        "nativeIdPreserved": true,
+        "nativeContextPreserved": true
+      },
+      "desktopVerification": {
+        "result": "passed",
+        "checks": 9,
+        "source": "desktop-bundled",
+        "desktopVersion": "26.1103.4239.0",
+        "report": "docs/test-results-2026-11-11-desktop-harnesses.md",
+        "verified": [
+          "native-session",
+          "model-catalog",
+          "send-ack",
+          "assistant-reply",
+          "completed-turn",
+          "native-id-preserved"
+        ]
+      },
+      "providerConfigurationVerification": {
+        "date": "2026-11-12",
+        "report": "docs/test-results-2026-11-12-providers.md",
+        "implemented": true,
+        "nativeProof": "openai-responses"
+      }
+    },
+    {
+      "id": "claude-code",
+      "result": "已通过原生对话、历史与恢复",
+      "version": "Agent SDK 0.3.322 + 原生 CLI 2.1.300",
+      "verified": [
+        "create",
+        "text",
+        "usage",
+        "turn-ended",
+        "history-read",
+        "history-list",
+        "identity-preserved",
+        "resume-reply",
+        "interrupt-request-acknowledged",
+        "turn-ended-after-interrupt",
+        "real-message-queue-FIFO",
+        "pending-message-withdrawal",
+        "delivery-query",
+        "local-session-delete",
+        "native-model-catalog-or-route",
+        "native-model-effort-switch",
+        "native-context-after-model-switch",
+        "model-settings-receipt-and-persistence"
+      ],
+      "remaining": "随附 CLI 2.1.322 的恢复失败；本机原生 CLI 2.1.300 通过，默认优先原生 CLI。取消/审批/订阅登录兼容待验收；interrupt 请求和随后的 success 回合结束已通过，不能证明 cancelled 或后台静止。",
+      "implementation": "implemented",
+      "messagingVerification": {
+        "result": "passed",
+        "checks": 22,
+        "report": "docs/test-results-2026-11-11-fixes.md"
+      },
+      "modelVerification": {
+        "result": "passed",
+        "checks": 17,
+        "report": "docs/test-results-2026-11-11-models.md",
+        "nativeIdPreserved": true,
+        "nativeContextPreserved": true
+      },
+      "desktopVerification": {
+        "result": "installation-discovered; desktop-code-bridge-unverified",
+        "desktopVersion": "4.23118.0",
+        "report": "docs/test-results-2026-11-11-desktop-harnesses.md",
+        "reason": "SDK原生路径已有验证；Claude消费者desktop登录不等于Agent SDK授权"
+      },
+      "providerConfigurationVerification": {
+        "date": "2026-11-12",
+        "report": "docs/test-results-2026-11-12-providers.md",
+        "implemented": true,
+        "nativeProof": "messages-direct-and-chat-bridge"
+      }
+    },
+    {
+      "id": "deepseek-harness",
+      "result": "已通过原生对话及原 ID 恢复",
+      "version": "CLI 0.2.1-rc.2",
+      "verified": [
+        "initialize",
+        "session/prompt",
+        "message",
+        "turn-ended",
+        "settled",
+        "identity-preserved",
+        "resume-reply",
+        "real-message-queue-FIFO",
+        "pending-message-withdrawal",
+        "delivery-query",
+        "local-session-delete",
+        "native-model-catalog-or-route",
+        "native-model-effort-switch",
+        "native-context-after-model-switch",
+        "model-settings-receipt-and-persistence"
+      ],
+      "remaining": "原 ID resume 已通过；无单轮 cancel；独立原生历史读取/列表未接；用量/额度未知；prompt 已移除 30 秒截止，握手保留超时；长回合使用隔离时钟合约测试。",
+      "implementation": "implemented",
+      "messagingVerification": {
+        "result": "passed",
+        "checks": 20,
+        "report": "docs/test-results-2026-11-11-fixes.md"
+      },
+      "modelVerification": {
+        "result": "passed",
+        "checks": 17,
+        "report": "docs/test-results-2026-11-11-models.md",
+        "nativeIdPreserved": true,
+        "nativeContextPreserved": true
+      },
+      "desktopVerification": {
+        "result": "passed",
+        "checks": 9,
+        "source": "desktop-bundled",
+        "desktopVersion": "0.2.2-rc.1",
+        "report": "docs/test-results-2026-11-11-desktop-harnesses.md",
+        "verified": [
+          "native-session",
+          "model-catalog",
+          "send-ack",
+          "assistant-reply",
+          "completed-turn",
+          "native-id-preserved"
+        ]
+      },
+      "providerConfigurationVerification": {
+        "date": "2026-11-12",
+        "report": "docs/test-results-2026-11-12-providers.md",
+        "implemented": true,
+        "nativeProof": "anthropic-messages-two-turns"
+      }
+    },
+    {
+      "id": "zcode",
+      "result": "desktop 3.17.2 / runtime 0.17.1：新 Provider 绑定双轮真实回复；默认账户仍受余额阻塞",
+      "verified": [
+        "desktop-discovery",
+        "desktop-native-session",
+        "desktop-conversation-subscription",
+        "native-current-model-catalog",
+        "send-ack",
+        "native-failed-turn-reported",
+        "bound-provider-reply",
+        "bound-provider-two-turn-context",
+        "bound-provider-native-id-preserved"
+      ],
+      "remaining": "原生默认 GLM-5.3 / bigmodel-api 返回 429 / 1113 余额不足或无资源包；另一 Provider 的 Anthropic 新绑定已通过双轮。恢复/取消/审批待测。历史限200行，无原生列表；复杂交互控件未完成。",
+      "implementation": "partial",
+      "modelVerification": {
+        "result": "desktop-current-model-catalog-and-send-ack; reply-blocked",
+        "report": "docs/test-results-2026-11-11-desktop-harnesses.md",
+        "reason": "原生账户资源不足，未验证真实模型切换"
+      },
+      "version": "Desktop 3.17.2 / bundled runtime 0.17.1",
+      "desktopVerification": {
+        "result": "blocked-account-resources",
+        "source": "desktop-bundled",
+        "report": "docs/test-results-2026-11-11-desktop-harnesses.md",
+        "nativeErrorCode": "1113",
+        "nativeReply": false
+      },
+      "providerConfigurationVerification": {
+        "date": "2026-11-12",
+        "report": "docs/test-results-2026-11-12-providers.md",
+        "implemented": true,
+        "nativeProof": "desktop-runtime-anthropic-messages-two-turns-local-credential-relay"
+      }
+    },
+    {
+      "id": "opencode",
+      "result": "desktop 1.18.30: independent Provider binding passed real two-turn replies, context and same native identity",
+      "verified": [
+        "desktop-discovery",
+        "desktop-native-health",
+        "desktop-native-session",
+        "native-connected-provider-model-catalog",
+        "native-sse",
+        "send-ack",
+        "native-failed-turn-reported",
+        "bound-provider-reply",
+        "bound-provider-two-turn-context",
+        "bound-provider-native-id-preserved"
+      ],
+      "remaining": "Other protocols/tools/approval/resume/cancel need native validation; earlier default routes returned 503 and remain separate historical evidence.",
+      "implementation": "partial",
+      "modelVerification": {
+        "result": "desktop-connected-model-catalog-and-selection-ack; reply-blocked",
+        "report": "docs/test-results-2026-11-11-desktop-harnesses.md",
+        "reason": "13个connected provider模型不是已获授权/服务可用的保证；指定原生目录模型也返回503"
+      },
+      "version": "Desktop 1.18.30",
+      "desktopVerification": {
+        "result": "blocked-model-service-503",
+        "source": "desktop-bundled",
+        "report": "docs/test-results-2026-11-11-desktop-harnesses.md",
+        "nativeReply": false
+      },
+      "providerConfigurationVerification": {
+        "date": "2026-11-12",
+        "report": "docs/test-results-2026-11-12-providers.md",
+        "implemented": true,
+        "nativeProof": "desktop-1.18.30-anthropic-messages"
+      }
+    },
+    {
+      "id": "gemini",
+      "result": "Gemini CLI 0.67.0 经本地 Google→Chat 网关双轮真实回复及原生 Read 工具通过",
+      "verified": ["native-configuration-read", "native-acp-session-created", "gateway-text-two-turns", "native-read-tool", "native-identity-preserved"],
+      "remaining": "Google 直连缺可用凭据未验证；网关图片、签名思考、搜索、精确 countTokens 不支持；load/list/usage 按握手；无独立 read API，historyRead unsupported；自动继续尚未开放。",
+      "implementation": "partial",
+      "modelVerification": {
+        "result": "wire-contract-only; native-unverified",
+        "report": "docs/test-results-2026-11-11-models.md",
+        "reason": "2026-11-11 的中途模型切换批次未安装 CLI；此字段保留该历史批次状态，新 Provider 网关推理见 providerConfigurationVerification"
+      },
+      "desktopVerification": {
+        "result": "discovery-contract-only; not-found-on-this-machine",
+        "report": "docs/test-results-2026-11-11-desktop-harnesses.md",
+        "reason": "无实际安装包/原生入口与登录，GUI不冒充编码harness"
+      },
+      "providerConfigurationVerification": {
+        "date": "2026-11-12",
+        "report": "docs/test-results-2026-11-12-providers.md",
+        "implemented": true,
+        "nativeProof": "0.67.0-chat-gateway-two-turns-and-native-read-tool"
+      }
+    },
+    {
+      "id": "cursor",
+      "result": "公共 ACP 隔离协议测试通过，未实机验证",
+      "verified": [],
+      "remaining": "普通 Cursor Agent 没有已确认的自定义 Provider endpoint，绑定入口禁用；原生 CLI/登录和 Windows shim 仍待验证；无独立 read API，historyRead unsupported；自动继续尚未开放。",
+      "implementation": "partial",
+      "modelVerification": {
+        "result": "wire-contract-only; native-unverified",
+        "report": "docs/test-results-2026-11-11-models.md",
+        "reason": "2026-11-11 的中途模型切换批次未安装 CLI；普通 Cursor Agent 自定义 Provider 接口仍未确认"
+      },
+      "desktopVerification": {
+        "result": "discovery-contract-only; not-found-on-this-machine",
+        "report": "docs/test-results-2026-11-11-desktop-harnesses.md",
+        "reason": "无实际安装包/原生入口与登录，GUI不冒充编码harness"
+      },
+      "providerConfigurationVerification": {
+        "date": "2026-11-12",
+        "report": "docs/test-results-2026-11-12-providers.md",
+        "implemented": false,
+        "nativeProof": "unsupported-normal-cursor-agent-custom-provider-interface-unconfirmed"
+      }
+    },
+    {
+      "id": "kimi-code",
+      "result": "Kimi Code 2.5.2 隔离新 Provider 绑定双轮真实回复，同一原生 ID",
+      "verified": ["bound-provider-reply", "bound-provider-two-turn-context", "bound-provider-native-id-preserved"],
+      "remaining": "用户日常安装与登录未验收；其他协议、恢复及计量待协商；无独立 read API，historyRead unsupported；自动继续尚未开放。",
+      "implementation": "partial",
+      "modelVerification": {
+        "result": "wire-contract-only; native-unverified",
+        "report": "docs/test-results-2026-11-11-models.md",
+        "reason": "2026-11-11 的中途模型切换批次未安装 CLI；2026-11-12 隔离 2.5.2 新绑定双轮通过，中途模型切换仍未验收"
+      },
+      "desktopVerification": {
+        "result": "discovery-contract-only; not-found-on-this-machine",
+        "report": "docs/test-results-2026-11-11-desktop-harnesses.md",
+        "reason": "无实际安装包/原生入口与登录，GUI不冒充编码harness"
+      },
+      "providerConfigurationVerification": {
+        "date": "2026-11-12",
+        "report": "docs/test-results-2026-11-12-providers.md",
+        "implemented": true,
+        "nativeProof": "2.5.2-anthropic-messages-two-turns"
+      }
+    },
+    {
+      "id": "grok-build",
+      "result": "Grok Build 1.0.80 隔离新 Provider 绑定双轮真实回复，同一原生 ID",
+      "verified": ["bound-provider-reply", "bound-provider-two-turn-context", "bound-provider-native-id-preserved"],
+      "remaining": "用户日常安装与登录未验收；其他协议、恢复及计量待协商；无独立 read API，historyRead unsupported；自动继续尚未开放。",
+      "implementation": "partial",
+      "modelVerification": {
+        "result": "wire-contract-only; native-unverified",
+        "report": "docs/test-results-2026-11-11-models.md",
+        "reason": "2026-11-11 的中途模型切换批次未安装 CLI；2026-11-12 隔离 1.0.80 新绑定双轮通过，中途模型切换仍未验收"
+      },
+      "desktopVerification": {
+        "result": "discovery-contract-only; not-found-on-this-machine",
+        "report": "docs/test-results-2026-11-11-desktop-harnesses.md",
+        "reason": "无实际安装包/原生入口与登录，GUI不冒充编码harness"
+      },
+      "providerConfigurationVerification": {
+        "date": "2026-11-12",
+        "report": "docs/test-results-2026-11-12-providers.md",
+        "implemented": true,
+        "nativeProof": "1.0.80-anthropic-messages-two-turns"
+      }
+    }
+  ],
+  "desktop": "Electron 39.1.0：本机继承 ELECTRON_RUN_AS_NODE 与 GPU 初始化 0xC0000005 属环境问题；启动器清理该变量、使用软件渲染和校验用户缓存回退，已实际连接 Host。五种新 Provider 绑定/默认值在实窗通过。窗口隐藏/重开/退出 UI 后，真实 Codex 任务完成且原生 ID 保持；完整停止菜单/打包和真实手机仍未验收。Playwright 关闭等待超时与主进程实际退出分开记录。",
+  "checks": {
+    "typecheck": "passed",
+    "build": "passed",
+    "domainAndAdapterTests": 137,
+    "browserTests": 18,
+    "nativeSupervision": "passed",
+    "profileRevisionAndDefaults": "passed",
+    "kodoPiIdentitySeparation": "passed",
+    "kodoProductIdentity": "passed",
+    "lint": "passed",
+    "format": "passed",
+    "eventWindow1000SyntheticRows": "300-at-a-time, older-page, return-latest; desktop/390px phone; no horizontal overflow",
+    "nativeInterruptionRequests": "Kodo/pi cancelled+settled; Codex interrupted; Claude acknowledged+success result, cancellation unconfirmed",
+    "systemKeyringRotation": "passed with temporary synthetic entries; unused rotation removed, pinned retained, current clear removed; temporary entries deleted",
+    "supplementaryApiAssertions": 18,
+    "deepseekPromptBeyond30s": "passed with isolated synthetic native peer, 31058ms wall time; not a real long model turn",
+    "searchMessageLocation": "passed: BUG-20261111-003 fixed; same/other session, bounded context, highlight, phone viewport",
+    "nativeMessagingAssertions": 117,
+    "nativeMessagingUiAssertions": 11,
+    "electronNativeTaskSurvivesUiExit": "passed with real Codex and original native ID",
+    "nativeModelSwitchAssertions": 85,
+    "nativeModelAndPendingUiAssertions": 16,
+    "electronModelRegression": "passed: real window, hide/reopen, independent Host after UI exit",
+    "piCustomEndpointModelSwitch": "passed with isolated SDK session: endpoint preserved, native session not recreated, pricing unknown; not a real provider conversation",
+    "desktopDiscovery": "passed: all ten synthetic installation records; real registry/Appx discovery; desktop-bundled native paths verified separately",
+    "desktopNativeConversationAssertions": 18,
+    "opencodeEchoAndFailureMapping": "passed: native message roles suppress user echoes; error followed by idle remains failed",
+    "desktopUi": "passed: 1440px/390px discovery, bridge source, long paths, rescan; no horizontal overflow",
+    "providerConfiguration": "passed within explicit implementation/verification matrix"
+  },
+  "limits": [
+    "首轮 10 种直接聊天尚未全部验收",
+    "外部活动会话接管未验证，恢复前需结束原运行",
+    "手机 HTTPS 配对逻辑已实现，真实手机与隧道尚未验收",
+    "多执行 Host 尚未实现；保留 hostId 边界",
+    "本地会话删除为逻辑移除；原生文件/身份/回执保留；单条已发消息删除、原生撤回/回滚和内容擦除未实现",
+    "Electron 本机继承 ELECTRON_RUN_AS_NODE 与 GPU 初始化异常已有环境诊断和启动修复；完整桌面停止菜单/异常退出和打包尚待验收",
+    "模型目录不等于账号授权；Codex luna 当前路由拒绝，无静默降级",
+    "普通 Cursor Agent 自定义 Provider 入口未证实并禁用；Gemini 经本地 Chat 网关真实双轮与原生 Read 通过，Google 直连未验证",
+    "DeepSeek 原生模型/档位无完整目录；ACP thought_level 仅属于当前模型；运行中立即发送受原生 steer 能力限制",
+    "desktop识别不等于所有版本可聊天；ZCode默认账户资源不足但新绑定双轮通过；OpenCode早期默认路由503，新绑定双轮通过；Kimi/Grok隔离运行版本双轮通过，用户日常安装未验收；macOS/Linux发现路径未实测"
+  ],
+  "reliability": {
+    "schemaVersion": 4,
+    "textBatching": "100ms / 8192 UTF-16 code units, native ID dedup in same transaction",
+    "retention": "idle text/state: 30 days / latest 20000, protect active watch cursors; resolved inbox:90 days; keep commands/wakes/receipts/tombstones",
+    "credentials": "reference-aware revisions; durable pre-write inventory; orphan deletion retry",
+    "deviceTokenDays": 30,
+    "processExceptions": "pause automation and exit nonzero for recovery",
+    "details": "docs/reliability-hardening.md"
+  },
+  "latestFunctionalRun": {
+    "id": "20261112-providers",
+    "report": "docs/test-results-2026-11-12-providers.md",
+    "previousRun": "docs/test-results-2026-11-11-desktop-harnesses.md",
+    "scope": "Three-layer Provider/model-library/harness-binding implementation. Native proofs cover only the explicitly recorded versions, models, routes and operations.",
+    "externalBlocks": [
+      "ZCode默认原生账户余额/资源包不足；新 Provider 绑定独立通过",
+      "Gemini Google 直连缺可用凭据；普通 Cursor Agent 无已确认的自定义 Provider 入口",
+      "Kimi/Grok/Gemini隔离版本已运行，用户日常安装仍待核实",
+      "真实手机/TLS设备未验收"
+    ],
+    "implementationGaps": [
+      "Normal Cursor Agent custom Provider binding is disabled because its endpoint configuration interface is unconfirmed.",
+      "Gemini Chat gateway inference and native Read passed; direct Google protocol inference remains unverified.",
+      "Bound sessions pin one model; model/Provider changes need a new bound session; declared effort may change next turn.",
+      "Toggle/budget metadata is stored but no general operation control or native mapping is implemented.",
+      "No Provider/model/binding deletion or independent configuration revision/receipt GC.",
+      "Provider model lists are refreshed on demand; no periodic refresh of every endpoint.",
+      "One public background feed only; OpenRouter can be selected as endpoint models URL.",
+      "Gateway images, signed/encrypted thinking, hosted/custom tools, remote response state and compaction are rejected.",
+      "Gateway native cancel/crash recovery and other tools/versions remain unverified.",
+      "All custom bound endpoint costs remain unknown; native catalog prices do not prove actual billing.",
+      "Official account model-list APIs were not all live tested.",
+      "No real phone/TLS; Electron verified five new binding/default flows, not every Provider form or native reply."
+    ]
+  },
+  "providerConfiguration": {
+    "report": "docs/test-results-2026-11-12-providers.md",
+    "verification": "docs/provider-configuration-verification.json",
+    "implementedMappings": [
+      "kodo",
+      "pi",
+      "codex",
+      "claude-code",
+      "opencode",
+      "deepseek-harness",
+      "zcode",
+      "gemini",
+      "kimi-code",
+      "grok-build"
+    ],
+    "remainingMappings": [
+      "cursor"
+    ],
+    "nativeDoubleTurns": "Kodo plus nine native harness bound conversations; Gemini and Claude Chat bridges include native Read tool; Cursor custom Provider unsupported"
+  }
+}

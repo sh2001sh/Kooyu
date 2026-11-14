@@ -1,0 +1,132 @@
+{
+  "reviewedAt": "2026-11-10",
+  "source": "https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json",
+  "purpose": "Distribution metadata reference only; no runtime validation",
+  "agents": [
+    {
+      "id": "cursor",
+      "name": "Cursor",
+      "version": "2026.11.05",
+      "description": "Cursor's coding agent",
+      "website": "https://cursor.com/docs/cli/acp",
+      "authors": [
+        "Cursor"
+      ],
+      "license": "proprietary",
+      "license_url": "https://cursor.com/terms-of-service",
+      "distribution": {
+        "binary": {
+          "darwin-aarch64": {
+            "archive": "https://downloads.cursor.com/lab/2026.11.05-86047df/darwin/arm64/agent-cli-package.tar.gz",
+            "cmd": "./dist-package/cursor-agent",
+            "args": [
+              "acp"
+            ]
+          },
+          "darwin-x86_64": {
+            "archive": "https://downloads.cursor.com/lab/2026.11.05-86047df/darwin/x64/agent-cli-package.tar.gz",
+            "cmd": "./dist-package/cursor-agent",
+            "args": [
+              "acp"
+            ]
+          },
+          "linux-aarch64": {
+            "archive": "https://downloads.cursor.com/lab/2026.11.05-86047df/linux/arm64/agent-cli-package.tar.gz",
+            "cmd": "./dist-package/cursor-agent",
+            "args": [
+              "acp"
+            ]
+          },
+          "linux-x86_64": {
+            "archive": "https://downloads.cursor.com/lab/2026.11.05-86047df/linux/x64/agent-cli-package.tar.gz",
+            "cmd": "./dist-package/cursor-agent",
+            "args": [
+              "acp"
+            ]
+          },
+          "windows-aarch64": {
+            "archive": "https://downloads.cursor.com/lab/2026.11.05-86047df/windows/arm64/agent-cli-package.zip",
+            "cmd": "./dist-package\\cursor-agent.cmd",
+            "args": [
+              "acp"
+            ]
+          },
+          "windows-x86_64": {
+            "archive": "https://downloads.cursor.com/lab/2026.11.05-86047df/windows/x64/agent-cli-package.zip",
+            "cmd": "./dist-package\\cursor-agent.cmd",
+            "args": [
+              "acp"
+            ]
+          }
+        }
+      },
+      "icon": "https://cdn.agentclientprotocol.com/registry/v1/latest/cursor.svg"
+    },
+    {
+      "id": "gemini",
+      "name": "Gemini CLI",
+      "version": "0.67.0",
+      "description": "Google's official CLI for Gemini",
+      "repository": "https://github.com/google-gemini/gemini-cli",
+      "website": "https://geminicli.com",
+      "authors": [
+        "Google"
+      ],
+      "license": "Apache-2.0",
+      "license_url": "https://github.com/google-gemini/gemini-cli/blob/main/LICENSE",
+      "distribution": {
+        "npx": {
+          "package": "@google/gemini-cli@0.67.0",
+          "args": [
+            "--acp"
+          ]
+        }
+      },
+      "icon": "https://cdn.agentclientprotocol.com/registry/v1/latest/gemini.svg"
+    },
+    {
+      "id": "grok-build",
+      "name": "Grok Build",
+      "version": "1.0.80",
+      "description": "xAI's coding agent and CLI",
+      "website": "https://x.ai/cli",
+      "authors": [
+        "xAI"
+      ],
+      "license": "proprietary",
+      "license_url": "https://x.ai/legal/terms-of-service",
+      "distribution": {
+        "npx": {
+          "package": "@xai-official/grok@1.0.80",
+          "args": [
+            "agent",
+            "stdio"
+          ]
+        }
+      },
+      "icon": "https://cdn.agentclientprotocol.com/registry/v1/latest/grok-build.svg"
+    },
+    {
+      "id": "kimi-code",
+      "name": "Kimi Code",
+      "version": "2.5.2",
+      "description": "Moonshot AI's next-gen coding agent",
+      "repository": "https://github.com/MoonshotAI/kimi-code",
+      "website": "https://moonshotai.github.io/kimi-code/",
+      "authors": [
+        "Moonshot AI"
+      ],
+      "license": "MIT",
+      "license_url": "https://github.com/MoonshotAI/kimi-code/blob/main/LICENSE",
+      "distribution": {
+        "npx": {
+          "package": "@moonshot-ai/kimi-code@2.5.2",
+          "args": [
+            "acp"
+          ]
+        }
+      },
+      "icon": "https://cdn.agentclientprotocol.com/registry/v1/latest/kimi-code.svg"
+    }
+  ]
+}

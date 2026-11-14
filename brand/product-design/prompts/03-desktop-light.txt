@@ -1,0 +1,13 @@
+SURFACE: a HIGH-FIDELITY LIGHT-THEME DESKTOP APPLICATION SCREEN for Kodo at landscape 1536x1024. Fill the canvas with the application UI, front-on and flat. No laptop, desk, camera perspective, marketing headline, poster composition or floating devices. This must look like a carefully designed working product.
+
+Architecture: a thin native Windows-style title bar, then a project navigation rail about 190px wide, a session list about 270px wide, a generous central conversation about 770px wide, and a narrow optional context pane on the far right. All panels align to one quiet horizontal header rhythm. Warm-white/ivory surfaces with very subtle tonal separation; restrained coral selection and actions.
+
+Top-left brand is the exact small approved coral ribbon symbol + "kodo". Rail has "新建会话", "主对话", "待处理", "全部会话", then a project group "项目" with selected "Atlas · 示例项目" and "个人工具". Bottom links "工具与配置", "用量与预算", "手机访问". A tiny bottom status reads "本地工作台 · 设计示例". Line icons are restrained and consistent.
+
+Session-list header "Atlas" with a search field. Small filter "全部工具". Three realistic sparse session rows: selected "梳理项目结构" with "Codex · 空闲"; "完善设置页" with "Claude Code · 等待输入"; "补充使用说明" with "pi · 草稿". A separate "Kodo 主对话" entry may sit above native sessions. Tool identity is secondary metadata, never the primary sidebar hierarchy.
+
+Main conversation header "梳理项目结构", small metadata "Codex · 原生会话 · 设计示例". Compact mode switch "直接对话" selected, "Kodo 托管" unselected. Show calm whitespace around a short transcript. User bubble: "帮我梳理这个项目的入口和模块关系。" Assistant: "我会先查看目录结构，再整理入口和依赖关系。" Below, a folded neutral tool row "查看项目目录" and a short readable module outline with simple file names. Do not invent passed tests, success counts or billing records.
+
+Bottom anchored composer with placeholder "继续这段工作…", attachment and context controls, a small deeper-coral send arrow, and an adjacent clear text control "停止并暂停托管". A discreet hint can read "托管仅在开启后生效". Right context pane title "工作位置" shows "Atlas / main" and a short example file list; lower section "活动" contains illustrative neutral events, not fabricated completion claims.
+
+Typography is crisp and readable at natural UI sizes, headers modest, transcript easy to read. Small functional iconography, compact navigation, 1px warm-gray boundaries, 10-12px radii on composer and message bubbles, very modest shadow only under the composer. This is a quiet local workbench with a warm human brand; do not put decorative ribbons or a giant logo into the conversation area. No green or blue theme.

@@ -1,0 +1,32 @@
+{
+  "proposal": "Kepace",
+  "status": "recommended_meaning_led_proposal",
+  "construction": "A deliberate brand contraction of Keep + Pace, not an existing English word.",
+  "suggested_pronunciation": "KEE-pace /kiːpeɪs/",
+  "brand_interpretation": "让不同工具里的工作保持同一步调，让工具跟上你的节奏。",
+  "dictionary_source": "https://dictionary.cambridge.org/us/dictionary/english/keep-pace",
+  "dictionary_note": "Keep pace refers to moving or progressing at the same rate as someone or something else. Brand wording is an interpretation.",
+  "symbol_sha256": "7bf8d93f5591bf698eb37c662167f9dc7ece8fab563f0fc7f30353f9617344ef",
+  "domain": {
+    "domain": "kepace.com",
+    "checked_at_utc": "2026-11-13T03:36:22.378824+00:00",
+    "source": "https://rdap.verisign.com/com/v1/domain/kepace.com",
+    "http_status": 404,
+    "outcome": "no_registration_record_returned"
+  },
+  "web_screen": {
+    "date": "2026-11-13",
+    "queries": [
+      "\"Kepace\"",
+      "\"Kepace\" software",
+      "\"Kepace\" AI",
+      "\"kepace.com\""
+    ],
+    "scope": "Limited exact-name search; not an exhaustive availability or trademark check."
+  },
+  "limits": [
+    "No domain purchase or reservation.",
+    "404 does not guarantee registrar availability or price.",
+    "Trademark and phonetic-similarity checks remain incomplete."
+  ]
+}

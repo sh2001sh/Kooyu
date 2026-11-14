@@ -1,0 +1,459 @@
+import { z } from "zod";
+export * from "./providers.js";
+export * from "./settings.js";
+export * from "./onboarding.js";
+export * from "./skills.js";
+export * from "./workspace-files.js";
+import type { HarnessBinding, ModelParameters } from "./providers.js";
+
+import { HARNESS_IDS } from "./client.js";
+export { HARNESS_IDS, NATIVE_HARNESS_IDS, PROTOCOL_VERSION } from "./client.js";
+export type HarnessId = (typeof HARNESS_IDS)[number];
+export type PermissionMode =
+  | "read-only"
+  | "workspace-write"
+  | "full-access"
+  | "accept-edits"
+  | "bypass-permissions"
+  | "plan"
+  | "build"
+  | "edit"
+  | "yolo"
+  | "guarded"
+  | "opencode-ask"
+  | "opencode-deny"
+  | "opencode-allow"
+  | "kodo-tools-read"
+  | "kodo-tools-none"
+  | "kimi:manual"
+  | "kimi:auto"
+  | "kimi:yolo"
+  | `acp:${string}`;
+export type TransportKind = "sdk" | "app-server" | "http" | "acp";
+export const CAPABILITIES = [
+  "directChat",
+  "historyRead",
+  "resume",
+  "observeLive",
+  "observeExternal",
+  "steer",
+  "cancel",
+  "interaction",
+  "usage",
+  "quota",
+] as const;
+export type Capability = (typeof CAPABILITIES)[number];
+export type CapabilitySupport = "supported" | "unsupported" | "unknown";
+
+export type HarnessModelSupport =
+  "binding-or-model" | "binding-required" | "native-models" | "native-only";
+export interface ModelParameterSource {
+  kind:
+    | "native-catalog"
+    | "native-runtime"
+    | "native-config"
+    | "user"
+    | "endpoint"
+    | "remote-catalog"
+    | "bundled-catalog";
+  label: string;
+  reference?: string;
+  version?: string;
+}
+export type ModelParameter =
+  "contextWindow" | "maxInputTokens" | "maxOutputTokens" | "reasoning" | "pricing";
+/** USD / 1M tokens; perRequest is USD / API request. */
+export interface ModelPricing {
+  input?: number;
+  output?: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+  reasoning?: number;
+  perRequest?: number;
+  billingMode?: "tokens" | "request" | "hybrid";
+  /** Ordered context brackets, selected using total input including cache tokens. */
+  tiers?: (Omit<ModelPricing, "tiers" | "billingMode"> & { upToInputTokens?: number })[];
+}
+export interface HarnessModelOption {
+  id: string;
+  name?: string;
+  provider?: string;
+  /** Exact canonical ID reported by the native harness for an alias, never inferred. */
+  resolvedModel?: string;
+  source: "discovered" | "native-catalog" | "recent";
+  /** Explicitly marked by the native catalog or current session snapshot. */
+  isDefault?: boolean;
+  isCurrent?: boolean;
+  /** Native values, not a universal low/medium/high scale. */
+  reasoning?: string[];
+  /** Token limits are independent. Absence means unreported, never a product default. */
+  contextWindow?: number;
+  maxInputTokens?: number;
+  maxOutputTokens?: number;
+  pricing?: ModelPricing;
+  parameterSources?: Partial<Record<ModelParameter, ModelParameterSource>>;
+}
+
+export interface ModelSettings {
+  model: string | null;
+  reasoning: string | null;
+  revision: number;
+}
+export const permissionModeSchema = z.union([
+  z.enum([
+    "read-only",
+    "workspace-write",
+    "full-access",
+    "accept-edits",
+    "bypass-permissions",
+    "plan",
+    "build",
+    "edit",
+    "yolo",
+    "guarded",
+    "opencode-ask",
+    "opencode-deny",
+    "opencode-allow",
+    "kodo-tools-read",
+    "kodo-tools-none",
+    "kimi:manual",
+    "kimi:auto",
+    "kimi:yolo",
+  ]),
+  z.templateLiteral(["acp:", z.string().regex(/^[^\r\n]{1,100}$/)]),
+]);
+export const modelSettingsSchema = z
+  .object({
+    requestId: z.string().uuid(),
+    expectedRevision: z.number().int().nonnegative(),
+    model: z.string().trim().min(1).max(200).nullable(),
+    reasoning: z.string().trim().min(1).max(100).nullable(),
+  })
+  .strict();
+
+export interface HarnessDescriptor {
+  id: HarnessId;
+  name: string;
+  transport: TransportKind;
+  implementation: "implemented" | "partial" | "pending";
+  capabilities: Record<Capability, CapabilitySupport>;
+  modelSupport?: HarnessModelSupport;
+  /** Values the harness uses when Kodo does not override them, from its own config. */
+  nativeDefaults?: { model: string | null; reasoning: string | null; permission: string | null };
+  /** Existing native configuration files, resolved on the host. */
+  configFiles?: string[];
+  configFileLocations?: { path: string; exists: boolean }[];
+  models?: HarnessModelOption[];
+  defaultModel?: { provider?: string; model: string } | null;
+  evidence?: string;
+  health?: {
+    installed: boolean;
+    launchable?: boolean;
+    modes?: {
+      cliOnly: { launchable: boolean; source: "sdk" | "cli" | null; reason?: string };
+      desktopOnly: {
+        launchable: boolean;
+        source: "sdk" | "desktop-bundled" | null;
+        reason?: string;
+      };
+    };
+    source?: "sdk" | "cli" | "desktop-bundled" | "configured" | null;
+    desktops?: { name: string; path: string; version: string | null }[];
+    executable: string | null;
+    version: string | null;
+    authentication: "unknown" | "configured";
+    error?: string;
+  };
+}
+
+export type HarnessBindingDefaults = Partial<Record<HarnessId, string | null>>;
+export interface BindingDefaults {
+  harnessBindingIds: HarnessBindingDefaults;
+  revision: number;
+}
+export interface Project {
+  id: string;
+  name: string;
+  createdAt: string;
+  pinned?: boolean;
+  bindingDefaults?: HarnessBindingDefaults;
+  configRevision?: number;
+}
+export interface Workspace {
+  id: string;
+  projectId: string | null;
+  hostId: string;
+  rootPath: string;
+}
+export type SessionKind = "direct" | "supervisor";
+export interface Session {
+  id: string;
+  title: string;
+  harnessId: HarnessId;
+  kind: SessionKind;
+  scope: "global" | "project";
+  projectId: string | null;
+  workspaceId: string | null;
+  hostId: string;
+  nativeSessionId: string | null;
+  phase: "draft" | "native";
+  createdAt: string;
+  instanceId: string;
+  bindingId: string | null;
+  bindingRevision: number | null;
+  bindingUnavailable?: boolean;
+  personalInstructions?: string;
+  model?: string | null;
+  reasoning?: string | null;
+  permissionMode?: PermissionMode | null;
+  settingsRevision?: number;
+  appliedSettingsRevision?: number;
+  /** Capabilities confirmed by this session's transport, refreshed on reconnect. */
+  nativeCapabilities?: Partial<Record<Capability, CapabilitySupport>>;
+  ownerEpoch: number;
+  runState: "idle" | "running" | "waiting-input" | "unknown";
+  executionState: "settled" | "unknown";
+  connectionState: "connected" | "offline" | "reconnecting";
+  archived: boolean;
+  pinned: boolean;
+  unread?: boolean;
+}
+
+export interface Supervision {
+  id: string;
+  controllerSessionId: string;
+  targetSessionId: string;
+  mode: "observe" | "notify" | "continue";
+  state: "active" | "paused" | "revoked";
+  generation: number;
+  cursor: string | null;
+  goal?: string;
+  runId?: string | null;
+  continuous?: boolean;
+  trigger?: "turn-ended" | "settled";
+  limits?: { endAt?: string; maxContinuations?: number; maxFailures?: number; budgetUsd?: number };
+  continuations?: number;
+  failures?: number;
+}
+
+export interface RuntimeEvent {
+  id: string;
+  sessionId: string;
+  nativeRunId: string | null;
+  sequence: number;
+  type:
+    | "message"
+    | "text-delta"
+    | "tool"
+    | "subagent"
+    | "interaction"
+    | "turn-ended"
+    | "settled"
+    | "disconnected"
+    | "state"
+    | "usage"
+    | "supervision"
+    | "handoff"
+    | "error";
+  payload: unknown;
+  createdAt: string;
+  source: string;
+}
+
+/** Child execution is observable without changing the parent run's state or usage. */
+export interface SubagentEvent {
+  agentId: string;
+  parentAgentId?: string;
+  name?: string;
+  status?: string;
+  toolCallId?: string;
+  event?: { type: Exclude<RuntimeEvent["type"], "subagent">; payload: unknown };
+}
+
+/** Ephemeral adapter input derived from a pinned Harness binding. */
+export interface BindingRuntime {
+  id: string;
+  revision: number;
+  name: string;
+  provider: string;
+  model: string;
+  baseUrl?: string;
+  credentialRef: string | null;
+  protocol?:
+    | "native"
+    | "openai-completions"
+    | "openai-responses"
+    | "anthropic-messages"
+    | "google-generative-ai";
+  modelParameters?: ModelParameters;
+  binding?: HarnessBinding;
+}
+
+export const createProjectSchema = z
+  .object({
+    name: z.string().trim().min(1).max(100),
+    rootPath: z.string().trim().min(1).max(4096).optional(),
+  })
+  .strict();
+export const createSessionSchema = z
+  .object({
+    title: z.string().trim().min(1).max(200),
+    harnessId: z.enum(HARNESS_IDS),
+    kind: z.enum(["direct", "supervisor"]),
+    projectId: z.string().uuid().nullable().optional(),
+    workspaceId: z.string().uuid().nullable().optional(),
+    bindingId: z.string().uuid().nullable().optional(),
+    model: z.string().trim().min(1).max(200).nullable().optional(),
+    reasoning: z.string().trim().min(1).max(100).nullable().optional(),
+    permissionMode: permissionModeSchema.nullable().optional(),
+  })
+  .strict();
+export type CreateProject = z.infer<typeof createProjectSchema>;
+export type CreateSession = z.infer<typeof createSessionSchema>;
+
+export interface Snapshot {
+  protocolVersion: number;
+  eventCursor?: number;
+  hostId: string;
+  stage: "development";
+  projects: Project[];
+  workspaces: Workspace[];
+  sessions: Session[];
+  harnesses: HarnessDescriptor[];
+  supervisions: Supervision[];
+  bindings: HarnessBinding[];
+  inbox: InboxItem[];
+  devices: { id: string; name: string; createdAt: string; expiresAt?: string }[];
+  projectGrants: ProjectGrant[];
+  bindingDefaults: BindingDefaults;
+}
+export interface ProjectGrant {
+  controllerSessionId: string;
+  projectId: string;
+  mode: "create-only" | "create-and-control";
+  goal: string;
+  limits: Supervision["limits"];
+}
+
+export interface Command {
+  id: string;
+  sessionId: string;
+  kind: "open" | "send" | "stop" | "interaction";
+  origin: "user" | "supervisor" | "wake";
+  controllerId: string | null;
+  generation: number;
+  bindingRevision: number | null;
+  status: "accepted" | "dispatched" | "confirmed" | "unknown" | "rejected" | "cancelled";
+  nativeRunId: string | null;
+  body: Record<string, unknown>;
+  createdAt: string;
+  error?: string;
+}
+export interface InboxItem {
+  id: string;
+  sessionId: string;
+  type: string;
+  payload: unknown;
+  createdAt: string;
+  resolved: boolean;
+  read?: boolean;
+}
+export interface Usage {
+  id: string;
+  sessionId: string;
+  projectId: string | null;
+  bindingId: string | null;
+  source: string;
+  scope: "turn" | "session";
+  input: number | null;
+  output: number | null;
+  cacheRead: number | null;
+  cacheWrite: number | null;
+  costUsd: number | null;
+  costKind: "actual" | "estimate" | "unknown";
+  model: string | null;
+  createdAt: string;
+}
+export const sendSchema = z
+  .object({
+    requestId: z.string().uuid(),
+    text: z.string().min(1).max(200000),
+    mode: z.enum(["new", "queue", "steer"]).default("queue"),
+  })
+  .strict();
+export const pendingMessageSchema = z
+  .object({
+    requestId: z.string().uuid(),
+    expectedRevision: z.number().int().nonnegative(),
+    action: z.enum(["edit", "send-now"]),
+    text: z.string().trim().min(1).max(200000).optional(),
+  })
+  .strict()
+  .refine((v) => v.action !== "edit" || v.text !== undefined, {
+    message: "修改待发消息需要正文。",
+  });
+export const watchSchema = z
+  .object({
+    controllerSessionId: z.string().uuid(),
+    targetSessionId: z.string().uuid(),
+    mode: z.enum(["observe", "notify", "continue"]),
+    goal: z.string().max(10000).default(""),
+    cursor: z.number().int().min(0).default(0),
+    runId: z.string().nullable().optional(),
+    continuous: z.boolean().default(false),
+    trigger: z.enum(["turn-ended", "settled"]).default("turn-ended"),
+    limits: z
+      .object({
+        endAt: z.iso.datetime().optional(),
+        maxContinuations: z.number().int().positive().optional(),
+        maxFailures: z.number().int().positive().optional(),
+        budgetUsd: z.number().positive().optional(),
+      })
+      .default({}),
+  })
+  .strict();
+export const projectGrantSchema = z
+  .object({
+    projectId: z.string().uuid(),
+    mode: z.enum(["create-only", "create-and-control", "revoke"]).default("create-only"),
+    goal: z.string().max(10000).default(""),
+    limits: watchSchema.shape.limits,
+  })
+  .strict();
+export const harnessBindingDefaultsSchema = z.partialRecord(
+  z.enum(HARNESS_IDS),
+  z.string().uuid().nullable(),
+);
+export const bindingDefaultsSchema = z
+  .object({
+    expectedRevision: z.number().int().min(0),
+    harnessBindingIds: harnessBindingDefaultsSchema,
+  })
+  .strict();
+export const projectDefaultsSchema = z
+  .object({
+    expectedRevision: z.number().int().min(0),
+    bindingDefaults: harnessBindingDefaultsSchema,
+  })
+  .strict();
+export type ErrorCode =
+  | "INVALID_INPUT"
+  | "NOT_FOUND"
+  | "CONFLICT"
+  | "NOT_IMPLEMENTED"
+  | "UNSUPPORTED"
+  | "UNAVAILABLE"
+  | "UNAUTHORIZED"
+  | "INTERNAL_ERROR";
+export interface ApiError {
+  error: { code: ErrorCode; message: string };
+}
+export class KodoError extends Error {
+  constructor(
+    public readonly code: ErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = "KodoError";
+  }
+}

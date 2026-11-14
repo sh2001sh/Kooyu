@@ -1,0 +1,20 @@
+{
+  "name": "@kodo/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "tsc -p tsconfig.json && node ../../scripts/launch-electron.mjs .",
+    "start": "node ../../scripts/launch-electron.mjs ."
+  },
+  "dependencies": {
+    "@kodo/platform": "0.0.0",
+    "@kodo/protocol": "0.0.0"
+  },
+  "devDependencies": {
+    "electron": "39.1.0"
+  }
+}

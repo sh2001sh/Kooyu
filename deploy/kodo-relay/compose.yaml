@@ -1,0 +1,37 @@
+name: kooyu-relay
+services:
+  relay:
+    image: ${RELAY_IMAGE:?Set a versioned RELAY_IMAGE in .env}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4321:4321"
+    environment:
+      RELAY_ORIGIN: https://relay.kooyu.app
+      RELAY_WEB_ROOT: /app/web
+      RELAY_TRUST_PROXY: "1"
+      RELAY_MAX_HOSTS: "1000"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    cpus: 2.0
+    pids_limit: 100
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('node:http').get('http://127.0.0.1:4321/healthz',{headers:{host:'relay.kooyu.app'}},r=>{r.resume();process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1))",
+        ]
+      interval: 20s
+      timeout: 5s
+      start_period: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"

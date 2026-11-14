@@ -1,32 +1,33 @@
-name: local-regression
-on: [push, pull_request]
+name: Kooyu checks
+on: [workflow_call, pull_request]
+permissions:
+  contents: read
 jobs:
   verify:
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [windows-latest, ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 24.13.0
           cache: npm
-      - name: Install Linux native sandbox dependencies
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y bubblewrap util-linux python3
-      - name: Enable unprivileged bubblewrap on Ubuntu runner
-        if: runner.os == 'Linux'
-        # GitHub's ephemeral Ubuntu host may block user namespaces through
-        # AppArmor. This changes the CI VM only, never a user's workstation.
-        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: npm ci
-      - run: npm run check
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run typecheck
+      - run: npm run build
+      - run: node --test scripts/platform.test.mjs
       - run: npm test
-      - name: Native platform gate (unavailable backend is a failure)
-        run: node scripts/verify-platform.mjs
-      - run: npm run test:assessment
-      - run: npm run demo:kernel -- --scripted
-      - run: npm run demo:kernel:recovery
-      - name: Clean production installation, upgrade and rollback
-        run: node scripts/verify-installation.mjs
+      - run: npm run test:relay
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:ui
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: checks-reports-${{ matrix.os }}
+          path: |
+            apps/web/test-results
+            apps/web/playwright-report

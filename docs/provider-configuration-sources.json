@@ -1,0 +1,452 @@
+{
+  "schemaVersion": 1,
+  "reviewedAt": "2026-11-11T15:55:58.490486+00:00",
+  "scope": "Provider, model catalog and harness configuration source review; no product implementation or runtime verification in this review.",
+  "report": "docs/provider-configuration.md",
+  "referenceProjects": [
+    {
+      "id": "pi",
+      "repository": "https://github.com/earendil-works/pi",
+      "revision": "058496badc9aec0479058311988c5f134325c2f5",
+      "license": "MIT",
+      "verification": "Local HEAD matched; evidence blobs read from the exact commit, including sparse-checkout paths.",
+      "files": [
+        {
+          "path": "packages/ai/catalog/generate.ts",
+          "url": "https://github.com/earendil-works/pi/blob/058496badc9aec0479058311988c5f134325c2f5/packages/ai/catalog/generate.ts",
+          "sha256": "216abe76de82ca57c3e4b425d088c0cca8eafd28ebaa2a33bc8bba825d617cd5"
+        },
+        {
+          "path": "packages/ai/catalog/sources/index.ts",
+          "url": "https://github.com/earendil-works/pi/blob/058496badc9aec0479058311988c5f134325c2f5/packages/ai/catalog/sources/index.ts",
+          "sha256": "c5f52cbbcdcde8c1561577eaa37af978578ed25e5f4cda1134af17ea43b16400"
+        },
+        {
+          "path": "packages/ai/src/providers/model-schema.ts",
+          "url": "https://github.com/earendil-works/pi/blob/058496badc9aec0479058311988c5f134325c2f5/packages/ai/src/providers/model-schema.ts",
+          "sha256": "446f06d10c8a60be5749bfad79fb36c70401c2d746448fa915ade9be82b827b0"
+        },
+        {
+          "path": "packages/ai/scripts/model-data.ts",
+          "url": "https://github.com/earendil-works/pi/blob/058496badc9aec0479058311988c5f134325c2f5/packages/ai/scripts/model-data.ts",
+          "sha256": "f2605a61ad57d8a3edb93e5c36c0f543d051796b8353452a1fd584eec33f02f4"
+        }
+      ]
+    },
+    {
+      "id": "cc-switch",
+      "repository": "https://github.com/farion1231/cc-switch",
+      "revision": "5e9812e07965f7497977fe7835648972a8120422",
+      "license": "MIT",
+      "verification": "Local HEAD matched; evidence blobs read from the exact commit, including sparse-checkout paths.",
+      "files": [
+        {
+          "path": "src-tauri/src/services/model_fetch.rs",
+          "url": "https://github.com/farion1231/cc-switch/blob/5e9812e07965f7497977fe7835648972a8120422/src-tauri/src/services/model_fetch.rs",
+          "sha256": "5c1216a9ba9ae553e82ba5e26c45e152e3af18667d0c38e82e6b67fbf5cde113"
+        },
+        {
+          "path": "src/lib/modelMetadata.ts",
+          "url": "https://github.com/farion1231/cc-switch/blob/5e9812e07965f7497977fe7835648972a8120422/src/lib/modelMetadata.ts",
+          "sha256": "97042ea8307c46d016edf45e3c441e89340bad35c1ec17efe53b0670cf9e506c"
+        },
+        {
+          "path": "src/lib/modelsDev.ts",
+          "url": "https://github.com/farion1231/cc-switch/blob/5e9812e07965f7497977fe7835648972a8120422/src/lib/modelsDev.ts",
+          "sha256": "1590338bebfaa34890718e96cff817308750514854ebd15d0f705bd8b0587e5b"
+        },
+        {
+          "path": "src/components/providers/forms/FetchedModelPicker.tsx",
+          "url": "https://github.com/farion1231/cc-switch/blob/5e9812e07965f7497977fe7835648972a8120422/src/components/providers/forms/FetchedModelPicker.tsx",
+          "sha256": "2762ea7fd6cad6c03c825748e93bf00b4283e71721cbcd87181ce25776146169"
+        },
+        {
+          "path": "src-tauri/src/services/model_pricing.rs",
+          "url": "https://github.com/farion1231/cc-switch/blob/5e9812e07965f7497977fe7835648972a8120422/src-tauri/src/services/model_pricing.rs",
+          "sha256": "5f2e6ee50195d5cd9ddce3ed42627a0f2d1ec959f53c9ebce8ac9b1aca216152"
+        },
+        {
+          "path": "src-tauri/src/proxy/providers/adapter.rs",
+          "url": "https://github.com/farion1231/cc-switch/blob/5e9812e07965f7497977fe7835648972a8120422/src-tauri/src/proxy/providers/adapter.rs",
+          "sha256": "245515ef2139fa22e2b9fa29ce98273d0f1dde3865e20826d5f070cbc3d716fb"
+        },
+        {
+          "path": "src-tauri/src/proxy/providers/transform_codex_chat.rs",
+          "url": "https://github.com/farion1231/cc-switch/blob/5e9812e07965f7497977fe7835648972a8120422/src-tauri/src/proxy/providers/transform_codex_chat.rs",
+          "sha256": "e66b88a8a8a0e42aab916138ac729b0646f84a8fc1fe7fe1af4a19067e119f30"
+        },
+        {
+          "path": "src-tauri/src/proxy/providers/streaming_codex_chat.rs",
+          "url": "https://github.com/farion1231/cc-switch/blob/5e9812e07965f7497977fe7835648972a8120422/src-tauri/src/proxy/providers/streaming_codex_chat.rs",
+          "sha256": "74b7d4d27100fcb1c86a9012428c4818cf61e6cf07db77c461613e906ad53dd8"
+        }
+      ]
+    },
+    {
+      "id": "magpie",
+      "repository": "https://github.com/yetone/magpie",
+      "revision": "6a450c49827d08965d5fe164d94ce502587d1571",
+      "license": "MIT",
+      "verification": "Local HEAD matched; evidence blobs read from the exact commit, including sparse-checkout paths.",
+      "files": [
+        {
+          "path": "internal/provider/provider.go",
+          "url": "https://github.com/yetone/magpie/blob/6a450c49827d08965d5fe164d94ce502587d1571/internal/provider/provider.go",
+          "sha256": "32a71ac4bdf8be18ed2657f22aa9336faba6581352a6ec1d0cc5f772cc7a1349"
+        },
+        {
+          "path": "internal/catalog/catalog.go",
+          "url": "https://github.com/yetone/magpie/blob/6a450c49827d08965d5fe164d94ce502587d1571/internal/catalog/catalog.go",
+          "sha256": "76664051fc47dc133f9db20160139b7fd53193ec93e430491e10a9ec168e31de"
+        },
+        {
+          "path": "internal/catalog/live.go",
+          "url": "https://github.com/yetone/magpie/blob/6a450c49827d08965d5fe164d94ce502587d1571/internal/catalog/live.go",
+          "sha256": "722bbd0ec96899d70217ad9d6b68aa6832ebf34e9943e950663f23a8f5dca19a"
+        },
+        {
+          "path": "internal/catalog/bundled.go",
+          "url": "https://github.com/yetone/magpie/blob/6a450c49827d08965d5fe164d94ce502587d1571/internal/catalog/bundled.go",
+          "sha256": "5e4cf2bc00f5c8c836525ef6abdc685e2cc50a754c217d7c08d20cbc0d130c6c"
+        },
+        {
+          "path": "internal/catalog/gemini_list.go",
+          "url": "https://github.com/yetone/magpie/blob/6a450c49827d08965d5fe164d94ce502587d1571/internal/catalog/gemini_list.go",
+          "sha256": "0b8bf051f5c388dfe8f7edf5d28fff17bf222cca2221e6962411639e865ce904"
+        },
+        {
+          "path": "internal/agent/nativemodels.go",
+          "url": "https://github.com/yetone/magpie/blob/6a450c49827d08965d5fe164d94ce502587d1571/internal/agent/nativemodels.go",
+          "sha256": "f02b294e7de6e6a0be04577b86d431080c3fec17328f56c4e0fd11b74abe5490"
+        },
+        {
+          "path": "internal/agent/codex.go",
+          "url": "https://github.com/yetone/magpie/blob/6a450c49827d08965d5fe164d94ce502587d1571/internal/agent/codex.go",
+          "sha256": "79680e9f34204c1f6ff2342d4f83b6208bddc4201929606978538017c91667bd"
+        },
+        {
+          "path": "internal/codexcat/codexcat.go",
+          "url": "https://github.com/yetone/magpie/blob/6a450c49827d08965d5fe164d94ce502587d1571/internal/codexcat/codexcat.go",
+          "sha256": "93d64bebf9ccb36c3a6561e0791cf497d2413367e1860b633adcad8b1929aa04"
+        },
+        {
+          "path": "internal/agent/claude.go",
+          "url": "https://github.com/yetone/magpie/blob/6a450c49827d08965d5fe164d94ce502587d1571/internal/agent/claude.go",
+          "sha256": "2f509a03620ee237e48ad4ff0f78c557c2941ac758f6e22cad1ed0906a8dd452"
+        },
+        {
+          "path": "internal/agent/dsh.go",
+          "url": "https://github.com/yetone/magpie/blob/6a450c49827d08965d5fe164d94ce502587d1571/internal/agent/dsh.go",
+          "sha256": "839a1a9e2d318887a557766061d03a26c14e1c6caaf0b2abc70986ddce7854fd"
+        },
+        {
+          "path": "internal/agent/pi.go",
+          "url": "https://github.com/yetone/magpie/blob/6a450c49827d08965d5fe164d94ce502587d1571/internal/agent/pi.go",
+          "sha256": "aea27c1c1812fe44111224bdb4944ed6462f96fb72ec34c7c15a54c05a43c2f3"
+        },
+        {
+          "path": "internal/agent/zcode.go",
+          "url": "https://github.com/yetone/magpie/blob/6a450c49827d08965d5fe164d94ce502587d1571/internal/agent/zcode.go",
+          "sha256": "6a3e2041feeb500f219d826d21b8fc5bc60a413b0d2c785aaa217cb44785e515"
+        },
+        {
+          "path": "internal/agent/opencode_providers.go",
+          "url": "https://github.com/yetone/magpie/blob/6a450c49827d08965d5fe164d94ce502587d1571/internal/agent/opencode_providers.go",
+          "sha256": "ef2511026afcd6a340e5a57dcbe2ef231b2d2c4f14e84d8d5cf42fbdfa4c6289"
+        },
+        {
+          "path": "internal/agent/opencode_v2.go",
+          "url": "https://github.com/yetone/magpie/blob/6a450c49827d08965d5fe164d94ce502587d1571/internal/agent/opencode_v2.go",
+          "sha256": "a8ef280990b15eb593718b9b7e2ce677a5c8b6a32467cdb1fadb8a2e0a5ac1c2"
+        },
+        {
+          "path": "internal/agent/gemini.go",
+          "url": "https://github.com/yetone/magpie/blob/6a450c49827d08965d5fe164d94ce502587d1571/internal/agent/gemini.go",
+          "sha256": "bfd95eb19172f546afa4026fe349d61cc5070cb06ad4e09cd9e7ef2f2c47818b"
+        },
+        {
+          "path": "internal/agent/cursorlocal.go",
+          "url": "https://github.com/yetone/magpie/blob/6a450c49827d08965d5fe164d94ce502587d1571/internal/agent/cursorlocal.go",
+          "sha256": "04580dd2435e1ff77396decec4fa4d9ee35e2c5c46b5bc07af9e5411e56c8470"
+        },
+        {
+          "path": "internal/agent/kimi.go",
+          "url": "https://github.com/yetone/magpie/blob/6a450c49827d08965d5fe164d94ce502587d1571/internal/agent/kimi.go",
+          "sha256": "486f4ba95781e1ec3be2ff0630600c2b133b1d81cf8f667224d04b458b63a032"
+        },
+        {
+          "path": "internal/agent/grok.go",
+          "url": "https://github.com/yetone/magpie/blob/6a450c49827d08965d5fe164d94ce502587d1571/internal/agent/grok.go",
+          "sha256": "d9596d22fa69968e26ed60d4c7f720adb37b8a159b0f9f1840390f38ca31aadc"
+        },
+        {
+          "path": "internal/gateway/chat.go",
+          "url": "https://github.com/yetone/magpie/blob/6a450c49827d08965d5fe164d94ce502587d1571/internal/gateway/chat.go",
+          "sha256": "8ef3aa9d1053f0a318bd9f8b35510180b506a216c056f6325ab55d8800d8e986"
+        },
+        {
+          "path": "internal/gateway/anthropic.go",
+          "url": "https://github.com/yetone/magpie/blob/6a450c49827d08965d5fe164d94ce502587d1571/internal/gateway/anthropic.go",
+          "sha256": "6cc448bfeae64a13190b063c0f8a3f844f58fea595a63a1d02e1d6f319d8ab24"
+        },
+        {
+          "path": "internal/gateway/gemini.go",
+          "url": "https://github.com/yetone/magpie/blob/6a450c49827d08965d5fe164d94ce502587d1571/internal/gateway/gemini.go",
+          "sha256": "a435b128b19e65a45912fabcc201e3393366f24d423b908120e1fc2cf254c13a"
+        }
+      ]
+    },
+    {
+      "id": "deepseek-harness",
+      "repository": "https://github.com/deepseek-ai/deepseek-harness",
+      "revision": "fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159",
+      "license": "MIT",
+      "verification": "Local HEAD matched; evidence blobs read from the exact commit, including sparse-checkout paths.",
+      "files": [
+        {
+          "path": "packages/llm/llm-deepseek/src/listing.ts",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/llm/llm-deepseek/src/listing.ts",
+          "sha256": "be41d48d5bcce9d3b45479a5e73eea724562cf11c108fd7a9ea26196b22cecac"
+        },
+        {
+          "path": "packages/llm/llm-deepseek/src/model-info.ts",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/llm/llm-deepseek/src/model-info.ts",
+          "sha256": "69d322cd2a94a8bb0fda1492a80c424e490b1f03c5ce53c5f4e0df33e2c2fb66"
+        },
+        {
+          "path": "packages/llm/llm-pi-ai/src/index.ts",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/llm/llm-pi-ai/src/index.ts",
+          "sha256": "d177d879b41d0847564fac96aa795060e0469794f9753eafccb23ecf193d2a56"
+        },
+        {
+          "path": "packages/llm/llm-pi-ai/src/catalog.ts",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/llm/llm-pi-ai/src/catalog.ts",
+          "sha256": "2acfd765ca51ee4feb8a28ab56fc740bf329d4bf53c7fc66885a3243bff799b6"
+        },
+        {
+          "path": "packages/llm/llm-pi-ai/src/discovery.ts",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/llm/llm-pi-ai/src/discovery.ts",
+          "sha256": "6f6a249dce322bebb48e72c35c5113225de187aa2b09cde91d15ecba371aa966"
+        }
+      ]
+    },
+    {
+      "id": "zcode",
+      "repository": "https://github.com/zai-org/ZCode",
+      "revision": "a9fe401eede6e6e5e01be9048679c206fe6f02d9",
+      "license": "Apache-2.0",
+      "verification": "Local HEAD matched; evidence blobs read from the exact commit, including sparse-checkout paths.",
+      "files": [
+        {
+          "path": "apps/zcode-cli/docs/design/v2/model/models-dev-catalog-source.md",
+          "url": "https://github.com/zai-org/ZCode/blob/a9fe401eede6e6e5e01be9048679c206fe6f02d9/apps/zcode-cli/docs/design/v2/model/models-dev-catalog-source.md",
+          "sha256": "1bde9c7be0f195a6e31e495fc17874041cecc6b9e156611095a254711d7dbd76"
+        },
+        {
+          "path": "packages/provider-node/src/zcode-builtin-provider-config-source.ts",
+          "url": "https://github.com/zai-org/ZCode/blob/a9fe401eede6e6e5e01be9048679c206fe6f02d9/packages/provider-node/src/zcode-builtin-provider-config-source.ts",
+          "sha256": "9d4be2160204cc2234edc5dde7e68851584b4a1989dc181a3b3e1402a28c3659"
+        },
+        {
+          "path": "packages/provider/src/config/model-config.ts",
+          "url": "https://github.com/zai-org/ZCode/blob/a9fe401eede6e6e5e01be9048679c206fe6f02d9/packages/provider/src/config/model-config.ts",
+          "sha256": "4c0e31fc9945989573861561099d49b6695063ac13a98964443ebe967dc51c45"
+        },
+        {
+          "path": "packages/shared/src/model-config.ts",
+          "url": "https://github.com/zai-org/ZCode/blob/a9fe401eede6e6e5e01be9048679c206fe6f02d9/packages/shared/src/model-config.ts",
+          "sha256": "5d8f79c5add78054fad680493e530fa8ed01af99ffb907875a216cc462e6c0f0"
+        },
+        {
+          "path": "apps/zcode-cli/packages/contracts/src/interfaces/model-catalog.port.ts",
+          "url": "https://github.com/zai-org/ZCode/blob/a9fe401eede6e6e5e01be9048679c206fe6f02d9/apps/zcode-cli/packages/contracts/src/interfaces/model-catalog.port.ts",
+          "sha256": "b6607f87cb65f96c95ac42f2c2c67547b80eedc35b52da55a71967fbc37cdbb9"
+        }
+      ]
+    }
+  ],
+  "additionalPinnedUpstreams": [
+    {
+      "id": "opencode",
+      "repository": "https://github.com/anomalyco/opencode",
+      "tag": "v1.18.30",
+      "revision": "3104c1428ec91f809e5ab86631300de41eb6952e",
+      "license": "MIT",
+      "files": [
+        {
+          "url": "https://raw.githubusercontent.com/anomalyco/opencode/3104c1428ec91f809e5ab86631300de41eb6952e/packages/core/src/models-dev.ts",
+          "sha256": "f6e11d21709b56b56f6c4f5bcc02e46356061d4501998d75b09b40d14baf07be"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/anomalyco/opencode/3104c1428ec91f809e5ab86631300de41eb6952e/packages/opencode/src/provider/provider.ts",
+          "sha256": "77216c71fd0079da036ac25af516a29ee45f58b52e7c63987065ca97583ee364"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/anomalyco/opencode/3104c1428ec91f809e5ab86631300de41eb6952e/packages/schema/src/models-dev.ts",
+          "sha256": "fc63c12f2ae068ffb32a233cf554af7e942725e0dfa77236fe497b8dde76adbd"
+        }
+      ],
+      "verification": "GitHub tag ref resolved to commit; files fetched by commit and SHA-256 checked. No package installation or execution."
+    },
+    {
+      "id": "gemini",
+      "repository": "https://github.com/google-gemini/gemini-cli",
+      "tag": "v0.67.0",
+      "revision": "dc6602cec4a6e823aa33937144245dc421e5165f",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "url": "https://raw.githubusercontent.com/google-gemini/gemini-cli/dc6602cec4a6e823aa33937144245dc421e5165f/packages/core/src/config/defaultModelConfigs.ts",
+          "sha256": "fada79b63ff50638e15fa5fec09f0ee54e08e0b53107fed683a369559200d4d8"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/google-gemini/gemini-cli/dc6602cec4a6e823aa33937144245dc421e5165f/packages/core/src/config/models.ts",
+          "sha256": "5712e7247b81304e1c559c8675f8fb2a86fd8981e17b4d8949f2f3eaeb11ef68"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/google-gemini/gemini-cli/dc6602cec4a6e823aa33937144245dc421e5165f/packages/core/src/core/tokenLimits.ts",
+          "sha256": "136ebd8f30e783a043c8282623cc8e1068cc25c0ecb01d14e8500adf17e86cce"
+        }
+      ],
+      "verification": "GitHub tag ref resolved to commit; files fetched by commit and SHA-256 checked. No package installation or execution."
+    }
+  ],
+  "publishedPackages": [
+    {
+      "name": "@moonshot-ai/kimi-code",
+      "version": "2.5.2",
+      "metadataUrl": "https://registry.npmjs.org/@moonshot-ai%2Fkimi-code/2.5.2",
+      "tarball": "https://registry.npmjs.org/@moonshot-ai/kimi-code/-/kimi-code-2.5.2.tgz",
+      "integrity": "sha512-a7UuugqQuPBHB2ZMiu8ezAFIwJ0dn6xanuRnTqa2pXXu12ng7kvigAlXy47TxNKpnyj8vgaNStedTv4kbqSCuA==",
+      "sha256": "e7e3d7b0097cd09080bb67dea0bbc4cbb2291aebcf58b722c52575ce7b953b20",
+      "licenseDeclaredByNpm": "MIT",
+      "verification": "Downloaded and read only; npm SHA-512 integrity matched. No installation, postinstall, login or model calls.",
+      "repositoryTagVerification": "The v2.5.2 GitHub tag lookup returned 404; no matching source commit claimed.",
+      "evidence": [
+        {
+          "path": "package/package.json",
+          "symbols": [
+            "catalog:update"
+          ]
+        },
+        {
+          "path": "package/dist/main.mjs",
+          "sha256": "b158343c177414e2a615116a96e193b333ca183bb0ee9569e51b0f4569e3a23e",
+          "symbols": [
+            "builtInModelsDev.ts",
+            "modelsDevUpstream.ts",
+            "getModelsDevCatalog",
+            "fetchManagedKimiCodeModels",
+            "parseThinkEfforts",
+            "toManagedModelAlias",
+            "resolveThinkingEffort",
+            "resolveBootstrapOptions"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "@xai-official/grok",
+      "version": "1.0.80",
+      "metadataUrl": "https://registry.npmjs.org/@xai-official%2Fgrok/1.0.80",
+      "tarball": "https://registry.npmjs.org/@xai-official/grok/-/grok-1.0.80.tgz",
+      "integrity": "sha512-KJ6dITKHtWwNYx5a18xBzds2qikBZVhM5gKoW3uExJjDRvlxIVOmhMBYUw26cxDpuKMMWCuoINmjIER3LmmvXA==",
+      "sha256": "b8de66b44eb7f7d2341b6eecae9ea23990f09b58737ff764cf62898cb85a0466",
+      "licenseDeclaredByNpm": "Apache-2.0",
+      "verification": "Downloaded and read only; npm SHA-512 integrity matched. No installation, postinstall, login or model calls.",
+      "limitation": "Installer metadata is not a license or source-code determination for the platform native executable. Internal model catalog maintenance was not inspected."
+    }
+  ],
+  "installedSdkEvidence": [
+    {
+      "name": "@anthropic-ai/claude-agent-sdk",
+      "version": "0.3.322",
+      "integrity": "sha512-r88ij7R3SPV2j3BtFuavgrbWZNE8SVVS42AOQ1KxlS+QnSwNNnUhmVXV3Es2dniZySBYX8ENebL43ffhiB0azw==",
+      "evidencePath": "node_modules/@anthropic-ai/claude-agent-sdk/sdk.d.ts",
+      "sha256": "c228b60931a217ea96e222ef41f47a0a83bee0a394d1735e3eb668e3f8838b2f"
+    },
+    {
+      "name": "@earendil-works/pi-coding-agent",
+      "version": "1.5.2",
+      "integrity": "sha512-mUWI04rqF1Vd/m1q+Ps1XeWsTXEVvRUnsmRa83I3Dzua0Tx5bYS93imeqtIfrXf7PkkaR6ERz+AuQhIJlom5yA==",
+      "evidencePath": "node_modules/@earendil-works/pi-coding-agent/package.json",
+      "sha256": "18b422b7d80f2caa2551d253c0a8409e1caa54b954bfb7d18252e507bb8a0318"
+    },
+    {
+      "name": "@earendil-works/pi-ai",
+      "version": "1.5.2",
+      "integrity": "sha512-2tWPSnV3qzfiDIY3aWluBag3vC++Vs+VsXt/UquSU5onPMohPih72FUhIhaqmDdMYubOgB3Byl9uF4Vk40JLvQ==",
+      "evidencePath": "node_modules/@earendil-works/pi-ai/package.json",
+      "sha256": "db02f15488aa28c3cce6bbdeabab7d3a43eaea8b293a9688570bc0b43b15f1b0"
+    }
+  ],
+  "officialDocuments": [
+    {
+      "url": "https://developers.openai.com/codex/config-reference/",
+      "retrievedAt": "2026-11-11T15:55:58.490486+00:00",
+      "sha256": "8aa8da20baac0709db4eb5e3a2200b27c03491fc666d32a2007a51761b48124e",
+      "bytes": 1614688,
+      "versioning": "Live official documentation captured as content hash; not a fixed source revision."
+    },
+    {
+      "url": "https://developers.openai.com/codex/app-server/",
+      "retrievedAt": "2026-11-11T15:55:58.490486+00:00",
+      "sha256": "b6064808593c33329ca16cc19ea2ff5932d269449f9cf6af56387d948da1d6c0",
+      "bytes": 1012882,
+      "versioning": "Live official documentation captured as content hash; not a fixed source revision."
+    },
+    {
+      "url": "https://geminicli.com/docs/cli/model/",
+      "retrievedAt": "2026-11-11T15:55:58.490486+00:00",
+      "sha256": "dc3e15447c8e5588f5f6279a36b9f93b3ba335a98df691900ef670ee2d4109bf",
+      "bytes": 100172,
+      "versioning": "Live official documentation captured as content hash; not a fixed source revision."
+    },
+    {
+      "url": "https://cursor.com/docs/cli/reference/parameters",
+      "retrievedAt": "2026-11-11T15:55:58.490486+00:00",
+      "sha256": "cd75f7b0196639f85777cacc08dc2c1b642b8d96dfc3adf350b36866315e1a9d",
+      "bytes": 385206,
+      "versioning": "Live official documentation captured as content hash; not a fixed source revision."
+    },
+    {
+      "url": "https://docs.x.ai/build/overview",
+      "retrievedAt": "2026-11-11T15:55:58.490486+00:00",
+      "sha256": "36e45bd7eb5c692d343f761aac58a2fa43a3b94d0d75dc7cbd6ac4c40ba7ddb8",
+      "bytes": 288669,
+      "versioning": "Live official documentation captured as content hash; not a fixed source revision."
+    },
+    {
+      "url": "https://docs.x.ai/build/settings/reference.md",
+      "retrievedAt": "2026-11-11T15:55:58.490486+00:00",
+      "sha256": "00ffe8c69f84632b0037c2a9d816d884a025fc4d162efe9264026459550f2ed3",
+      "bytes": 20453,
+      "versioning": "Live official documentation captured as content hash; not a fixed source revision."
+    },
+    {
+      "url": "https://docs.x.ai/build/cli/reference.md",
+      "retrievedAt": "2026-11-11T15:55:58.490486+00:00",
+      "sha256": "d6c944c885ac72a4f4d6036c1796537b795f805bff512c8a31a5f5f10932ee6e",
+      "bytes": 3844,
+      "versioning": "Live official documentation captured as content hash; not a fixed source revision."
+    }
+  ],
+  "limitations": [
+    "Official live pages are not guaranteed to match installed native versions.",
+    "Claude internal catalog, ordinary Cursor Agent provider injection and Grok internal catalog maintenance remain unverified.",
+    "Model listing success is not inference authorization, quota or conversation success.",
+    "Reference cache and downloaded artifacts are not runtime dependencies."
+  ],
+  "onlineCatalogFollowUp": {
+    "localReviewDate": "2026-11-12",
+    "report": "docs/model-catalog-sources.md",
+    "evidence": "docs/model-catalog-sources.json",
+    "scope": "Live public catalog/schema review and revised manual override design only; updater, override editor and three-layer migration not implemented."
+  },
+  "implementationFollowup": {
+    "date": "2026-11-12",
+    "report": "docs/test-results-2026-11-12-providers.md",
+    "verification": "docs/provider-configuration-verification.json",
+    "note": "Original audit/verification scope is retained as a historical record; subsequent product implementation and real model calls are recorded separately."
+  }
+}

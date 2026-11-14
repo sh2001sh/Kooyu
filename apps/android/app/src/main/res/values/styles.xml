@@ -1,0 +1,9 @@
+<resources>
+    <style name="BaseKooyuTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">@bool/kooyu_light_status_bar</item>
+        <item name="android:windowBackground">@color/kooyu_window_background</item>
+        <item name="android:windowActionModeOverlay">true</item>
+    </style>
+    <style name="Theme.Kooyu" parent="@style/BaseKooyuTheme" />
+</resources>

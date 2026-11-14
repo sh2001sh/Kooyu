@@ -1,0 +1,535 @@
+{
+  "schemaVersion": 1,
+  "reviewedAt": "2026-11-11T16:44:08.215560+00:00",
+  "report": "docs/model-catalog-sources.md",
+  "scope": "Read-only source availability and implementation audit; documentation changes only. No runtime catalog updater, override editor, Provider migration or gateway implemented in this review.",
+  "implementationAudit": {
+    "provider": "Existing ModelProfile is a single provider/model/baseUrl/protocol object, not an independent multi-endpoint Provider.",
+    "modelCatalog": "Existing native parameter extraction and field sources; no persistent remote catalog or editable override layer.",
+    "harnessBinding": "Existing profile revisions and selected native mappings; no complete three-layer binding and no generic conversion gateway.",
+    "latestRequestedOverrides": "Automatic fill plus user overrides and restore automatic; design updated, runtime implementation pending.",
+    "productCodeChanged": false,
+    "newModelRequests": 0,
+    "evidenceFiles": [
+      "packages/protocol/src/index.ts",
+      "packages/host/src/profiles/config.ts",
+      "packages/host/src/harnesses/models.ts",
+      "packages/host/src/harnesses/model-metadata.ts",
+      "apps/web/src/components/Profiles.tsx"
+    ],
+    "currentProfileSchemaChecks": [
+      {
+        "field": "endpoints",
+        "accepted": false,
+        "validationCode": "unrecognized_keys"
+      },
+      {
+        "field": "modelsUrl",
+        "accepted": false,
+        "validationCode": "unrecognized_keys"
+      },
+      {
+        "field": "contextWindow",
+        "accepted": false,
+        "validationCode": "unrecognized_keys"
+      }
+    ]
+  },
+  "sources": [
+    {
+      "name": "models-dev",
+      "url": "https://models.dev/api.json",
+      "resolvedUrl": "https://models.dev/api.json",
+      "status": 200,
+      "bytes": 6010533,
+      "sha256": "f55606113b377c543af6c9da092fcd59c73828f9ef7cd0e57d3a48a6ea8c45de",
+      "headers": {
+        "Content-Type": "application/json",
+        "ETag": "\"f55606113b377c543af6c9da092fcd59\"",
+        "Cache-Control": "public, max-age=0, must-revalidate",
+        "Access-Control-Allow-Origin": "*"
+      },
+      "cache": ".local/research-evidence/2026-11-12/model-catalogs/models-dev.json",
+      "capturedAt": "2026-11-11T16:39:25.831097+00:00",
+      "providerCount": 235,
+      "modelCount": 8991,
+      "providerSample": [
+        "abacus",
+        "qiniu-ai",
+        "ollama-cloud",
+        "xiaomi-token-plan-sgp",
+        "stepfun"
+      ]
+    },
+    {
+      "name": "opencode",
+      "url": "https://models.opencode.ai/api.json",
+      "resolvedUrl": "https://models.opencode.ai/api.json",
+      "status": 200,
+      "bytes": 6010533,
+      "sha256": "f55606113b377c543af6c9da092fcd59c73828f9ef7cd0e57d3a48a6ea8c45de",
+      "headers": {
+        "Content-Type": "application/json",
+        "ETag": "\"f55606113b377c543af6c9da092fcd59\"",
+        "Cache-Control": "public, max-age=0, must-revalidate",
+        "Access-Control-Allow-Origin": "*"
+      },
+      "cache": ".local/research-evidence/2026-11-12/model-catalogs/opencode.json",
+      "capturedAt": "2026-11-11T16:39:25.779199+00:00",
+      "providerCount": 235,
+      "modelCount": 8991,
+      "providerSample": [
+        "abacus",
+        "qiniu-ai",
+        "ollama-cloud",
+        "xiaomi-token-plan-sgp",
+        "stepfun"
+      ]
+    },
+    {
+      "name": "openrouter",
+      "url": "https://openrouter.ai/api/v1/models",
+      "resolvedUrl": "https://openrouter.ai/api/v1/models",
+      "status": 200,
+      "bytes": 839874,
+      "sha256": "3a36cfe411401a0620b1776af685e8e430d86a44e6a80b0092b44408ab744fd1",
+      "headers": {
+        "Content-Type": "application/json",
+        "Last-Modified": "Wed, 11 Nov 2026 16:39:22 GMT",
+        "Cache-Control": "public, max-age=120, stale-while-revalidate=3600, stale-if-error=3600",
+        "Access-Control-Allow-Origin": "*"
+      },
+      "cache": ".local/research-evidence/2026-11-12/model-catalogs/openrouter.json",
+      "capturedAt": "2026-11-11T16:39:24.515427+00:00",
+      "modelCount": 466,
+      "topKeys": [
+        "data",
+        "total_count",
+        "links"
+      ],
+      "firstModelKeys": [
+        "id",
+        "canonical_slug",
+        "hugging_face_id",
+        "name",
+        "created",
+        "description",
+        "context_length",
+        "architecture",
+        "pricing",
+        "top_provider",
+        "per_request_limits",
+        "supported_parameters",
+        "default_parameters",
+        "supported_voices",
+        "knowledge_cutoff",
+        "expiration_date",
+        "links",
+        "endpoints",
+        "reasoning"
+      ]
+    },
+    {
+      "name": "models-dev-site",
+      "url": "https://models.dev/",
+      "resolvedUrl": "https://models.dev/",
+      "status": 200,
+      "bytes": 2259373,
+      "sha256": "cda286ed192255d4c9b8c438fe1a23f1ce087532931667222362c69e366e3d66",
+      "headers": {
+        "Content-Type": "text/html",
+        "Cache-Control": "public, max-age=0, must-revalidate",
+        "Access-Control-Allow-Origin": "*"
+      },
+      "cache": ".local/research-evidence/2026-11-12/model-catalogs/models-dev-site.html",
+      "capturedAt": "2026-11-11T16:39:24.957131+00:00"
+    },
+    {
+      "name": "models-dev-license",
+      "url": "https://raw.githubusercontent.com/anomalyco/models.dev/dev/LICENSE",
+      "resolvedUrl": "https://raw.githubusercontent.com/anomalyco/models.dev/dev/LICENSE",
+      "status": 200,
+      "bytes": 1067,
+      "sha256": "dc2dc41c9fea2fd3c41c21c6f484844cab367800b88ff24781f980ad3a9d160a",
+      "headers": {
+        "Content-Type": "text/plain; charset=utf-8",
+        "ETag": "\"fee1bbaab0a1c7a39fe6fddde25eb3081a8acf7ec871913f518da523835ad6f3\"",
+        "Cache-Control": "max-age=300",
+        "Access-Control-Allow-Origin": "*"
+      },
+      "cache": ".local/research-evidence/2026-11-12/model-catalogs/models-dev-license.txt",
+      "capturedAt": "2026-11-11T16:39:23.453080+00:00"
+    },
+    {
+      "name": "openai-models-doc",
+      "url": "https://developers.openai.com/api/reference/resources/models/methods/list",
+      "resolvedUrl": "https://developers.openai.com/api/reference/resources/models/methods/list",
+      "status": 200,
+      "bytes": 477168,
+      "sha256": "b8331e855f69568678c9de690a85853f44725bd368aee1ae78f3fcaca2c2a92a",
+      "headers": {
+        "Content-Type": "text/html; charset=utf-8",
+        "ETag": "\"32bf3bfe1d116d647f1fdb1308452c0f\"",
+        "Last-Modified": "Wed, 11 Nov 2026 11:17:00 GMT",
+        "Cache-Control": "public, max-age=0, must-revalidate",
+        "Access-Control-Allow-Origin": "*"
+      },
+      "cache": ".local/research-evidence/2026-11-12/model-catalogs/openai-models-doc.html",
+      "capturedAt": "2026-11-11T16:39:24.315574+00:00"
+    },
+    {
+      "name": "gemini-models-doc",
+      "url": "https://ai.google.dev/api/models",
+      "resolvedUrl": "https://aistudio.google.com/api-reference/models",
+      "status": 200,
+      "bytes": 38543,
+      "sha256": "7117196c4e66871a6fada9ee4fae32931f8a1035292eaeb436b2db2b3c9cd391",
+      "headers": {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-cache, no-store, max-age=0, must-revalidate"
+      },
+      "cache": ".local/research-evidence/2026-11-12/model-catalogs/gemini-models-doc.html",
+      "capturedAt": "2026-11-11T16:39:25.335412+00:00"
+    },
+    {
+      "name": "anthropic-models-doc",
+      "url": "https://platform.claude.com/docs/en/api/models/list",
+      "resolvedUrl": "https://platform.claude.com/docs/en/api/models/list",
+      "status": 200,
+      "bytes": 619656,
+      "sha256": "c2cfd5674361d253ca579dd913af0c67a414a9c2b1fc384fba340da1c26b5a34",
+      "headers": {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "private, no-cache, no-store, max-age=0, must-revalidate"
+      },
+      "cache": ".local/research-evidence/2026-11-12/model-catalogs/anthropic-models-doc.html",
+      "capturedAt": "2026-11-11T16:39:24.934352+00:00"
+    },
+    {
+      "name": "models-dev-canonical",
+      "url": "https://models.dev/models.json",
+      "resolvedUrl": "https://models.dev/models.json",
+      "status": 200,
+      "bytes": 514064,
+      "sha256": "f29296910a35865fa57f5fc27c74861071b9d37cc9ad9a3fea760647dc0c72b9",
+      "headers": {
+        "Content-Type": "application/json",
+        "ETag": "\"f29296910a35865fa57f5fc27c748610\"",
+        "Cache-Control": "public, max-age=0, must-revalidate"
+      },
+      "cache": ".local/research-evidence/2026-11-12/model-catalogs/models-dev-canonical.json",
+      "capturedAt": "2026-11-11T16:40:16.947114+00:00",
+      "topKeys": [
+        "stepfun/step-3.5-flash",
+        "stepfun/step-5-preview",
+        "stepfun/step-3.7-flash",
+        "stepfun/step-3.5-flash-2603",
+        "cognitivecomputations/dolphin-mistral-24b-venice-edition",
+        "trendyol/asure-12b",
+        "sakana/sakana-namazu",
+        "sakana/fugu-max"
+      ],
+      "modelCount": 613,
+      "sample": {
+        "id": "stepfun/step-3.5-flash",
+        "name": "Step 3.5 Flash",
+        "description": "StepFun flash lane for quick multimodal reasoning and coding assistance",
+        "family": "step",
+        "attachment": false,
+        "reasoning": true,
+        "tool_call": true,
+        "temperature": true,
+        "knowledge": "2025-01",
+        "release_date": "2026-01-29",
+        "last_updated": "2026-02-13",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "open_weights": true,
+        "limit": {
+          "context": 256000,
+          "input": 256000,
+          "output": 256000
+        },
+        "weights": [
+          {
+            "label": "Hugging Face",
+            "url": "https://huggingface.co/stepfun-ai/Step-3.5-Flash"
+          }
+        ],
+        "benchmarks": [
+          {
+            "name": "Artificial Analysis Coding Index",
+            "score": 31.6,
+            "metric": "index",
+            "source": "https://openrouter.ai/stepfun/step-3.5-flash/benchmarks",
+            "date": "2026-06-02"
+          },
+          {
+            "name": "SciCode",
+            "score": 40.4,
+            "metric": "percent correct",
+            "source": "https://openrouter.ai/stepfun/step-3.5-flash/benchmarks",
+            "date": "2026-06-02"
+          },
+          {
+            "name": "Terminal-Bench Hard",
+            "score": 27.3,
+            "metric": "success rate",
+            "source": "https://openrouter.ai/stepfun/step-3.5-flash/benchmarks",
+            "date": "2026-06-02"
+          },
+          {
+            "name": "SWE-Bench Verified",
+            "score": 74.4,
+            "metric": "resolved",
+            "source": "https://arxiv.org/abs/2602.10604"
+          }
+        ]
+      }
+    },
+    {
+      "name": "models-dev-combined",
+      "url": "https://models.dev/catalog.json",
+      "resolvedUrl": "https://models.dev/catalog.json",
+      "status": 200,
+      "bytes": 6524621,
+      "sha256": "d7caaa93ccc18bd5c5cc8367afcb964e24b6f38d8d1762d22501d5e0d77ce1fd",
+      "headers": {
+        "Content-Type": "application/json",
+        "ETag": "\"d7caaa93ccc18bd5c5cc8367afcb964e\"",
+        "Cache-Control": "public, max-age=0, must-revalidate"
+      },
+      "cache": ".local/research-evidence/2026-11-12/model-catalogs/models-dev-combined.json",
+      "capturedAt": "2026-11-11T16:40:17.818208+00:00",
+      "topKeys": [
+        "providers",
+        "models"
+      ]
+    },
+    {
+      "name": "models-dev-github",
+      "url": "https://api.github.com/repos/anomalyco/models.dev/commits/dev",
+      "resolvedUrl": "https://api.github.com/repos/anomalyco/models.dev/commits/dev",
+      "status": 200,
+      "bytes": 11417,
+      "sha256": "bfb8b002002fd7b0dbdb8cdb440014522e05a9ddebffb27a28882dc014690bd3",
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "ETag": "W/\"0b2346eaba273744619b75597e2bdcf8c6d2591dd0e190f204f34165e907f709\"",
+        "Cache-Control": "public, max-age=60, s-maxage=60"
+      },
+      "cache": ".local/research-evidence/2026-11-12/model-catalogs/models-dev-github.json",
+      "capturedAt": "2026-11-11T16:40:16.341984+00:00",
+      "topKeys": [
+        "sha",
+        "node_id",
+        "commit",
+        "url",
+        "html_url",
+        "comments_url",
+        "author",
+        "committer"
+      ],
+      "revision": "73e0b67d6484e870ab330ab3559a1b1bcea74a52"
+    },
+    {
+      "name": "openrouter-models-doc",
+      "url": "https://openrouter.ai/docs/api/api-reference/models/get-models",
+      "resolvedUrl": "https://openrouter.ai/docs/api/api-reference/models/list-all-models-and-their-properties",
+      "status": 200,
+      "bytes": 580388,
+      "sha256": "5d4ec9e3694d2bcd1447edebf7d8509f3798e4f829dde7b0c26c5d974ff75e3d",
+      "headers": {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
+      },
+      "cache": ".local/research-evidence/2026-11-12/model-catalogs/openrouter-models-doc.html",
+      "capturedAt": "2026-11-11T16:40:18.583620+00:00"
+    },
+    {
+      "name": "gemini-discovery",
+      "url": "https://generativelanguage.googleapis.com/$discovery/rest?version=v1beta",
+      "resolvedUrl": "https://generativelanguage.googleapis.com/$discovery/rest?version=v1beta",
+      "status": 200,
+      "bytes": 391890,
+      "sha256": "4a7adc1625e382962eb57d2530209d72210c97050a49f3f07dfd253e7408591d",
+      "headers": {
+        "Content-Type": "application/json; charset=UTF-8"
+      },
+      "cache": ".local/research-evidence/2026-11-12/model-catalogs/gemini-discovery.json",
+      "capturedAt": "2026-11-11T16:40:16.980357+00:00",
+      "topKeys": [
+        "ownerName",
+        "baseUrl",
+        "resources",
+        "parameters",
+        "schemas",
+        "canonicalName",
+        "version_module",
+        "protocol"
+      ]
+    },
+    {
+      "name": "models-dev-conditional",
+      "url": "https://models.dev/api.json",
+      "capturedAt": "2026-11-11T16:40:48.560366+00:00",
+      "requestIfNoneMatch": "\"f55606113b377c543af6c9da092fcd59\"",
+      "status": 304
+    },
+    {
+      "name": "models-dev-license-pinned",
+      "url": "https://raw.githubusercontent.com/anomalyco/models.dev/73e0b67d6484e870ab330ab3559a1b1bcea74a52/LICENSE",
+      "revision": "73e0b67d6484e870ab330ab3559a1b1bcea74a52",
+      "status": 200,
+      "sha256": "dc2dc41c9fea2fd3c41c21c6f484844cab367800b88ff24781f980ad3a9d160a",
+      "cache": ".local/research-evidence/2026-11-12/model-catalogs/models-dev-license-pinned.txt",
+      "capturedAt": "2026-11-11T16:40:49.595080+00:00"
+    },
+    {
+      "name": "models-dev-readme-pinned",
+      "url": "https://raw.githubusercontent.com/anomalyco/models.dev/73e0b67d6484e870ab330ab3559a1b1bcea74a52/README.md",
+      "revision": "73e0b67d6484e870ab330ab3559a1b1bcea74a52",
+      "status": 200,
+      "sha256": "5e5491fccebf8c71825ebcef5e59a76d3230c4521d1a10f635dc20f69100de09",
+      "cache": ".local/research-evidence/2026-11-12/model-catalogs/models-dev-readme-pinned.txt",
+      "capturedAt": "2026-11-11T16:40:50.419889+00:00"
+    }
+  ],
+  "coverage": {
+    "providerCount": 235,
+    "providerModelEntries": 8991,
+    "withContext": 8833,
+    "withOutput": 8733,
+    "reasoningTrue": 6925,
+    "withReasoningOptions": 5788,
+    "reasoningOptionTypes": {
+      "toggle": 1431,
+      "effort": 4663,
+      "budget_tokens": 603
+    },
+    "openrouter": {
+      "entries": 466,
+      "withSupportedEfforts": 223
+    }
+  },
+  "examples": [
+    {
+      "provider": "openai",
+      "model": "gpt-5",
+      "canonicalModelId": "openai/gpt-5",
+      "limits": {
+        "context": 400000,
+        "input": 272000,
+        "output": 128000
+      },
+      "reasoningOptions": [
+        {
+          "type": "effort",
+          "values": [
+            "minimal",
+            "low",
+            "medium",
+            "high"
+          ]
+        }
+      ],
+      "source": "https://models.dev/api.json"
+    },
+    {
+      "provider": "anthropic",
+      "model": "claude-sonnet-5-5",
+      "canonicalModelId": "anthropic/claude-sonnet-5-5",
+      "limits": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "reasoningOptions": [
+        {
+          "type": "effort",
+          "values": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ]
+        }
+      ],
+      "source": "https://models.dev/api.json"
+    },
+    {
+      "provider": "google",
+      "model": "gemini-2.5-pro",
+      "canonicalModelId": "google/gemini-2.5-pro",
+      "limits": {
+        "context": 1048576,
+        "output": 65536
+      },
+      "reasoningOptions": [
+        {
+          "type": "budget_tokens",
+          "min": 128,
+          "max": 32768
+        }
+      ],
+      "source": "https://models.dev/api.json"
+    },
+    {
+      "provider": "deepseek",
+      "model": "deepseek-v4-flash",
+      "canonicalModelId": "deepseek/deepseek-v4.1-flash-1017",
+      "limits": {
+        "context": 1048576,
+        "output": 393216
+      },
+      "reasoningOptions": [
+        {
+          "type": "toggle"
+        },
+        {
+          "type": "effort",
+          "values": [
+            "low",
+            "high",
+            "max"
+          ]
+        }
+      ],
+      "source": "https://models.dev/api.json"
+    }
+  ],
+  "recommendation": {
+    "mainPublicFeed": "https://models.dev/catalog.json",
+    "routeReasoningFeed": "https://models.dev/api.json",
+    "canonicalFeed": "https://models.dev/models.json",
+    "additionalRouteFeed": "https://openrouter.ai/api/v1/models",
+    "fieldPriority": [
+      "user override",
+      "native or endpoint effective metadata",
+      "matching Provider route entry",
+      "canonical model metadata",
+      "installed SDK snapshot"
+    ],
+    "refresh": "Host ETag/TTL refresh with schema validation, immutable data revisions and last-known-good cache, independently of app releases; pending implementation."
+  },
+  "boundaries": [
+    "models.dev is community-maintained, not a universal manufacturer specification.",
+    "The OpenCode mirror and models.dev api.json had identical content; not independent evidence.",
+    "All 613 captured canonical entries omitted reasoning_options; Provider entries contain route-specific reasoning_options.",
+    "Official Anthropic/Google schemas were read; authenticated account model lists were not called.",
+    "Native harness capability negotiation still constrains which configured parameters can be sent.",
+    "Research caches are evidence only, not runtime dependencies."
+  ],
+  "implementationFollowup": {
+    "date": "2026-11-12",
+    "report": "docs/test-results-2026-11-12-providers.md",
+    "verification": "docs/provider-configuration-verification.json",
+    "note": "Original audit/verification scope is retained as a historical record; subsequent product implementation and real model calls are recorded separately."
+  }
+}

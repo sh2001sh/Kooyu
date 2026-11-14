@@ -126,16 +126,18 @@ Claude 审查完成 → 唤醒 → Kodo 汇总意见 → 回发 Codex 修复 →
 - 不建任务板、任务树、固定审查流程或多层 agent。
 - 不根据关键词判定任务完成；完成由 Kodo 结合证据判断，用户可随时接管或否决。
 
-## 8. 与当前实现的差距
+## 8. 实现状态（2026-11-12）
 
-| 项目 | 现状 | 需要补齐 |
+| 项目 | 状态 | 实现位置 |
 | --- | --- | --- |
-| 会话管理（A） | 有 list/open/stop；整理归属、归档、改名只在 UI | 为 Kodo 增加整理类操作（可并入 `harness_open` 的更新参数或新增 `harness_update`），走“建”级授权 |
-| 进展汇报（B） | `harness_list` + `harness_read` 可拼出 | `harness_list` 返回每个会话最近结果摘要与待处理计数，避免逐个 read；提供“按项目汇报”提示词模板 |
-| 监督（C） | watch/唤醒/限制/接管已实现并真实验证（Codex） | 其他 harness 的监督闭环验收；唤醒消息中带目标文本与上次判断摘要 |
-| 编排（D） | open/send/watch/handoff 可用 | 多目标合并唤醒的展示；worktree 选择的提示与默认策略 |
-| 范围语义 | 全局 Kodo 带目录保持全局（已修复） | 草稿 UI 中把“范围”和“工作目录”分开标注 |
-| 汇报入口 | 无 | 主对话空态提供“汇报所有进展”“盯住一个会话”“在项目中编排任务”三个起始建议 |
+| 会话管理（A） | 已实现 `harness_update`：改名、归档/取消归档、置顶、移动项目。不在已管理范围、移动项目或归档时，先在对话中确认；项目主对话不能移出本项目；不整理自身 | `packages/host/src/kodo/tools.ts` |
+| 进展汇报（B） | 已实现 `harness_list progress=true` 与 `status` 过滤：每个会话返回状态、最近请求/回复摘要、最近结果/错误、待处理交互、排队输入、控制者，按最近活动排序 | `SessionService.progress`、`Store.recentEvents` |
+| 监督（C） | 唤醒消息带目标、目标会话状态、最近回复/错误、已续聊次数、失败次数与限制，并说明判断步骤 | `SessionService.drainWakes` |
+| 编排（D） | 系统提示按四种角色说明编排方式与 worktree 约束；工具沿用 open/send/watch/handoff | `kodoRolePrompt`（`kodo/kernel.ts`） |
+| 范围语义 | 提示词按全局/项目范围区分；草稿项目选择器对 Kodo 显示“全局主对话 · 跨项目 / 项目主对话 · 名称”；空态显示范围与默认工作目录 | `DraftWorkspace.tsx`、`main.tsx` |
+| 起始建议 | Kodo 空态提供三项建议（全局：汇报所有进展 / 盯住一个会话 / 整理会话；项目：汇报进展 / 盯住一个会话 / 编排任务），点击填入输入框 | `main.tsx` |
+
+仍待验收：除 Codex 外其他 harness 的监督闭环；多目标合并唤醒的界面展示。
 
 ## 9. 验收场景
 

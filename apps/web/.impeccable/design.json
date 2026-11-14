@@ -1,0 +1,565 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-10T15:57:32.257Z",
+  "title": "Design System: Kodo Workbench",
+  "extensions": {
+    "colorMeta": {
+      "accent-solid": {
+        "role": "primary",
+        "displayName": "Workbench Green",
+        "tonalRamp": [
+          "oklch(0.1500 0.0643 172.87)",
+          "oklch(0.2643 0.0643 172.87)",
+          "oklch(0.3786 0.0643 172.87)",
+          "oklch(0.4929 0.0643 172.87)",
+          "oklch(0.6071 0.0643 172.87)",
+          "oklch(0.7214 0.0643 172.87)",
+          "oklch(0.8357 0.0643 172.87)",
+          "oklch(0.9500 0.0643 172.87)"
+        ]
+      },
+      "on-accent": {
+        "role": "neutral",
+        "displayName": "Clear White",
+        "tonalRamp": [
+          "oklch(0.1500 0.0000 89.88)",
+          "oklch(0.2643 0.0000 89.88)",
+          "oklch(0.3786 0.0000 89.88)",
+          "oklch(0.4929 0.0000 89.88)",
+          "oklch(0.6071 0.0000 89.88)",
+          "oklch(0.7214 0.0000 89.88)",
+          "oklch(0.8357 0.0000 89.88)",
+          "oklch(0.9500 0.0000 89.88)"
+        ]
+      },
+      "surface-navigator": {
+        "role": "neutral",
+        "displayName": "Navigator Mist",
+        "tonalRamp": [
+          "oklch(0.1500 0.0017 247.84)",
+          "oklch(0.2643 0.0017 247.84)",
+          "oklch(0.3786 0.0017 247.84)",
+          "oklch(0.4929 0.0017 247.84)",
+          "oklch(0.6071 0.0017 247.84)",
+          "oklch(0.7214 0.0017 247.84)",
+          "oklch(0.8357 0.0017 247.84)",
+          "oklch(0.9500 0.0017 247.84)"
+        ]
+      },
+      "surface-paper": {
+        "role": "neutral",
+        "displayName": "Paper White",
+        "tonalRamp": [
+          "oklch(0.1500 0.0017 247.84)",
+          "oklch(0.2643 0.0017 247.84)",
+          "oklch(0.3786 0.0017 247.84)",
+          "oklch(0.4929 0.0017 247.84)",
+          "oklch(0.6071 0.0017 247.84)",
+          "oklch(0.7214 0.0017 247.84)",
+          "oklch(0.8357 0.0017 247.84)",
+          "oklch(0.9500 0.0017 247.84)"
+        ]
+      },
+      "surface-sunken": {
+        "role": "neutral",
+        "displayName": "Inset Fog",
+        "tonalRamp": [
+          "oklch(0.1500 0.0017 247.84)",
+          "oklch(0.2643 0.0017 247.84)",
+          "oklch(0.3786 0.0017 247.84)",
+          "oklch(0.4929 0.0017 247.84)",
+          "oklch(0.6071 0.0017 247.84)",
+          "oklch(0.7214 0.0017 247.84)",
+          "oklch(0.8357 0.0017 247.84)",
+          "oklch(0.9500 0.0017 247.84)"
+        ]
+      },
+      "text": {
+        "role": "neutral",
+        "displayName": "Graphite",
+        "tonalRamp": [
+          "oklch(0.1500 0.0049 248.05)",
+          "oklch(0.2643 0.0049 248.05)",
+          "oklch(0.3786 0.0049 248.05)",
+          "oklch(0.4929 0.0049 248.05)",
+          "oklch(0.6071 0.0049 248.05)",
+          "oklch(0.7214 0.0049 248.05)",
+          "oklch(0.8357 0.0049 248.05)",
+          "oklch(0.9500 0.0049 248.05)"
+        ]
+      },
+      "text-secondary": {
+        "role": "neutral",
+        "displayName": "Secondary Graphite",
+        "tonalRamp": [
+          "oklch(0.1500 0.0043 247.94)",
+          "oklch(0.2643 0.0043 247.94)",
+          "oklch(0.3786 0.0043 247.94)",
+          "oklch(0.4929 0.0043 247.94)",
+          "oklch(0.6071 0.0043 247.94)",
+          "oklch(0.7214 0.0043 247.94)",
+          "oklch(0.8357 0.0043 247.94)",
+          "oklch(0.9500 0.0043 247.94)"
+        ]
+      },
+      "text-tertiary": {
+        "role": "neutral",
+        "displayName": "Quiet Graphite",
+        "tonalRamp": [
+          "oklch(0.1500 0.0030 228.83)",
+          "oklch(0.2643 0.0030 228.83)",
+          "oklch(0.3786 0.0030 228.83)",
+          "oklch(0.4929 0.0030 228.83)",
+          "oklch(0.6071 0.0030 228.83)",
+          "oklch(0.7214 0.0030 228.83)",
+          "oklch(0.8357 0.0030 228.83)",
+          "oklch(0.9500 0.0030 228.83)"
+        ]
+      },
+      "border-control": {
+        "role": "neutral",
+        "displayName": "Control Gray",
+        "tonalRamp": [
+          "oklch(0.1500 0.0028 228.81)",
+          "oklch(0.2643 0.0028 228.81)",
+          "oklch(0.3786 0.0028 228.81)",
+          "oklch(0.4929 0.0028 228.81)",
+          "oklch(0.6071 0.0028 228.81)",
+          "oklch(0.7214 0.0028 228.81)",
+          "oklch(0.8357 0.0028 228.81)",
+          "oklch(0.9500 0.0028 228.81)"
+        ]
+      },
+      "fill-hover": {
+        "role": "neutral",
+        "displayName": "Hover Veil",
+        "tonalRamp": [
+          "oklch(0.1500 0.0049 248.05)",
+          "oklch(0.2643 0.0049 248.05)",
+          "oklch(0.3786 0.0049 248.05)",
+          "oklch(0.4929 0.0049 248.05)",
+          "oklch(0.6071 0.0049 248.05)",
+          "oklch(0.7214 0.0049 248.05)",
+          "oklch(0.8357 0.0049 248.05)",
+          "oklch(0.9500 0.0049 248.05)"
+        ]
+      },
+      "fill-selected": {
+        "role": "neutral",
+        "displayName": "Selection Veil",
+        "tonalRamp": [
+          "oklch(0.1500 0.0049 248.05)",
+          "oklch(0.2643 0.0049 248.05)",
+          "oklch(0.3786 0.0049 248.05)",
+          "oklch(0.4929 0.0049 248.05)",
+          "oklch(0.6071 0.0049 248.05)",
+          "oklch(0.7214 0.0049 248.05)",
+          "oklch(0.8357 0.0049 248.05)",
+          "oklch(0.9500 0.0049 248.05)"
+        ]
+      },
+      "fill-bubble": {
+        "role": "neutral",
+        "displayName": "Message Veil",
+        "tonalRamp": [
+          "oklch(0.1500 0.0049 248.05)",
+          "oklch(0.2643 0.0049 248.05)",
+          "oklch(0.3786 0.0049 248.05)",
+          "oklch(0.4929 0.0049 248.05)",
+          "oklch(0.6071 0.0049 248.05)",
+          "oklch(0.7214 0.0049 248.05)",
+          "oklch(0.8357 0.0049 248.05)",
+          "oklch(0.9500 0.0049 248.05)"
+        ]
+      },
+      "border-subtle": {
+        "role": "neutral",
+        "displayName": "Quiet Boundary",
+        "tonalRamp": [
+          "oklch(0.1500 0.0049 248.05)",
+          "oklch(0.2643 0.0049 248.05)",
+          "oklch(0.3786 0.0049 248.05)",
+          "oklch(0.4929 0.0049 248.05)",
+          "oklch(0.6071 0.0049 248.05)",
+          "oklch(0.7214 0.0049 248.05)",
+          "oklch(0.8357 0.0049 248.05)",
+          "oklch(0.9500 0.0049 248.05)"
+        ]
+      },
+      "border": {
+        "role": "neutral",
+        "displayName": "Standard Boundary",
+        "tonalRamp": [
+          "oklch(0.1500 0.0049 248.05)",
+          "oklch(0.2643 0.0049 248.05)",
+          "oklch(0.3786 0.0049 248.05)",
+          "oklch(0.4929 0.0049 248.05)",
+          "oklch(0.6071 0.0049 248.05)",
+          "oklch(0.7214 0.0049 248.05)",
+          "oklch(0.8357 0.0049 248.05)",
+          "oklch(0.9500 0.0049 248.05)"
+        ]
+      },
+      "border-strong": {
+        "role": "neutral",
+        "displayName": "Field Boundary",
+        "tonalRamp": [
+          "oklch(0.1500 0.0049 248.05)",
+          "oklch(0.2643 0.0049 248.05)",
+          "oklch(0.3786 0.0049 248.05)",
+          "oklch(0.4929 0.0049 248.05)",
+          "oklch(0.6071 0.0049 248.05)",
+          "oklch(0.7214 0.0049 248.05)",
+          "oklch(0.8357 0.0049 248.05)",
+          "oklch(0.9500 0.0049 248.05)"
+        ]
+      },
+      "success-text": {
+        "role": "semantic",
+        "displayName": "Success Green",
+        "tonalRamp": [
+          "oklch(0.1500 0.1308 149.87)",
+          "oklch(0.2643 0.1308 149.87)",
+          "oklch(0.3786 0.1308 149.87)",
+          "oklch(0.4929 0.1308 149.87)",
+          "oklch(0.6071 0.1308 149.87)",
+          "oklch(0.7214 0.1308 149.87)",
+          "oklch(0.8357 0.1308 149.87)",
+          "oklch(0.9500 0.1308 149.87)"
+        ]
+      },
+      "info-text": {
+        "role": "semantic",
+        "displayName": "Amber Ink",
+        "tonalRamp": [
+          "oklch(0.1500 0.1058 72.10)",
+          "oklch(0.2643 0.1058 72.10)",
+          "oklch(0.3786 0.1058 72.10)",
+          "oklch(0.4929 0.1058 72.10)",
+          "oklch(0.6071 0.1058 72.10)",
+          "oklch(0.7214 0.1058 72.10)",
+          "oklch(0.8357 0.1058 72.10)",
+          "oklch(0.9500 0.1058 72.10)"
+        ]
+      },
+      "destructive-text": {
+        "role": "semantic",
+        "displayName": "Error Red",
+        "tonalRamp": [
+          "oklch(0.1500 0.2038 26.94)",
+          "oklch(0.2643 0.2038 26.94)",
+          "oklch(0.3786 0.2038 26.94)",
+          "oklch(0.4929 0.2038 26.94)",
+          "oklch(0.6071 0.2038 26.94)",
+          "oklch(0.7214 0.2038 26.94)",
+          "oklch(0.8357 0.2038 26.94)",
+          "oklch(0.9500 0.2038 26.94)"
+        ]
+      },
+      "info-tint": {
+        "role": "semantic",
+        "displayName": "Amber Wash",
+        "tonalRamp": [
+          "oklch(0.1500 0.1499 71.76)",
+          "oklch(0.2643 0.1499 71.76)",
+          "oklch(0.3786 0.1499 71.76)",
+          "oklch(0.4929 0.1499 71.76)",
+          "oklch(0.6071 0.1499 71.76)",
+          "oklch(0.7214 0.1499 71.76)",
+          "oklch(0.8357 0.1499 71.76)",
+          "oklch(0.9500 0.1499 71.76)"
+        ]
+      },
+      "destructive-tint": {
+        "role": "semantic",
+        "displayName": "Error Wash",
+        "tonalRamp": [
+          "oklch(0.1500 0.2101 27.07)",
+          "oklch(0.2643 0.2101 27.07)",
+          "oklch(0.3786 0.2101 27.07)",
+          "oklch(0.4929 0.2101 27.07)",
+          "oklch(0.6071 0.2101 27.07)",
+          "oklch(0.7214 0.2101 27.07)",
+          "oklch(0.8357 0.2101 27.07)",
+          "oklch(0.9500 0.2101 27.07)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "title": {
+        "displayName": "Page Title",
+        "purpose": "Utility page heading."
+      },
+      "panel-title": {
+        "displayName": "Conversation Title",
+        "purpose": "Conversation heading; long text truncates."
+      },
+      "body": {
+        "displayName": "Interface Body",
+        "purpose": "Controls and ordinary workbench copy."
+      },
+      "reading": {
+        "displayName": "Transcript",
+        "purpose": "Reading copy; mobile increases to 15px and text remains bounded."
+      },
+      "label": {
+        "displayName": "Supporting Label",
+        "purpose": "Ordinary muted assistance; smaller local desktop metadata is not a recommended system scale."
+      },
+      "mono": {
+        "displayName": "Code and Raw Output",
+        "purpose": "Code, tool output and raw lifecycle records."
+      }
+    },
+    "shadows": [
+      {
+        "name": "composer",
+        "value": "0 3px 12px -5px rgb(0 0 0 / .09)",
+        "purpose": "Local composer depth."
+      },
+      {
+        "name": "elev-2",
+        "value": "0 0 0 1px var(--border), 0 1px 1px rgb(0 0 0 / 0.03), 0 4px 8px -4px rgb(0 0 0 / 0.08), 0 16px 32px -8px rgb(0 0 0 / 0.14)",
+        "purpose": "Floating connection feedback."
+      },
+      {
+        "name": "elev-3",
+        "value": "0 0 0 1px var(--border), 0 2px 4px rgb(0 0 0 / 0.04), 0 12px 24px -6px rgb(0 0 0 / 0.12), 0 32px 64px -12px rgb(0 0 0 / 0.22)",
+        "purpose": "Native dialog elevation."
+      },
+      {
+        "name": "scope-drawer",
+        "value": "12px 0 40px rgb(0 0 0 / .15)",
+        "purpose": "Mobile scope overlay."
+      },
+      {
+        "name": "detail-overlay",
+        "value": "-8px 0 25px -16px rgb(0 0 0 / .2)",
+        "purpose": "Compact desktop and mobile details overlay."
+      }
+    ],
+    "motion": [
+      {
+        "name": "button-background",
+        "value": "background .12s",
+        "purpose": "Existing button state feedback; reduced motion removes transitions."
+      },
+      {
+        "name": "spinner",
+        "value": "cube 1.3s ease-in-out infinite",
+        "purpose": "Nine-cell opacity loading indicator with .15s and .3s stagger groups; reduced motion removes animation."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "animation: none !important; transition: none !important; scroll-behavior: auto !important",
+        "purpose": "App-wide prefers-reduced-motion override."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "wide-desktop",
+        "value": "1500px",
+        "purpose": "Minimum width; columns grow to 230px / 320px / flexible."
+      },
+      {
+        "name": "compact-desktop",
+        "value": "1100px",
+        "purpose": "Maximum width; columns narrow to 190px / 255px / flexible and details overlay."
+      },
+      {
+        "name": "mobile",
+        "value": "760px",
+        "purpose": "Maximum width; list-to-conversation flow, explicit scope drawer, 16px entry text and reviewed 44px controls."
+      }
+    ],
+    "focus": {
+      "value": "2px solid var(--focus-ring)",
+      "offset": "3px",
+      "purpose": "Keyboard focus and composer focus-within."
+    },
+    "provenance": {
+      "baseline": "Craft Agents",
+      "revision": "1627c43e93bb4f5b1532116b8eb092c0ada4b23f",
+      "sourceFiles": [
+        "src/styles/craft-tokens.css",
+        "src/styles/app.css",
+        "src/main.tsx",
+        "src/components/TurnCard.tsx",
+        "src/components/Spinner.tsx"
+      ],
+      "inventory": "../../../third-party/craft-agents/EXTRACTION.md",
+      "brand": "Kodo name and plain K mark; no Craft product branding."
+    },
+    "review": {
+      "evidenceRoot": "../../../.impeccable/review",
+      "captures": [
+        "desktop.png",
+        "mobile.png",
+        "capabilities.png"
+      ],
+      "verdict": "ship",
+      "scope": "Four listed fixes scored resolved only; no whole-surface or runtime certification."
+    },
+    "rampMethod": "Generated OKLCH preview ramps preserve the source hue/chroma with stepped lightness; transparent colors use their base pigment. Ramps are previews, not additional production theme tokens.",
+    "componentBehaviors": {
+      "settings": {
+        "scope": "Settings only; code-led extension of the current neutral workbench. Existing global primitives, narrative, components, and review metadata are preserved.",
+        "documentedAt": "2026-11-12",
+        "sources": [
+          "../design/settings.md",
+          "../src/styles/app.css",
+          "../src/components/SettingsNavigation.tsx",
+          "../src/components/AppPreferences.tsx",
+          "../src/components/EngineConfiguration.tsx",
+          "../src/components/ProviderConfiguration.tsx",
+          "../src/components/DraftWorkspace.tsx",
+          "../../../docs/settings-workflow.md"
+        ],
+        "theme": "Inherit the active light/dark surface, text, border, fill, and accent custom properties from app.css. The Settings shell aliases tertiary text to secondary text for readable labels, icons, counts, and metadata. Status colors accompany explicit text.",
+        "navigation": "Grouped sidebar destinations cover workbench preferences, engine installation, Provider/model configuration, and session policy. Active buttons expose aria-current=page; collapsed navigation retains accessible names. Mobile presents horizontally scrolling section pills and the existing bottom navigation.",
+        "disclosure": "Native details/summary engine rows show identity, current route, and written availability before expansion. Installation, compatible Provider routing, history, and native file/capability information remain progressively disclosed. Inline status and alert text describes progress and failures.",
+        "routing": "Save the engine's Provider and compatible endpoint in Settings, then select its model in the conversation. Provider save imports models automatically and failed discovery exposes retry. Preserve native login/configuration, saved Provider routes, advanced fixed-model mappings, and independent Kodo/pi configuration identities.",
+        "metadata": "Expose model limit, capability, and USD-per-million-token price sources. Manual override takes precedence over current endpoint, then public catalog. Blank inputs use automatic values, and zero is an explicit free price.",
+        "responsive": "At maximum 760px, engine fields and native details stack, Provider headings/actions wrap, and preference selects fill the row. Installation actions, engine route saves, and Provider form actions use minimum 44px height; mobile section pills retain 34px height.",
+        "motion": "Use existing navigation/section spring tokens and honor both system reduced motion and the saved application preference. The system query removes animation/transitions; the application preference reduces durations to 0.01ms and restores automatic scrolling.",
+        "guidance": "../DESIGN.md: Settings-specific Colors, Typography, Layout, Elevation & Depth, Shapes, Components, and Do's and Don'ts sections."
+      },
+      "sessionManagement": {
+        "source": "src/main.tsx: Manage",
+        "description": "The existing detail pane presents supervision relations as linked rows with textual mode/state and adjacent pause/revoke actions. Supervisor sessions also show eligible projects and their current authorization state. Three explicit actions distinguish creation permission (仅授权创建), creation with automatic continuation (创建并自动继续), and revocation of future permission (撤销未来授权). The explanatory copy states that automatic control applies only to sessions subsequently created by this supervisor, inherits the goal and limits entered above, and treats blank limits as unset. Existing or paused sessions require separate enablement; revoking future authorization leaves existing per-target relations intact.\n\nWhen automatic-continuation mode selects a target with another active controller, the form replaces its submit label with an explicit transfer action (转交自动控制). Adjacent explanatory copy states that transfer pauses the former controller, invalidates its unsent input, and lets the current native turn continue. These controls reuse ordinary fields, secondary buttons, muted explanatory copy, and relationship rows; they introduce no new visual tokens or elevation pattern."
+      }
+    }
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Kodo primary action; static design-system example.",
+      "html": "<button class=\"ds-primary\"><svg viewBox=\"0 0 24 24\" width=\"17\" height=\"17\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><path d=\"M12 5v14M5 12h14\"/></svg>新建会话</button>",
+      "css": ".ds-primary{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:32px;padding:6px 11px;border:1px solid var(--border,color-mix(in srgb,#1a1c1e 10%,transparent));border-radius:7px;font:13px/1.5 var(--font-sans, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Microsoft YaHei\", sans-serif);cursor:pointer;transition:background .12s;background:var(--accent-solid,#245c4d);color:var(--on-accent,#fff);border-color:transparent}.ds-primary:hover{background:color-mix(in srgb,var(--accent-solid,#245c4d) 90%,black)}.ds-primary:focus-visible{outline:2px solid var(--focus-ring,#245c4d);outline-offset:3px}.ds-primary:disabled{opacity:.45;cursor:default}@media(prefers-reduced-motion:reduce){.ds-primary{transition:none}}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Paper surface with a quiet neutral border.",
+      "html": "<button class=\"ds-secondary\">读取原生状态</button>",
+      "css": ".ds-secondary{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:32px;padding:6px 11px;border:1px solid var(--border,color-mix(in srgb,#1a1c1e 10%,transparent));border-radius:7px;font:13px/1.5 var(--font-sans, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Microsoft YaHei\", sans-serif);cursor:pointer;transition:background .12s;background:var(--surface-paper,#fcfdfe);color:var(--text,#1a1c1e)}.ds-secondary:hover{background:var(--fill-hover,color-mix(in srgb,#1a1c1e 4.5%,transparent))}.ds-secondary:focus-visible{outline:2px solid var(--focus-ring,#245c4d);outline-offset:3px}.ds-secondary:disabled{opacity:.45;cursor:default}@media(prefers-reduced-motion:reduce){.ds-secondary{transition:none}}"
+    },
+    {
+      "name": "Icon Button",
+      "kind": "button",
+      "refersTo": "button-icon",
+      "description": "Borderless utility action with an accessible name and mobile target override.",
+      "html": "<button class=\"ds-icon\" aria-label=\"会话详情与管理\"><svg viewBox=\"0 0 24 24\" width=\"20\" height=\"20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"1\"/><circle cx=\"19\" cy=\"12\" r=\"1\"/><circle cx=\"5\" cy=\"12\" r=\"1\"/></svg></button>",
+      "css": ".ds-icon{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:32px;padding:6px 11px;border:1px solid var(--border,color-mix(in srgb,#1a1c1e 10%,transparent));border-radius:7px;font:13px/1.5 var(--font-sans, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Microsoft YaHei\", sans-serif);cursor:pointer;transition:background .12s;padding:5px;border:0;min-width:30px;background:none;color:var(--text-secondary,#424446)}.ds-icon:hover{background:var(--fill-hover,color-mix(in srgb,#1a1c1e 4.5%,transparent))}.ds-icon:focus-visible{outline:2px solid var(--focus-ring,#245c4d);outline-offset:3px}@media(max-width:760px){.ds-icon{min-width:44px;min-height:44px}}@media(prefers-reduced-motion:reduce){.ds-icon{transition:none}}"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Labelled paper field; mobile entry uses 16px text.",
+      "html": "<label class=\"ds-field\">标题<input placeholder=\"为这段工作起个名字\"/></label>",
+      "css": ".ds-field{display:flex;flex-direction:column;gap:7px;color:var(--text,#1a1c1e);font:500 13px/1.5 var(--font-sans, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Microsoft YaHei\", sans-serif)}.ds-field input{min-width:0;padding:9px 10px;border:1px solid var(--border-strong,color-mix(in srgb,#1a1c1e 16%,transparent));border-radius:7px;background:var(--surface-paper,#fcfdfe);color:var(--text,#1a1c1e);font:400 13px/1.5 var(--font-sans, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Microsoft YaHei\", sans-serif);caret-color:var(--accent-text,#245c4d)}.ds-field input::placeholder{color:var(--text-tertiary,#5d5f60)}.ds-field input:focus-visible{outline:2px solid var(--focus-ring,#245c4d);outline-offset:3px}@media(max-width:760px){.ds-field input{font-size:16px}}"
+    },
+    {
+      "name": "Scope Navigation",
+      "kind": "nav",
+      "refersTo": "navigation-active",
+      "description": "Neutral selected scope; the example is a visual primitive, not a live session navigator.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"范围导航示例\"><button class=\"ds-nav-active\"><svg viewBox=\"0 0 24 24\" width=\"17\" height=\"17\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><path d=\"M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z\"/></svg><span>全部会话</span></button><button>未归属</button></nav>",
+      "css": ".ds-nav{display:flex;flex-direction:column;gap:3px;padding:8px;background:var(--surface-navigator,#f2f3f4)}.ds-nav button{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:32px;padding:6px 11px;border:1px solid var(--border,color-mix(in srgb,#1a1c1e 10%,transparent));border-radius:7px;font:13px/1.5 var(--font-sans, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Microsoft YaHei\", sans-serif);cursor:pointer;transition:background .12s;width:100%;border:0;background:none;justify-content:flex-start;min-height:36px;text-align:left;padding:8px 10px;color:var(--text-secondary,#424446)}.ds-nav button:hover{background:var(--fill-hover,color-mix(in srgb,#1a1c1e 4.5%,transparent))}.ds-nav button.ds-nav-active{background:var(--fill-selected,color-mix(in srgb,#1a1c1e 7%,transparent));color:var(--text,#1a1c1e);font-weight:550}.ds-nav svg{color:var(--text-tertiary,#5d5f60)}.ds-nav button:focus-visible{outline:2px solid var(--focus-ring,#245c4d);outline-offset:3px}@media(max-width:760px){.ds-nav button{min-height:43px}}@media(prefers-reduced-motion:reduce){.ds-nav button{transition:none}}"
+    },
+    {
+      "name": "Selected Session Row",
+      "kind": "custom",
+      "refersTo": "session-row-selected",
+      "description": "Static placeholder row demonstrating title, harness, textual state and date hierarchy.",
+      "html": "<button class=\"ds-session\"><span class=\"ds-session-title\"><span>会话标题</span><span class=\"ds-dot\" aria-hidden=\"true\"></span></span><span class=\"ds-session-meta\"><span class=\"ds-harness\">Codex</span><span>空闲</span><span class=\"ds-date\">日期</span></span></button>",
+      "css": ".ds-session{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:32px;padding:6px 11px;border:1px solid var(--border,color-mix(in srgb,#1a1c1e 10%,transparent));border-radius:7px;font:13px/1.5 var(--font-sans, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Microsoft YaHei\", sans-serif);cursor:pointer;transition:background .12s;display:block;text-align:left;width:100%;border:0;border-radius:8px;padding:12px 11px;background:var(--fill-selected,color-mix(in srgb,#1a1c1e 7%,transparent));color:var(--text,#1a1c1e)}.ds-session-title{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:550}.ds-session-title>span:first-child{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ds-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--border-control,#8a8c8d)}.ds-session-meta{display:flex;align-items:center;gap:7px;margin-top:8px;font-size:10px;color:var(--text-tertiary,#5d5f60)}.ds-harness{color:var(--text-secondary,#424446)}.ds-date{margin-left:auto;font-size:9px}.ds-session:focus-visible{outline:2px solid var(--focus-ring,#245c4d);outline-offset:3px}@media(max-width:760px){.ds-session{padding:15px 12px}.ds-session-title{font-size:15px}.ds-session-meta{font-size:12px}.ds-date{font-size:10px}}@media(prefers-reduced-motion:reduce){.ds-session{transition:none}}"
+    },
+    {
+      "name": "Tool Disclosure",
+      "kind": "card",
+      "refersTo": "tool-card",
+      "description": "Genuine tool output uses a folded inset container. This is placeholder preview content.",
+      "html": "<details class=\"ds-tool\"><summary><svg viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><path d=\"M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0L21 6a6 6 0 0 1-7.9 7.9l-7.4 7.4a2.1 2.1 0 0 1-3-3l7.4-7.4A6 6 0 0 1 18 3Z\"/></svg><span>工具调用</span><span class=\"ds-tool-hint\">查看输出</span></summary><pre>工具输出预览</pre></details>",
+      "css": ".ds-tool{margin:12px 0 22px;background:var(--surface-sunken,#f4f5f6);color:var(--text,#1a1c1e);border-radius:7px;font:13px/1.5 var(--font-sans, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Microsoft YaHei\", sans-serif)}.ds-tool summary{padding:10px 12px;display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px}.ds-tool-hint{margin-left:auto;font-size:10px;color:var(--text-tertiary,#5d5f60)}.ds-tool pre{padding:0 12px 12px;margin:0;max-height:400px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.65 ui-monospace,Consolas,monospace}.ds-tool summary:focus-visible{outline:2px solid var(--focus-ring,#245c4d);outline-offset:3px}"
+    },
+    {
+      "name": "Message Composer",
+      "kind": "custom",
+      "refersTo": "composer",
+      "description": "Container-level focus, harness context, send mode, and adjacent stop-and-pause action; placeholder preview only.",
+      "html": "<div class=\"ds-compose-wrap\"><div class=\"ds-compose\"><textarea aria-label=\"消息预览\" placeholder=\"发送消息给 Codex…\"></textarea><div class=\"ds-toolbar\"><span class=\"ds-compose-harness\">Codex · 原生配置</span><select aria-label=\"发送方式预览\"><option>空闲时发送</option><option>新一轮</option></select><button class=\"ds-send\" aria-label=\"发送消息预览\"><svg viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><path d=\"m5 12 7-7 7 7M12 19V5\"/></svg></button></div></div><div class=\"ds-compose-foot\"><span>Enter 发送 · Shift Enter 换行</span><button class=\"ds-stop\">停止并暂停托管</button></div></div>",
+      "css": ".ds-compose-wrap{font:13px/1.5 var(--font-sans, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Microsoft YaHei\", sans-serif);color:var(--text,#1a1c1e)}.ds-compose{border:1px solid var(--border-strong,color-mix(in srgb,#1a1c1e 16%,transparent));border-radius:12px;box-shadow:0 3px 12px -5px rgb(0 0 0/.09);background:var(--surface-raised,#fcfdfe)}.ds-compose:focus-within{outline:2px solid var(--focus-ring,#245c4d);outline-offset:3px}.ds-compose textarea{box-sizing:border-box;width:100%;min-width:0;border:0;outline:0;min-height:82px;max-height:240px;background:none;padding:15px 16px;resize:vertical;color:var(--text,#1a1c1e);font:13px/1.5 var(--font-sans, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Microsoft YaHei\", sans-serif);caret-color:var(--accent-text,#245c4d)}.ds-compose textarea::placeholder{color:var(--text-tertiary,#5d5f60)}.ds-toolbar{display:flex;align-items:center;padding:0 11px 11px;gap:10px}.ds-compose-harness{flex:1;color:var(--text-tertiary,#5d5f60);font-size:10px}.ds-toolbar select{width:90px;min-width:0;padding:3px;border:0;background:none;color:var(--text-tertiary,#5d5f60);font:10px/1.5 var(--font-sans, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Microsoft YaHei\", sans-serif)}.ds-send{display:inline-flex;align-items:center;justify-content:center;width:30px;min-height:30px;border:0;border-radius:8px;padding:0;background:var(--accent-solid,#245c4d);color:white;cursor:pointer}.ds-send:hover{filter:brightness(1.1)}.ds-send:disabled{opacity:.45;cursor:default}.ds-compose-foot{display:flex;align-items:center;justify-content:space-between;margin-top:10px;gap:10px;color:var(--text-tertiary,#5d5f60);font-size:9px}.ds-stop{font:10px/1.5 var(--font-sans, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Microsoft YaHei\", sans-serif);min-height:24px;border:0;background:none;padding:0;color:var(--text-tertiary,#5d5f60);cursor:pointer}.ds-stop:hover{background:var(--fill-hover,color-mix(in srgb,#1a1c1e 4.5%,transparent))}.ds-send:focus-visible,.ds-stop:focus-visible,.ds-toolbar select:focus-visible{outline:2px solid var(--focus-ring,#245c4d);outline-offset:3px}@media(max-width:760px){.ds-compose textarea{font-size:16px;min-height:80px}.ds-compose-harness{max-width:42%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.ds-toolbar select{font-size:11px;margin-left:auto;min-height:44px;min-width:90px}.ds-send{min-width:44px;min-height:44px}.ds-compose-foot{font-size:10px;gap:4px}.ds-stop{font-size:11px;min-height:44px}}"
+    },
+    {
+      "name": "Delivery Notice",
+      "kind": "custom",
+      "refersTo": "notice",
+      "description": "Amber notice separates unknown delivery from completed execution.",
+      "html": "<div class=\"ds-notice\">发送结果未知，已暂停后续递送。先核对原生历史。<button>读取原生状态</button></div>",
+      "css": ".ds-notice{font:11px/1.5 var(--font-sans, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Microsoft YaHei\", sans-serif);color:var(--info-text,#865600);padding:10px;background:var(--info-tint,color-mix(in srgb,#eb9f2c 10%,transparent));margin-bottom:10px;border-radius:7px}.ds-notice button{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:32px;padding:6px 11px;border:1px solid var(--border,color-mix(in srgb,#1a1c1e 10%,transparent));border-radius:7px;font:13px/1.5 var(--font-sans, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Microsoft YaHei\", sans-serif);cursor:pointer;transition:background .12s;font-size:10px;margin:6px;background:var(--surface-paper,#fcfdfe);color:inherit}.ds-notice button:hover{background:var(--fill-hover,color-mix(in srgb,#1a1c1e 4.5%,transparent))}.ds-notice button:focus-visible{outline:2px solid var(--focus-ring,#245c4d);outline-offset:3px}@media(prefers-reduced-motion:reduce){.ds-notice button{transition:none}}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Quiet Session Workbench",
+    "overview": "Kodo uses the user's pinned Craft Agents baseline: quiet neutral surfaces, compact navigation and session metadata, a generous conversation column, and restrained green actions. The interface supports repeated operational work. Hierarchy comes from placement, readable text, tonal separation, and small line icons rather than decorative imagery.\n\nThe app presents its own Kodo name and plain K mark. Craft Agents supplies selected semantic tokens and the adapted nine-cell loading indicator at revision `1627c43e93bb4f5b1532116b8eb092c0ada4b23f`; the shell and message presentation are local implementations. The retained LICENSE, NOTICE, TRADEMARK.md, extraction inventory, and brand boundary remain authoritative in [EXTRACTION.md](../../third-party/craft-agents/EXTRACTION.md). Code provenance does not authorize Craft product branding.\n\nThis document records the built light theme from `src/styles/craft-tokens.css`, its overrides in `src/styles/app.css`, and the React components. The source also contains a dark-theme toggle and dark roles; the reviewed evidence covers the light theme. The final [verdict](../../.impeccable/review/verdict.md) scored four listed fixes resolved with disposition `ship` for those fixes only; it does not certify the complete product or independently verify runtime capabilities.",
+    "keyCharacteristics": [
+      "Neutral navigator, paper content surfaces, and subtle boundaries.",
+      "Green primary actions and keyboard focus with text-backed runtime status.",
+      "System UI typography and a spacious, bounded reading column.",
+      "Desktop scope, session list, and conversation; mobile list-to-conversation navigation.",
+      "Folded tool output, explicit native interactions, and an adjacent stop-and-pause control."
+    ],
+    "rules": [
+      {
+        "name": "The Pinned Baseline Rule",
+        "body": "Extend the Craft-derived surface hierarchy and Kodo's green action language while preserving the recorded license and brand boundary.",
+        "section": "overview"
+      },
+      {
+        "name": "The State Has Words Rule",
+        "body": "Pair runtime color with an explicit state label; color alone must not carry running, waiting, disconnected, or paused meaning.",
+        "section": "colors"
+      },
+      {
+        "name": "The Native Type Rule",
+        "body": "Use the shared system stack throughout; keep mobile message and form entry text large enough to avoid zoom (16px).",
+        "section": "typography"
+      },
+      {
+        "name": "The Reading Space Rule",
+        "body": "Let the conversation absorb remaining width while keeping prose bounded; show detail and raw history only when requested.",
+        "section": "layout"
+      },
+      {
+        "name": "The Structural Depth Rule",
+        "body": "Use elevation for an input surface or an actual overlay, and preserve the quiet tonal separation of the main panes.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Visible Focus Rule",
+        "body": "Every keyboard entry point retains visible focus; textarea focus must illuminate the composer boundary.",
+        "section": "components"
+      }
+    ],
+    "dos": [
+      "**Do** preserve the pinned Craft-derived neutral surface hierarchy and Kodo green primary actions.",
+      "**Do** keep project scope visible and harness identity available through labels and filters.",
+      "**Do** label runtime, connection, and supervision states separately and pair status color with words.",
+      "**Do** keep a visible composer focus boundary, mobile entry text at 16px, and the reviewed mobile action targets at 44px minimum.",
+      "**Do** keep long output collapsible and readable, with raw lifecycle history available separately.",
+      "**Do** honor reduced motion and the operating system's font and window conventions."
+    ],
+    "donts": [
+      "**Don't** reuse Craft names, logos, domains, identifiers, or service endpoints as Kodo branding.",
+      "**Don't** fill empty states with fabricated sessions, replies, verification results, or capability claims.",
+      "**Don't** imply a pending send is completed execution, or equate installation discovery with verified protocol behavior.",
+      "**Don't** copy the legacy non-tool user-message and reasoning classifications into tool cards.",
+      "**Don't** turn optional details into permanent extra panes on a narrow screen."
+    ]
+  }
+}

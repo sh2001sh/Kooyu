@@ -1,0 +1,43 @@
+appId: app.kodo.desktop
+productName: Kooyu
+directories:
+  output: release/desktop
+  app: .local/desktop-stage/app
+extraMetadata:
+  main: dist/main.js
+asar: true
+npmRebuild: false
+files:
+  - dist/**
+  - assets/**
+  - package.json
+extraResources:
+  - from: .local/desktop-stage/host
+    to: host
+  - from: .local/desktop-stage/host/node_modules
+    to: host/node_modules
+    filter: "**/*"
+  - from: .local/desktop-stage/runtime
+    to: runtime
+mac:
+  category: public.app-category.developer-tools
+  icon: brand/icons/kooyu-app.icns
+  target: [dmg, zip]
+  hardenedRuntime: true
+  entitlements: apps/desktop/entitlements.mac.plist
+  entitlementsInherit: apps/desktop/entitlements.mac.plist
+win:
+  icon: brand/icons/kooyu-app.ico
+  target: [nsis]
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+  include: scripts/windows-installer.nsh
+  artifactName: Kooyu-Setup-${version}.${ext}
+linux:
+  maintainer: Kooyu contributors <sh2001sh@users.noreply.github.com>
+  icon: brand/icons/kooyu-app-512.png
+  category: Development
+  target: [AppImage, deb]

@@ -1,0 +1,76 @@
+{
+  "name": "Kooyu",
+  "status": "user_confirmed",
+  "date": "2026-11-13",
+  "suggested_pronunciation": "KOO-yoo",
+  "proposed_origin": "A possible branded spelling inspired by Kuyu; do not claim Kooyu is the Turkish dictionary spelling.",
+  "queries": [
+    {
+      "domain": "kooyu.com",
+      "source": "https://rdap.verisign.com/com/v1/domain/kooyu.com",
+      "checked_at_utc": "2026-11-13T04:09:21.960754+00:00",
+      "http_status": 200,
+      "outcome": "registered",
+      "registration_events": [
+        {
+          "eventAction": "registration",
+          "eventDate": "2006-12-31T20:52:51Z"
+        }
+      ]
+    },
+    {
+      "domain": "kooyu.app",
+      "source": "https://pubapi.registry.google/rdap/domain/kooyu.app",
+      "checked_at_utc": "2026-11-13T04:09:21.961121+00:00",
+      "http_status": 404,
+      "outcome": "no_registration_record_returned"
+    },
+    {
+      "domain": "kooyu.dev",
+      "source": "https://pubapi.registry.google/rdap/domain/kooyu.dev",
+      "checked_at_utc": "2026-11-13T04:09:21.961416+00:00",
+      "http_status": 404,
+      "outcome": "no_registration_record_returned"
+    },
+    {
+      "domain": "kooyuai.com",
+      "source": "https://rdap.verisign.com/com/v1/domain/kooyuai.com",
+      "checked_at_utc": "2026-11-13T04:09:21.961671+00:00",
+      "http_status": 404,
+      "outcome": "no_registration_record_returned"
+    },
+    {
+      "domain": "kooyu-ai.com",
+      "source": "https://rdap.verisign.com/com/v1/domain/kooyu-ai.com",
+      "checked_at_utc": "2026-11-13T04:09:21.961941+00:00",
+      "http_status": 404,
+      "outcome": "no_registration_record_returned"
+    },
+    {
+      "domain": "getkooyu.com",
+      "source": "https://rdap.verisign.com/com/v1/domain/getkooyu.com",
+      "checked_at_utc": "2026-11-13T04:09:21.962373+00:00",
+      "http_status": 404,
+      "outcome": "no_registration_record_returned"
+    }
+  ],
+  "observed_software_overlaps": [
+    {
+      "name": "Kooyu: Learn Languages",
+      "category": "Language learning app",
+      "source": "https://apps.apple.com/us/app/kooyu-learn-languages/id6812756360"
+    },
+    {
+      "name": "Kooyu Flow",
+      "category": "Market strategy research and execution software",
+      "source": "https://www.kooyuflow.com.br/sobre/"
+    }
+  ],
+  "limits": [
+    "No domain purchase or reservation.",
+    "Registry 404 does not guarantee registrar checkout availability or price.",
+    "This is a limited public-name screen, not trademark clearance.",
+    "No same-name coding workbench identified in this limited exact-name search; this does not establish absence."
+  ],
+  "confirmed_on": "2026-11-13"
+}

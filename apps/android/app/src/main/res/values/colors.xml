@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="kooyu_icon_background">#F17561</color>
+    <color name="kooyu_window_background">#FFFBFE</color>
+    <bool name="kooyu_light_status_bar">true</bool>
+</resources>

@@ -1,0 +1,14 @@
+{
+  "model": "gpt-image-2",
+  "surface": "03-desktop-light",
+  "size": [
+    1536,
+    1024
+  ],
+  "quality": "high",
+  "reference": "../mobius-k/colors/coral.png",
+  "reference_sha256": "6d3a95a7fe10ecfb29477354c36f44b40d356baa172bc315efefdcad60ecd42c",
+  "prompt_file": "prompts/03-desktop-light.request.txt",
+  "status": "design-concept",
+  "elapsed_seconds": 38
+}

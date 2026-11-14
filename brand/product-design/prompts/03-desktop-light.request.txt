@@ -1,0 +1,28 @@
+This is a high-fidelity product design CONCEPT IMAGE for Kodo, a local AI session workbench. Deliver an exceptionally polished design image, not executable software.
+
+Reference image 1 is the USER-APPROVED Kodo logo. Reuse its actual irregular, lively Mobius-inspired ribbon silhouette and sunset-coral color treatment. Do not invent a different logo or replace it with a literal capital K. The accepted mark is an asymmetrical loop on the left with one long upper-right sweep and a shorter lower-right sweep. Reference contributes identity, curve language and palette; its white square canvas is NOT a required page composition.
+
+Established palette: sunset coral #F17561, peach highlight #FFD0B3, deep berry fold #A03259, warm paper #FAF8F4, clean white #FFFFFF, soft warm-gray boundaries #E7E1DD, graphite text #28232A, secondary text #726B72. Functional solid CTA can use deeper coral #BE4C42 with ivory text. No green primary, blue primary, teal, rainbow gradients, or neon. The coral-to-peach ribbon shading is a deliberate brand feature, not a reason to cover every surface in gradients.
+
+Visual voice: warm precision; calm, human, subtly lively, beautifully spaced, contemporary independent software studio. Meticulous typography, light but visible borders, generous whitespace, elegant line icons, modest 10-14 px component corners. Use modern refined sans-serif Latin lettering and clean readable Chinese sans-serif. Roundedness should come from the ribbon and small details, not inflated bubbly UI. Avoid glassmorphism, excessive shadows, dark cyberpunk, crypto imagery, robots, brains, sparkles, generic purple-AI aesthetics, busy grids, decorative graphs and dashboard KPI tiles.
+
+PRODUCT TRUTH: Kodo organizes native coding-tool sessions by project, with native harness names used as metadata and filters. Users can chat directly with a native tool OR explicitly enable Kodo supervision. Kodo is the product agent; standalone pi is a separate native harness. Native identity and capabilities remain visible. A local independent Host owns execution; closing the interface detaches without stopping an accepted task, but computer sleep is not uninterrupted operation. Desktop and mobile access the same host/session; mobile supervision is a design concept subject to actual connection and version capabilities. Do not claim universal integration verification, unlimited autonomy, migration of native context between providers, invented benchmarks, customer counts, testimonials, automatic approval, production certifications, or completed tests.
+
+Whenever sample session states, messages or project artifacts appear, label the view clearly but unobtrusively as "设计示例" or "示例项目". All sample UI is illustrative synthetic design content, not real execution records. This does not require a huge disclaimer. Avoid implementation details in marketing copy; SQLite, transport APIs and internal IDs do not belong in the main product story.
+
+Surface-specific requirements follow. Honor their composition and exact primary copy. The result must be a coherent designed surface with excellent hierarchy, not a collage of arbitrary inspiration.
+
+
+SURFACE: a HIGH-FIDELITY LIGHT-THEME DESKTOP APPLICATION SCREEN for Kodo at landscape 1536x1024. Fill the canvas with the application UI, front-on and flat. No laptop, desk, camera perspective, marketing headline, poster composition or floating devices. This must look like a carefully designed working product.
+
+Architecture: a thin native Windows-style title bar, then a project navigation rail about 190px wide, a session list about 270px wide, a generous central conversation about 770px wide, and a narrow optional context pane on the far right. All panels align to one quiet horizontal header rhythm. Warm-white/ivory surfaces with very subtle tonal separation; restrained coral selection and actions.
+
+Top-left brand is the exact small approved coral ribbon symbol + "kodo". Rail has "新建会话", "主对话", "待处理", "全部会话", then a project group "项目" with selected "Atlas · 示例项目" and "个人工具". Bottom links "工具与配置", "用量与预算", "手机访问". A tiny bottom status reads "本地工作台 · 设计示例". Line icons are restrained and consistent.
+
+Session-list header "Atlas" with a search field. Small filter "全部工具". Three realistic sparse session rows: selected "梳理项目结构" with "Codex · 空闲"; "完善设置页" with "Claude Code · 等待输入"; "补充使用说明" with "pi · 草稿". A separate "Kodo 主对话" entry may sit above native sessions. Tool identity is secondary metadata, never the primary sidebar hierarchy.
+
+Main conversation header "梳理项目结构", small metadata "Codex · 原生会话 · 设计示例". Compact mode switch "直接对话" selected, "Kodo 托管" unselected. Show calm whitespace around a short transcript. User bubble: "帮我梳理这个项目的入口和模块关系。" Assistant: "我会先查看目录结构，再整理入口和依赖关系。" Below, a folded neutral tool row "查看项目目录" and a short readable module outline with simple file names. Do not invent passed tests, success counts or billing records.
+
+Bottom anchored composer with placeholder "继续这段工作…", attachment and context controls, a small deeper-coral send arrow, and an adjacent clear text control "停止并暂停托管". A discreet hint can read "托管仅在开启后生效". Right context pane title "工作位置" shows "Atlas / main" and a short example file list; lower section "活动" contains illustrative neutral events, not fabricated completion claims.
+
+Typography is crisp and readable at natural UI sizes, headers modest, transcript easy to read. Small functional iconography, compact navigation, 1px warm-gray boundaries, 10-12px radii on composer and message bubbles, very modest shadow only under the composer. This is a quiet local workbench with a warm human brand; do not put decorative ribbons or a giant logo into the conversation area. No green or blue theme.

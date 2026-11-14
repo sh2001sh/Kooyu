@@ -1,0 +1,21 @@
+{
+  "brand": "Kooyu",
+  "confirmed_on": "2026-11-13",
+  "concept_images": "Historical Kodo layout concepts; current Kooyu logo lives in assets.",
+  "direction": "灵动回环 A · 日落珊瑚",
+  "design_images": 6,
+  "asset_index": "assets/README.md",
+  "design_index": "product-design/README.md",
+  "bundles": [
+    {
+      "path": "brand\\kooyu-brand-assets.zip",
+      "files": 101,
+      "bytes": 3024384
+    },
+    {
+      "path": "brand\\kooyu-product-designs.zip",
+      "files": 28,
+      "bytes": 10683977
+    }
+  ]
+}

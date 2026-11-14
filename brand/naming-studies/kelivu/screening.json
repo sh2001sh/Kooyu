@@ -1,0 +1,60 @@
+{
+  "proposal": "Kelivu",
+  "status": "recommended_name_proposal",
+  "pronunciation": "keh-LEE-voo",
+  "ipa": "/kɛˈliːvuː/",
+  "lettering": {
+    "font": "Quicksand",
+    "weight": 590,
+    "shear": 0.065,
+    "tracking_em": [
+      -0.018,
+      -0.012,
+      -0.008,
+      -0.005,
+      -0.014
+    ],
+    "outlined": true
+  },
+  "symbol_sha256": "7bf8d93f5591bf698eb37c662167f9dc7ece8fab563f0fc7f30353f9617344ef",
+  "domains": [
+    {
+      "domain": "kelivu.com",
+      "checked_at_utc": "2026-11-13T03:29:39.221996+00:00",
+      "source": "https://rdap.verisign.com/com/v1/domain/kelivu.com",
+      "http_status": 404,
+      "outcome": "no_registration_record_returned"
+    },
+    {
+      "domain": "kovinu.com",
+      "checked_at_utc": "2026-11-13T03:29:39.223797+00:00",
+      "source": "https://rdap.verisign.com/com/v1/domain/kovinu.com",
+      "http_status": 404,
+      "outcome": "no_registration_record_returned"
+    },
+    {
+      "domain": "keluvu.com",
+      "checked_at_utc": "2026-11-13T03:29:39.224261+00:00",
+      "source": "https://rdap.verisign.com/com/v1/domain/keluvu.com",
+      "http_status": 404,
+      "outcome": "no_registration_record_returned"
+    }
+  ],
+  "web_screen": {
+    "date": "2026-11-13",
+    "queries": [
+      "\"Kelivu\"",
+      "\"Kelivu\" software OR AI OR app OR company",
+      "\"Kelivu\" \"Kelivo\""
+    ],
+    "finding": "No clear exact-name AI/software brand identified in the limited returned results. This is not exhaustive.",
+    "known_nonbrand_hits": [
+      "Constructed-language conjugation tables; OCR dictionary entries"
+    ]
+  },
+  "limits": [
+    "No purchase or reservation performed.",
+    "404 is a registry observation, not a registrar checkout or price guarantee.",
+    "Trademark and similar-sounding-name clearance remain incomplete."
+  ]
+}

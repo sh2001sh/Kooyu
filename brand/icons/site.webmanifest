@@ -1,21 +1,28 @@
 {
-  "name": "Kodo",
-  "short_name": "Kodo",
+  "name": "Kooyu",
+  "short_name": "Kooyu",
+  "start_url": "/",
   "display": "standalone",
-  "background_color": "#0B0E12",
-  "theme_color": "#0B0E12",
+  "background_color": "#FAF8F4",
+  "theme_color": "#F17561",
   "icons": [
     {
-      "src": "./kodo-app-192.png",
+      "src": "kooyu-app-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
-      "src": "./kodo-app-512.png",
+      "src": "kooyu-app-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "kooyu-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }

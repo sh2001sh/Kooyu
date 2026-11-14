@@ -1,0 +1,178 @@
+{
+  "date": "2026-11-13",
+  "registry_bootstrap_source": "https://data.iana.org/rdap/dns.json",
+  "registries": {
+    "app": "https://pubapi.registry.google/rdap/",
+    "dev": "https://pubapi.registry.google/rdap/",
+    "com": "https://rdap.verisign.com/com/v1/"
+  },
+  "queries": [
+    {
+      "domain": "kuyu.com",
+      "source": "https://rdap.verisign.com/com/v1/domain/kuyu.com",
+      "checked_at_utc": "2026-11-13T03:50:22.525590+00:00",
+      "http_status": 200,
+      "outcome": "registered",
+      "events": [
+        {
+          "eventAction": "registration",
+          "eventDate": "2000-05-02T11:15:38Z"
+        }
+      ]
+    },
+    {
+      "domain": "kuyu.app",
+      "source": "https://pubapi.registry.google/rdap/domain/kuyu.app",
+      "checked_at_utc": "2026-11-13T03:50:22.525898+00:00",
+      "http_status": 404,
+      "outcome": "no_registration_record_returned"
+    },
+    {
+      "domain": "kuyu.dev",
+      "source": "https://pubapi.registry.google/rdap/domain/kuyu.dev",
+      "checked_at_utc": "2026-11-13T03:50:22.526183+00:00",
+      "http_status": 404,
+      "outcome": "no_registration_record_returned"
+    },
+    {
+      "domain": "koti.com",
+      "source": "https://rdap.verisign.com/com/v1/domain/koti.com",
+      "checked_at_utc": "2026-11-13T03:50:22.526408+00:00",
+      "http_status": 200,
+      "outcome": "registered",
+      "events": [
+        {
+          "eventAction": "registration",
+          "eventDate": "1998-05-26T04:00:00Z"
+        }
+      ]
+    },
+    {
+      "domain": "koti.app",
+      "source": "https://pubapi.registry.google/rdap/domain/koti.app",
+      "checked_at_utc": "2026-11-13T03:50:22.526731+00:00",
+      "http_status": 200,
+      "outcome": "registered",
+      "events": [
+        {
+          "eventAction": "registration",
+          "eventActor": "godaddy",
+          "eventDate": "2018-05-07T21:11:48.058Z"
+        }
+      ]
+    },
+    {
+      "domain": "koti.dev",
+      "source": "https://pubapi.registry.google/rdap/domain/koti.dev",
+      "checked_at_utc": "2026-11-13T03:50:22.527025+00:00",
+      "http_status": 200,
+      "outcome": "registered",
+      "events": [
+        {
+          "eventAction": "registration",
+          "eventActor": "openprovider",
+          "eventDate": "2026-04-13T14:40:00.622Z"
+        }
+      ]
+    },
+    {
+      "domain": "kumi.com",
+      "source": "https://rdap.verisign.com/com/v1/domain/kumi.com",
+      "checked_at_utc": "2026-11-13T03:50:22.527440+00:00",
+      "http_status": 200,
+      "outcome": "registered",
+      "events": [
+        {
+          "eventAction": "registration",
+          "eventDate": "1997-07-23T04:00:00Z"
+        }
+      ]
+    },
+    {
+      "domain": "kumi.app",
+      "source": "https://pubapi.registry.google/rdap/domain/kumi.app",
+      "checked_at_utc": "2026-11-13T03:50:23.168983+00:00",
+      "http_status": 200,
+      "outcome": "registered",
+      "events": [
+        {
+          "eventAction": "registration",
+          "eventActor": "grepapps",
+          "eventDate": "2022-07-21T16:10:45.152Z"
+        }
+      ]
+    },
+    {
+      "domain": "kumi.dev",
+      "source": "https://pubapi.registry.google/rdap/domain/kumi.dev",
+      "checked_at_utc": "2026-11-13T03:50:23.185583+00:00",
+      "http_status": 200,
+      "outcome": "registered",
+      "events": [
+        {
+          "eventAction": "registration",
+          "eventActor": "porkbun",
+          "eventDate": "2023-09-18T16:31:35.770Z"
+        }
+      ]
+    },
+    {
+      "domain": "getkuyu.com",
+      "source": "https://rdap.verisign.com/com/v1/domain/getkuyu.com",
+      "checked_at_utc": "2026-11-13T03:50:23.186526+00:00",
+      "http_status": 404,
+      "outcome": "no_registration_record_returned"
+    },
+    {
+      "domain": "usekuyu.com",
+      "source": "https://rdap.verisign.com/com/v1/domain/usekuyu.com",
+      "checked_at_utc": "2026-11-13T03:50:23.223495+00:00",
+      "http_status": 404,
+      "outcome": "no_registration_record_returned"
+    },
+    {
+      "domain": "getkoti.com",
+      "source": "https://rdap.verisign.com/com/v1/domain/getkoti.com",
+      "checked_at_utc": "2026-11-13T03:50:23.237229+00:00",
+      "http_status": 200,
+      "outcome": "registered",
+      "events": [
+        {
+          "eventAction": "registration",
+          "eventDate": "2026-09-06T18:30:29Z"
+        }
+      ]
+    },
+    {
+      "domain": "usekoti.com",
+      "source": "https://rdap.verisign.com/com/v1/domain/usekoti.com",
+      "checked_at_utc": "2026-11-13T03:50:23.241838+00:00",
+      "http_status": 200,
+      "outcome": "registered",
+      "events": [
+        {
+          "eventAction": "registration",
+          "eventDate": "2026-11-06T00:20:21Z"
+        }
+      ]
+    },
+    {
+      "domain": "getkumi.com",
+      "source": "https://rdap.verisign.com/com/v1/domain/getkumi.com",
+      "checked_at_utc": "2026-11-13T03:50:23.251121+00:00",
+      "http_status": 200,
+      "outcome": "registered",
+      "events": [
+        {
+          "eventAction": "registration",
+          "eventDate": "2018-12-11T23:05:57Z"
+        }
+      ]
+    }
+  ],
+  "limits": [
+    "No purchase or reservation.",
+    "404 is not a price or checkout guarantee.",
+    "No trademark clearance has been completed."
+  ]
+}
