@@ -118,8 +118,9 @@ test("Cursor uses the current agent command and accepts the older cursor-agent a
 test("desktop runtime selection respects explicit overrides, preference and bundled ZCode config", () => {
   const f = fixture();
   try {
-    const entry = f.put("resources/glm/zcode.cjs");
-    const config = f.put("resources/config/provider/zcode-builtin.json", "{}");
+    const resources = process.platform === "darwin" ? "Contents/Resources" : "resources";
+    const entry = f.put(`${resources}/glm/zcode.cjs`);
+    const config = f.put(`${resources}/config/provider/zcode-builtin.json`, "{}");
     const desktop = { name: "ZCode", path: f.root, version: "synthetic" };
     const finder = (command: string) => command;
     const automatic = resolveInstallation("zcode", undefined, [desktop], finder);
@@ -225,7 +226,8 @@ test("each harness reports CLI-only and desktop-only entrypoints independently",
       assert.equal(withoutBundled.desktopOnly.source, sdkIds.has(id) ? "sdk" : null, id);
       if (sdkIds.has(id)) continue;
       const bin = id === "cursor" ? "cursor-agent" : command;
-      f.put(`resources/bin/${bin}${process.platform === "win32" ? ".exe" : ""}`);
+      const resources = process.platform === "darwin" ? "Contents/Resources" : "resources";
+      f.put(`${resources}/bin/${bin}${process.platform === "win32" ? ".exe" : ""}`);
       const withBundled = resolveInstallationModes(id, [desktop], find);
       assert.equal(withBundled.desktopOnly.launchable, true, id);
       assert.equal(withBundled.desktopOnly.source, "desktop-bundled", id);

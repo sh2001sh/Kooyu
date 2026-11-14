@@ -93,7 +93,8 @@ test("Claude standalone history uses the binding home without changing Host envi
   const original = process.env.CLAUDE_CONFIG_DIR;
   const id = randomUUID();
   try {
-    const cwd = join(dir, "workspace");
+    const { realpath } = await import("node:fs/promises");
+    const cwd = join(await realpath(dir), "workspace");
     const home = join(dir, "isolated");
     const project = join(home, "projects", cwd.replace(/[^a-zA-Z0-9]/g, "-"));
     await mkdir(cwd);

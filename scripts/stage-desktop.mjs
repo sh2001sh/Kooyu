@@ -33,11 +33,15 @@ await cp(join(root, "services/relay/package.json"), join(host, "services/relay/p
 const npm = process.env.npm_execpath;
 if (!npm) throw new Error("Use npm run package:desktop or npm run stage:desktop.");
 const exitCode = await new Promise((done, reject) => {
-  const child = spawn(process.execPath, [npm, "ci", "--omit=dev", "--no-audit", "--no-fund"], {
-    cwd: host,
-    stdio: "inherit",
-    windowsHide: true,
-  });
+  const child = spawn(
+    process.execPath,
+    [npm, "ci", "--omit=dev", "--workspace=@kodo/host", "--no-audit", "--no-fund"],
+    {
+      cwd: host,
+      stdio: "inherit",
+      windowsHide: true,
+    },
+  );
   child.once("error", reject);
   child.once("exit", done);
 });

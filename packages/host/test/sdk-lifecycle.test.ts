@@ -129,7 +129,11 @@ for (const id of ["kodo", "pi"] as const)
       mode = null;
       await runtime.setPermissionMode!(mode);
       await runtime.send("default", randomUUID(), "new");
-      assert.deepEqual(seen, [["read"], [], ["read", "write", "edit", "powershell"]]);
+      assert.deepEqual(seen, [
+        ["read"],
+        [],
+        ["read", "write", "edit", process.platform === "win32" ? "powershell" : "bash"],
+      ]);
       await assert.rejects(runtime.setPermissionMode!("full-access"), /只支持/);
     } finally {
       await runtime.close();

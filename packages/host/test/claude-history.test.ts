@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
+import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Session } from "@kodo/protocol";
@@ -10,7 +11,7 @@ import { readClaudeTree } from "../src/harnesses/claude-history.js";
 import { claudeAdapterWithQuery } from "../src/harnesses/claude-code.js";
 
 test("installed Claude SDK restores isolated synthetic subagent logs without model calls or replayed billing", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "kooyu-claude-tree-"));
+  const dir = realpathSync(await mkdtemp(join(tmpdir(), "kooyu-claude-tree-")));
   const home = join(dir, "isolated"),
     cwd = join(dir, "workspace"),
     id = randomUUID();

@@ -152,7 +152,10 @@ import Observation
         guard let c = connection, let result = await execute("/sessions", values: effective.body.object, refreshAfter: false), current(c, generation) else { return false }
         let id = result["id"].string; guard !id.isEmpty else { return false }
         selected = id; page = nil; await refresh()
-        if !draft.firstMessage.isEmpty && !(await send(draft.firstMessage, mode: "new")) { composerDraft = draft.firstMessage }
+        if !draft.firstMessage.isEmpty {
+            let sent = await send(draft.firstMessage, mode: "new")
+            if !sent { composerDraft = draft.firstMessage }
+        }
         return true
     }
     func createSession(title: String, projectId: String?) async -> Bool { var draft = SessionDraft(); draft.title = title; draft.projectId = projectId ?? ""; return await createSession(draft) }

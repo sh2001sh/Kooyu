@@ -1,6 +1,7 @@
 # Build outputs
 node_modules/
 dist/
+!packages/host/test/fixtures/@moonshot-ai/kimi-code/dist/
 out/
 release/
 coverage/
