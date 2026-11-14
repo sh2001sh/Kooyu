@@ -477,7 +477,8 @@ struct ProjectsView: View {
     @State private var editingProject: HostProject?
     @State private var deleting: HostProject?
     @State private var workspaceProject: String?
-    @State private var name = "", path = ""
+    @State private var name = ""
+    @State private var path = ""
 
     var body: some View {
         List {
@@ -599,7 +600,8 @@ struct ProjectsView: View {
 struct WorkspaceBrowserView: View {
     @Bindable var model: Workbench
     let workspace: HostWorkspace
-    @State private var path = "", section = "files"
+    @State private var path = ""
+    @State private var section = "files"
     @State private var file: String?
     @State private var data: JSONValue?
     @State private var loading = false
@@ -684,7 +686,9 @@ struct WorkspaceBrowserView: View {
 
 struct NativeSettingsView: View {
     @Bindable var model: Workbench
-    @State private var section = "devices", instructions = "", harness = "kodo"
+    @State private var section = "devices"
+    @State private var instructions = ""
+    @State private var harness = "kodo"
     @State private var settings: JSONValue?
     @State private var loadingSettings = false
 
@@ -773,7 +777,13 @@ struct NativeSessionDetails: View {
     @Bindable var model: Workbench
     let session: HostSession
     @Environment(\.dismiss) private var dismiss
-    @State private var section = "settings", title = "", project = "", workspace = "", chosenModel = "", reasoning = "", permission = ""
+    @State private var section = "settings"
+    @State private var title = ""
+    @State private var project = ""
+    @State private var workspace = ""
+    @State private var chosenModel = ""
+    @State private var reasoning = ""
+    @State private var permission = ""
     @State private var options: JSONValue?
     @State private var nativePermissions: JSONValue?
 

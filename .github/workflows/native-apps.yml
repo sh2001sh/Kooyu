@@ -50,7 +50,11 @@ jobs:
           node-version: 24.13.0
           cache: npm
       - run: npm ci
-      - run: npm run package:desktop -- --publish never
+      - name: Build desktop installers
+        shell: bash
+        run: |
+          if [[ "$RUNNER_OS" == "macOS" ]]; then ulimit -n 65536; fi
+          npm run package:desktop -- --publish never
       - uses: actions/upload-artifact@v4
         with:
           name: kooyu-${{ matrix.platform }}
@@ -72,6 +76,8 @@ jobs:
           distribution: temurin
           java-version: "17"
       - uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-36 build-tools;36.0.0"
       - uses: gradle/actions/setup-gradle@v4
       - name: Restore the existing Android signing identity
         shell: bash
