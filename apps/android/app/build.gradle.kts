@@ -14,6 +14,9 @@ android {
         versionName = "0.2.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
+    signingConfigs.getByName("debug") {
+        System.getenv("KOOYU_ANDROID_DEBUG_KEYSTORE")?.let { storeFile = file(it) }
+    }
     buildTypes {
         release { isMinifyEnabled = false }
     }

@@ -15,21 +15,22 @@ test("installed Claude SDK restores isolated synthetic subagent logs without mod
   const home = join(dir, "isolated"),
     cwd = join(dir, "workspace"),
     id = randomUUID();
-  const project = join(home, "projects", cwd.replace(/[^a-zA-Z0-9]/g, "-"));
+  await mkdir(cwd);
+  const canonicalCwd = realpathSync(cwd);
+  const project = join(home, "projects", canonicalCwd.replace(/[^a-zA-Z0-9]/g, "-"));
   const children = join(project, id, "subagents");
   const message = (text: string, role = "assistant") => ({
     type: role,
     uuid: randomUUID(),
     parentUuid: null,
     sessionId: id,
-    cwd,
+    cwd: canonicalCwd,
     timestamp: new Date().toISOString(),
     message: { role, content: [{ type: "text", text }] as Wire[] },
   });
   const events: { type: string; payload: Wire; key?: string }[] = [];
   const original = process.env.CLAUDE_CONFIG_DIR;
   await mkdir(children, { recursive: true });
-  await mkdir(cwd);
   const root = message("root stored prompt", "user");
   await writeFile(join(project, id + ".jsonl"), JSON.stringify(root) + "\n");
   const child = message("child saved output");
@@ -53,7 +54,7 @@ test("installed Claude SDK restores isolated synthetic subagent logs without mod
   // The SDK enumerates this empty file; it must remain an explicit incomplete child.
   await writeFile(join(children, "agent-empty.jsonl"), "");
   const ctx: AdapterContext = {
-    cwd,
+    cwd: canonicalCwd,
     dataDir: dir,
     env: { ...process.env, CLAUDE_CONFIG_DIR: home },
     launch: { command: "claude-sdk", args: [] },

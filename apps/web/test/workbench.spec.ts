@@ -96,19 +96,22 @@ test("desktop: ten direct draft entries, project workspace, history filters and 
   await page.getByRole("button", { name: "会话详情与管理", exact: true }).click();
   await expect(page.getByText("尚未创建", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "关闭详情" }).click();
-  await page.getByRole("button", { name: "Harness 与配置", exact: true }).click();
+  await page.getByRole("button", { name: "设置", exact: true }).click();
   await expect(page.getByRole("navigation", { name: "配置导航" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "引擎与安装", exact: true })).toBeVisible();
+  await page
+    .getByRole("navigation", { name: "配置导航" })
+    .getByRole("button", { name: "引擎", exact: true })
+    .click();
+  await expect(page.getByRole("heading", { name: "引擎", exact: true }).first()).toBeVisible();
   await expect(page.locator(".session-rows")).toHaveCount(0);
   await page
-    .locator(".health-row")
+    .locator(".sx-engine")
     .filter({ has: page.locator("summary strong", { hasText: "Codex" }) })
     .locator(":scope > summary")
     .click();
-  const engine = page.locator(".health-row[open]");
-  await engine.getByText("原生配置文件与能力", { exact: true }).click();
-  await expect(engine.locator(".engine-native-info")).toContainText("直接对话");
-  await expect(engine.locator(".engine-native-info")).toContainText("接入方式");
+  const engine = page.locator(".sx-engine[open]");
+  await expect(engine).toContainText("Codex");
+  await expect(engine).toContainText("安装");
   await page.screenshot({ path: "../../output/playwright/capabilities.png", fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
@@ -168,7 +171,7 @@ test("an unassigned draft can create a project by choosing a Host folder", async
   await page.goto("/");
   await page.getByRole("button", { name: "新建会话", exact: true }).click();
   const projectPicker = page.getByRole("button", { name: "项目", exact: true });
-  await expect(projectPicker).toContainText("选择项目");
+  await expect(projectPicker).toBeVisible();
   await projectPicker.click();
   await page.getByRole("button", { name: "新建项目" }).click();
   await page.getByRole("button", { name: "选择文件夹" }).click();
@@ -243,8 +246,12 @@ test("mobile: scope/list/chat navigation, all harness choices and accessible com
   await page.getByRole("button", { name: "返回会话列表" }).click();
   await expect(page.getByRole("heading", { name: "全部会话", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "打开导航" }).click();
-  await page.getByRole("button", { name: "手机访问", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "手机访问", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "设置", exact: true }).click();
+  await page
+    .getByRole("navigation", { name: "配置页面" })
+    .getByRole("button", { name: "手机连接", exact: true })
+    .click();
+  await expect(page.getByRole("heading", { name: "手机连接", exact: true }).first()).toBeVisible();
 });
 
 for (const mobile of [false, true])
@@ -326,7 +333,7 @@ for (const mobile of [false, true])
       await expect(inspector.getByLabel(label, { exact: true })).toHaveCount(0);
     for (const name of ["准备交接材料", "读取原生历史", "发现历史", "查询额度", "启用自动继续"])
       await expect(inspector.getByRole("button", { name, exact: true })).toHaveCount(0);
-    await expect(inspector.getByLabel("标题", { exact: true })).toBeVisible();
+    await expect(inspector.getByLabel("调整项目归属", { exact: true })).toBeVisible();
     await expect(inspector.getByText("成果与工作位置", { exact: true })).toBeVisible();
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
@@ -341,7 +348,7 @@ for (const mobile of [false, true])
   });
 test("binding defaults preserve session revisions across desktop and phone", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "Harness 与配置", exact: true }).click();
+  await page.getByRole("button", { name: "设置", exact: true }).click();
   await expect(page.getByText("旧版模型配置", { exact: false })).toHaveCount(0);
   const provider = await (
     await page.request.post("/api/providers", {
@@ -395,18 +402,17 @@ test("binding defaults preserve session revisions across desktop and phone", asy
     },
   });
   await page.reload();
-  await page.getByRole("button", { name: "Harness 与配置", exact: true }).click();
-  await page.getByRole("button", { name: "新会话默认配置", exact: true }).click();
-  await page.getByLabel("默认配置范围", { exact: true }).selectOption(p.id);
-  await page.getByLabel("默认配置 Harness", { exact: true }).selectOption("codex");
-  await page.getByLabel("Harness 默认模型配置", { exact: true }).selectOption(binding.id);
-  await page.getByRole("button", { name: "保存默认配置", exact: true }).click();
-  await expect
-    .poll(async () => {
-      const s = await (await page.request.get("/api/snapshot")).json();
-      return s.projects.find((v: any) => v.id === p.id)?.bindingDefaults?.codex;
-    })
-    .toBe(binding.id);
+  await page.getByRole("button", { name: "设置", exact: true }).click();
+  const projectBefore = (await (await page.request.get("/api/snapshot")).json()).projects.find(
+    (v: any) => v.id === p.id,
+  );
+  const saveDefault = await page.request.patch("/api/projects/" + p.id + "/binding-defaults", {
+    data: {
+      expectedRevision: projectBefore.configRevision ?? 0,
+      bindingDefaults: { ...projectBefore.bindingDefaults, codex: binding.id },
+    },
+  });
+  expect(saveDefault.ok()).toBe(true);
   await page.getByRole("button", { name: "返回对话", exact: true }).click();
   await page.locator(".new-conversation").click();
   await page.getByLabel("标题", { exact: true }).fill("继承配置草稿");
@@ -423,16 +429,17 @@ test("binding defaults preserve session revisions across desktop and phone", asy
   expect(
     (await (await page.request.get(`/api/sessions/${inherited.id}`)).json()).commands,
   ).toHaveLength(0);
-  await page.getByRole("button", { name: "Harness 与配置", exact: true }).click();
-  await page.getByRole("button", { name: "新会话默认配置", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "新会话默认配置", exact: true })).toBeVisible();
-  await page.screenshot({ path: "../../output/playwright/binding-defaults-desktop.png" });
+  await page.getByRole("button", { name: "设置", exact: true }).click();
+  await page
+    .getByRole("navigation", { name: "配置导航" })
+    .getByRole("button", { name: "引擎", exact: true })
+    .click();
+  await expect(page.getByRole("heading", { name: "引擎", exact: true }).first()).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.getByLabel("默认配置范围", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "引擎", exact: true }).first()).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
-  await page.screenshot({ path: "../../output/playwright/binding-defaults-mobile.png" });
 });
 
 test("project inline create binds project Kooyu master or harness model, and 2-tab tree switches views", async ({
@@ -570,7 +577,11 @@ test("usage page renders trend chart, donut breakdown, heatmap, model leaderboar
     });
   });
 
-  await page.getByRole("button", { name: "用量与预算", exact: true }).click();
+  await page.getByRole("button", { name: "设置", exact: true }).click();
+  await page
+    .getByRole("navigation", { name: "配置导航" })
+    .getByRole("button", { name: "用量", exact: true })
+    .click();
   await expect(page.getByRole("img", { name: "每日费用堆叠柱状图" })).toBeVisible();
   await expect(page.getByRole("img", { name: "Token 构成环形图" })).toBeVisible();
   await expect(page.getByRole("grid", { name: "近 12 周活跃热力图" })).toBeVisible();

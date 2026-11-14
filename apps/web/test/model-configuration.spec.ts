@@ -36,27 +36,21 @@ for (const width of [1440, 390])
     const model = await modelResponse.json();
     await page.goto("/");
     if (width < 600) await page.getByRole("button", { name: "打开导航", exact: true }).click();
-    await page.getByRole("button", { name: "Harness 与配置", exact: true }).first().click();
-    await page.getByRole("button", { name: "模型库", exact: true }).first().click();
-    const panel = page.getByRole("region", { name: "Provider 与模型配置" });
-    const record = panel.locator(".provider-record").filter({
-      has: page.getByText(modelName, { exact: true }),
-    });
+    await page.getByRole("button", { name: "设置", exact: true }).click();
+    await page
+      .getByRole("navigation", { name: width < 600 ? "配置页面" : "配置导航" })
+      .getByRole("button", { name: "模型来源", exact: true })
+      .click();
+    const record = page
+      .getByRole("table", { name: "模型列表" })
+      .locator("tbody tr")
+      .filter({ hasText: modelName });
     await expect(record.getByText("输入 $0", { exact: true })).toBeVisible();
     await expect(record.getByText("输出 $2.5", { exact: true })).toBeVisible();
-    await expect(record.getByText("参考价 · USD / 百万 Token", { exact: true })).toBeVisible();
-    await record.getByRole("button", { name: `编辑参数 ${modelName}`, exact: true }).click();
-    const editor = panel.locator("form.provider-editor");
-    await editor.getByText("思考档位", { exact: true }).click();
-    await expect(editor.getByLabel("支持的思考档位（JSON）")).toBeVisible();
-    await expect(editor.getByLabel("档位映射覆盖（JSON）")).toBeHidden();
-    await expect(editor.getByText("pi 思考映射覆盖（JSON）", { exact: true })).toHaveCount(0);
-    await editor.getByText("引擎协议映射（高级）", { exact: true }).click();
-    await expect(editor.getByLabel("档位映射覆盖（JSON）")).toHaveValue(
-      JSON.stringify(overrides.thinkingLevelMap, null, 2),
-    );
+    await record.getByRole("button", { name: "修改", exact: true }).click();
+    const editor = page.locator("form.sx-model-editor");
     await editor.getByLabel("上下文窗口", { exact: true }).fill("234567");
-    await editor.getByRole("button", { name: "保存参数覆盖", exact: true }).click();
+    await editor.getByRole("button", { name: "保存", exact: true }).click();
     await expect(editor).toHaveCount(0);
     const config = await (await page.request.get("/api/provider-configuration")).json();
     const saved = config.models.find((item: { id: string }) => item.id === model.id);

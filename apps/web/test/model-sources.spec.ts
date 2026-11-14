@@ -85,12 +85,15 @@ for (const width of [1440, 390]) {
         .getByRole("button", { name: "模型来源", exact: true })
         .click();
       const table = page.getByRole("table", { name: "模型列表", exact: true });
-      const row = table.locator("tbody tr").filter({
-        has: page
-          .locator(".model-identity")
-          .filter({ hasText: new RegExp(`^${modelName}(已修改)?$`) }),
-      });
-      await expect(table.locator("tbody tr")).toHaveCount(2);
+      const row = table
+        .locator("tbody tr")
+        .filter({ hasText: modelName })
+        .filter({
+          has: page
+            .locator(".model-identity")
+            .filter({ hasText: new RegExp(`^${modelName}(已修改)?$`) }),
+        });
+      await expect(table.locator("tbody tr").filter({ hasText: modelName })).toHaveCount(2);
       await expect(row).toHaveCount(1);
       const source = row.getByRole("combobox", { name: `模型 ${modelName} 的来源`, exact: true });
       await expect(source.locator("option")).toHaveCount(3);
@@ -131,10 +134,10 @@ for (const width of [1440, 390]) {
         true,
       );
       await page.getByLabel("模型来源筛选", { exact: true }).selectOption(providers[1]!.id);
-      await expect(table.locator("tbody tr")).toHaveCount(1);
+      await expect(table.locator("tbody tr").filter({ hasText: modelName })).toHaveCount(1);
       await expect(row.getByText("输入 $7", { exact: true })).toBeVisible();
       await page.getByLabel("模型来源筛选", { exact: true }).selectOption("");
-      await expect(table.locator("tbody tr")).toHaveCount(2);
+      await expect(table.locator("tbody tr").filter({ hasText: modelName })).toHaveCount(2);
       await expect(row.getByRole("combobox")).toHaveValue(models[1]!.id);
       expect(errors).toEqual([]);
     } finally {

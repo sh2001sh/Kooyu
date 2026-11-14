@@ -94,6 +94,16 @@ for (const mobile of [false, true])
       try {
         await page.goto("/");
         const source = page.getByLabel("模型来源", { exact: true });
+        await expect(
+          page.getByRole("heading", { name: "为主 Agent 连接模型（可选）" }),
+        ).toBeVisible();
+        await expect(page.locator(".setup-connection")).toHaveAttribute("aria-busy", "false");
+        await expect
+          .poll(
+            async () =>
+              (await source.count()) + (await page.getByLabel("来源名称", { exact: true }).count()),
+          )
+          .toBeGreaterThan(0);
         if (await source.count()) await source.selectOption("new");
         await page
           .getByLabel("来源名称", { exact: true })
@@ -152,6 +162,14 @@ for (const mobile of [false, true])
 test("discovery failure preserves API and offers manual model parameters", async ({ page }) => {
   await page.goto("/");
   const source = page.getByLabel("模型来源", { exact: true });
+  await expect(page.getByRole("heading", { name: "为主 Agent 连接模型（可选）" })).toBeVisible();
+  await expect(page.locator(".setup-connection")).toHaveAttribute("aria-busy", "false");
+  await expect
+    .poll(
+      async () =>
+        (await source.count()) + (await page.getByLabel("来源名称", { exact: true }).count()),
+    )
+    .toBeGreaterThan(0);
   if (await source.count()) await source.selectOption("new");
   await page.getByLabel("来源名称", { exact: true }).fill("Onboarding test unavailable");
   await page.getByLabel("Base URL", { exact: true }).fill("http://127.0.0.1:1/v1");
