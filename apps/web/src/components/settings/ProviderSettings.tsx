@@ -70,7 +70,6 @@ export function ProviderSettings({
   return (
     <SettingsPage
       title="模型来源"
-      description="添加你的 API 服务（官方或中转），保存后自动获取模型列表，并补全上下文窗口、思考档位和参考价格。在「引擎」里选择哪个引擎使用它。"
       actions={
         <>
           <button
@@ -124,7 +123,6 @@ export function ProviderSettings({
       {data && data.models.length > 0 && (
         <SettingsSection
           title="模型"
-          description="同一模型只展示一次。选择来源查看或修改该服务的参数和价格。"
           actions={
             <SxSelect
               ariaLabel="模型来源筛选"
@@ -273,11 +271,7 @@ function ProviderCard({
             }, "已添加");
           }}
         >
-          <SettingsRow
-            label="模型 ID"
-            description="与服务商文档中的模型名称一致。"
-            htmlFor={`add-${p.id}`}
-          >
+          <SettingsRow label="模型 ID" htmlFor={`add-${p.id}`}>
             <input
               id={`add-${p.id}`}
               required
@@ -346,6 +340,13 @@ function ModelTable({
               <tr key={m.id}>
                 <td className="model-identity">
                   <span className="sx-model-name">{m.model}</span>
+                  <span className="provider-help">
+                    {m.effective.input?.includes("image")
+                      ? "文本 · 图片"
+                      : m.effective.input?.includes("text")
+                        ? "文本"
+                        : "输入模态待确认"}
+                  </span>
                   {Object.keys(m.overrides).length > 0 && <span className="sx-edited">已修改</span>}
                 </td>
                 <td className="model-source" data-label="来源">
@@ -427,6 +428,9 @@ function ModelEditRow({
   const o = m.overrides;
   const [context, setContext] = useState(o.contextWindow?.toString() ?? "");
   const [output, setOutput] = useState(o.maxOutputTokens?.toString() ?? "");
+  const [inputMode, setInputMode] = useState(
+    o.input ? (o.input.includes("image") ? "image" : "text") : "auto",
+  );
   const [prices, setPrices] = usePricingDraft(o.pricing, m.automatic.pricing);
   const save = (overrides: ModelParameters) =>
     (async () => {
@@ -453,6 +457,12 @@ function ModelEditRow({
               const next: ModelParameters = { ...o };
               next.contextWindow = context.trim() ? Number(context) : undefined;
               next.maxOutputTokens = output.trim() ? Number(output) : undefined;
+              next.input =
+                inputMode === "auto"
+                  ? undefined
+                  : inputMode === "image"
+                    ? ["text", "image"]
+                    : ["text"];
               next.pricing = readPricingDraft(prices);
               for (const key of Object.keys(next) as (keyof ModelParameters)[])
                 if (next[key] === undefined) delete next[key];
@@ -462,6 +472,27 @@ function ModelEditRow({
         >
           <h4>{m.model}</h4>
           <p className="provider-help">当前来源：{source}</p>
+          <label>
+            输入模态
+            <select
+              aria-label="输入模态"
+              value={inputMode}
+              onChange={(e) => setInputMode(e.target.value)}
+            >
+              <option value="auto">自动（models.dev / 当前端点）</option>
+              <option value="text">仅文本</option>
+              <option value="image">文本与图片</option>
+            </select>
+          </label>
+          <p className="provider-help">
+            自动识别：
+            {auto.input?.includes("image")
+              ? "文本与图片"
+              : auto.input?.includes("text")
+                ? "仅文本"
+                : "尚未确认"}
+            。手动配置优先，选择自动可恢复目录设置。
+          </p>
           <div className="model-pricing-grid">
             <label>
               上下文窗口
@@ -584,11 +615,7 @@ function ProviderForm({
         }).finally(() => setBusy(false));
       }}
     >
-      <SettingsRow
-        label="名称"
-        description="只用于显示，例如「DeepSeek 官方」「公司中转」。"
-        htmlFor="pv-name"
-      >
+      <SettingsRow label="名称" htmlFor="pv-name">
         <input
           id="pv-name"
           required
@@ -614,10 +641,7 @@ function ProviderForm({
               </button>
             </SettingsRow>
           )}
-          <SettingsRow
-            label="接口格式"
-            description={PROTOCOLS.find((p) => p.value === d.protocol)?.hint}
-          >
+          <SettingsRow label="接口格式">
             <SxSelect
               ariaLabel="接口格式"
               value={d.protocol}
@@ -625,11 +649,10 @@ function ProviderForm({
               options={PROTOCOLS.map((p) => ({
                 value: p.value,
                 label: p.label,
-                hint: p.hint,
               }))}
             />
           </SettingsRow>
-          <SettingsRow label="接口地址" description="通常以 /v1 结尾。">
+          <SettingsRow label="接口地址">
             <input
               aria-label="接口地址"
               type="url"

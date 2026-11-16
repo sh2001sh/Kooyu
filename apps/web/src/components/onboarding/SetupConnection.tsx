@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowRight, Check, KeyRound, RefreshCw } from "lucide-react";
+import { ArrowRight, Check, RefreshCw } from "lucide-react";
 import type {
   AppSettings,
   CatalogModel,
@@ -260,12 +260,8 @@ export function SetupConnection({
                     placeholder="https://api.example.com/v1"
                     spellCheck={false}
                     autoComplete="url"
-                    aria-describedby="setup-url-help"
                   />
                 </label>
-                <p id="setup-url-help" className="setup-help">
-                  填写服务商提供的接口根地址（非聊天网页）。协议需与服务一致。
-                </p>
                 <label>
                   API Key
                   <span className="setup-key-input">
@@ -276,11 +272,7 @@ export function SetupConnection({
                       onChange={(e) => setKey(e.target.value)}
                       autoComplete="new-password"
                       spellCheck={false}
-                      placeholder={
-                        editing && endpoint?.credentialRef
-                          ? "已保存；留空保持不变"
-                          : "粘贴密钥；本地无认证服务可留空"
-                      }
+                      placeholder={editing && endpoint?.credentialRef ? "已保存" : "API Key"}
                     />
                     <button
                       type="button"
@@ -291,10 +283,6 @@ export function SetupConnection({
                     </button>
                   </span>
                 </label>
-                <p className="setup-help setup-key-note">
-                  <KeyRound size={13} />
-                  密钥保存在系统凭据库，不写入浏览器存储。
-                </p>
                 <div className="setup-actions">
                   {editing && (
                     <button
@@ -437,9 +425,6 @@ export function SetupConnection({
               </>
             )
           )}
-          <p className="setup-help setup-disclosure">
-            这里只读取模型列表并保存配置，不自动测试推理；接口权限和工具能力需在首次对话中确认。
-          </p>
         </>
       )}
     </div>

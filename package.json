@@ -25,11 +25,17 @@
     "start:desktop": "npm run start -w @kodo/desktop",
     "test:ui": "npm run test:ui -w @kodo/web",
     "test:platform": "node --test scripts/platform.test.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "verify:self-hosted-admin": "node scripts/verify-self-hosted-admin.mjs",
+    "verify:self-hosted-worker": "node scripts/verify-self-hosted-worker.mjs",
     "verify:packaged": "node scripts/verify-packaged-desktop.mjs",
     "verify:native": "node scripts/verify-native.mjs",
     "verify:native-lifecycle": "node scripts/verify-native-lifecycle.mjs",
     "verify:supervision": "node scripts/verify-supervision.mjs",
     "verify:electron": "node scripts/verify-electron.mjs",
+    "start:platform-fixture": "node scripts/platform-test-fixture.mjs",
+    "verify:desktop-pages": "node scripts/verify-desktop-pages.mjs",
+    "verify:android-pages": "node scripts/verify-android-pages.mjs",
     "verify:live-ui": "node scripts/verify-live-ui.mjs",
     "lint": "eslint packages apps scripts eslint.config.mjs",
     "format": "prettier --write packages apps scripts package.json tsconfig.base.json eslint.config.mjs .prettierrc.json",
@@ -61,5 +67,8 @@
     "prettier": "^3.9.10",
     "typescript": "~6.0.0",
     "typescript-eslint": "^8.72.2"
+  },
+  "dependencies": {
+    "tar": "7.5.23"
   }
 }

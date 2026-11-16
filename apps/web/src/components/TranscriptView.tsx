@@ -1,7 +1,16 @@
 import Markdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { AlertTriangle, Brain, ChevronRight, Wrench } from "lucide-react";
-import type { HarnessId, RuntimeEvent, SubagentEvent } from "@kodo/protocol";
+import {
+  AlertTriangle,
+  Brain,
+  ChevronRight,
+  Wrench,
+  Pencil,
+  MoreHorizontal,
+  GitBranch,
+} from "lucide-react";
+import type { HarnessId, MessageAttachment, RuntimeEvent, SubagentEvent } from "@kodo/protocol";
+import { assistantContent, isThinkingChannel, splitAssistantText } from "@kodo/protocol/client";
 import { useContext, useState } from "react";
 import { FilePreviewContext } from "../lib/file-preview-context";
 import { workspaceLinkPath } from "../lib/workspace-files";
@@ -10,6 +19,7 @@ import { HarnessBadge } from "./KodoBrand";
 import { CopyButton } from "./Motion";
 import { failureText, messageText } from "./TurnCard";
 import { useAppPreferences } from "../lib/preferences";
+import { SentAttachments } from "./Attachments";
 
 type Value = Record<string, any>;
 
@@ -20,6 +30,8 @@ interface TranscriptRow {
   text: string;
   payload?: unknown;
   origin?: string;
+  attachments?: MessageAttachment[];
+  createdAt?: string;
 }
 
 interface ChildTranscript {
@@ -293,12 +305,16 @@ function MessageRow({
   anchorEventId,
   continuation = false,
   subagent = false,
+  onEdit,
+  onBranch,
 }: {
   row: TranscriptRow;
   harnessId: HarnessId;
   anchorEventId?: string;
   continuation?: boolean;
   subagent?: boolean;
+  onEdit?: (eventId: string, text: string) => void;
+  onBranch?: (eventId: string) => void;
 }) {
   const hit = row.eventIds.includes(anchorEventId ?? "") || undefined;
   if (row.role === "error")
@@ -327,6 +343,7 @@ function MessageRow({
         id={`message-${row.id}`}
       >
         {row.origin && <div className="turn-author">{row.origin}</div>}
+        {row.attachments && <SentAttachments attachments={row.attachments} />}
         <div className="markdown">
           <Markdown
             remarkPlugins={[remarkGfm]}
@@ -335,6 +352,29 @@ function MessageRow({
           >
             {row.text}
           </Markdown>
+        </div>
+        <div className="message-actions">
+          {row.createdAt && (
+            <time dateTime={row.createdAt}>
+              {new Date(row.createdAt).toLocaleString(undefined, {
+                weekday: "short",
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </time>
+          )}
+          <CopyButton text={row.text} label="复制消息" />
+          {!subagent && onEdit && (
+            <button
+              type="button"
+              className="ios-copy-btn"
+              aria-label="编辑消息"
+              title="编辑并分支"
+              onClick={() => onEdit(row.eventIds[0]!, row.text)}
+            >
+              <Pencil size={14} />
+            </button>
+          )}
         </div>
       </article>
     );
@@ -366,6 +406,28 @@ function MessageRow({
           {row.text}
         </Markdown>
       </div>
+      <div className="message-actions">
+        {row.createdAt && (
+          <time dateTime={row.createdAt}>
+            {new Date(row.createdAt).toLocaleString(undefined, {
+              weekday: "short",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </time>
+        )}
+        {!subagent && onBranch && row.createdAt && (
+          <details className="message-more">
+            <summary aria-label="更多消息操作">
+              <MoreHorizontal size={16} />
+            </summary>
+            <button type="button" onClick={() => onBranch(row.eventIds[0]!)}>
+              <GitBranch size={14} />
+              分支到新聊天
+            </button>
+          </details>
+        )}
+      </div>
     </article>
   );
 }
@@ -394,7 +456,16 @@ function buildTranscriptRows(events: RuntimeEvent[]) {
   const flush = () => {
     flushThought();
     if (stream) {
-      rows.push({ id: streamKey, eventIds: streamIds, role: "assistant", text: stream });
+      const parts = splitAssistantText(stream);
+      if (parts.thinking.trim())
+        rows.push({
+          id: `${streamKey}:analysis`,
+          eventIds: streamIds,
+          role: "thinking",
+          text: parts.thinking,
+        });
+      if (parts.text)
+        rows.push({ id: streamKey, eventIds: streamIds, role: "assistant", text: parts.text });
       stream = "";
       streamIds = [];
     }
@@ -427,7 +498,7 @@ function buildTranscriptRows(events: RuntimeEvent[]) {
         else if (update.event.type === "state" && value.runState) child.status = value.runState;
         child.events.push({ ...e, type: update.event.type, payload: update.event.payload });
       }
-    } else if (e.type === "text-delta" && p.channel === "thought") {
+    } else if (e.type === "text-delta" && isThinkingChannel(p.channel)) {
       // A new reasoning item starts a separate block.
       if (thought && p.itemId !== undefined && p.itemId !== thoughtItem) flushThought();
       if (!thought) thoughtKey = `thought:${e.id}`;
@@ -439,14 +510,32 @@ function buildTranscriptRows(events: RuntimeEvent[]) {
       stream += typeof p.text === "string" ? p.text : "";
       streamIds.push(e.id);
     } else if (e.type === "message") {
-      const text = messageText(p);
-      if (!text) continue;
-      if (p.channel === "thought" || p.type === "reasoning") {
+      const parts =
+        p.role === "user" ? { text: messageText(p), thinking: "" } : assistantContent(p);
+      const text = parts.text;
+      const attachments =
+        p.role === "user" && Array.isArray(p.attachments)
+          ? (p.attachments as MessageAttachment[])
+          : undefined;
+      if (parts.thinking) {
         // A stored reasoning part is a full snapshot; replace its streamed prefix.
-        if (thought && p.id !== thoughtItem) flushThought();
-        thoughtItem = p.id ?? e.id;
-        thoughtKey = `thought:${thoughtItem}`;
-        thought = text;
+        const priorThought = rows.at(-1);
+        const replacesStreamedThought =
+          p.id === undefined &&
+          !thought &&
+          priorThought?.role === "thinking" &&
+          parts.thinking.trim().startsWith(priorThought.text.trim());
+        if (thought && p.id !== undefined && p.id !== thoughtItem) flushThought();
+        thoughtItem = replacesStreamedThought ? undefined : (p.id ?? thoughtItem ?? e.id);
+        thoughtKey = replacesStreamedThought ? priorThought.id : `thought:${thoughtItem}`;
+        thought = parts.thinking;
+      }
+      if (!text && !attachments?.length) {
+        // A final reasoning-only snapshot must also replace its streamed wrapper.
+        if (parts.thinking && !isThinkingChannel(p.channel) && !isThinkingChannel(p.type)) {
+          stream = "";
+          streamIds = [];
+        }
         continue;
       }
       const role = p.role ?? "assistant";
@@ -462,6 +551,8 @@ function buildTranscriptRows(events: RuntimeEvent[]) {
         eventIds: [e.id],
         role,
         text,
+        createdAt: e.createdAt,
+        ...(attachments?.length ? { attachments } : {}),
         origin:
           p.origin === "supervisor"
             ? "由主对话发送"
@@ -517,7 +608,9 @@ function buildTranscriptRows(events: RuntimeEvent[]) {
         });
     }
   }
-  const thinkingPending = Boolean(thought.trim()) && !stream;
+  const thinkingPending =
+    (Boolean(thought.trim()) && !stream) ||
+    (Boolean(splitAssistantText(stream).thinking.trim()) && !splitAssistantText(stream).text);
   flush();
   return { rows, thinkingPending };
 }
@@ -529,6 +622,8 @@ export function Transcript({
   running = false,
   subagent = false,
   onOpenFile,
+  onEdit,
+  onBranch,
 }: {
   events: RuntimeEvent[];
   harnessId?: HarnessId;
@@ -536,6 +631,8 @@ export function Transcript({
   running?: boolean;
   subagent?: boolean;
   onOpenFile?: (path: string) => void;
+  onEdit?: (eventId: string, text: string) => void;
+  onBranch?: (eventId: string) => void;
 }) {
   const inheritedOpenFile = useContext(FilePreviewContext);
   const { settings: preferences } = useAppPreferences();
@@ -584,6 +681,7 @@ export function Transcript({
               harnessId={harnessId}
               anchorEventId={anchorEventId}
               subagent={subagent}
+              onEdit={onEdit}
             />
           );
         }
@@ -596,6 +694,7 @@ export function Transcript({
             harnessId={harnessId}
             anchorEventId={anchorEventId}
             continuation={continuation}
+            onBranch={onBranch}
           />
         );
       })}

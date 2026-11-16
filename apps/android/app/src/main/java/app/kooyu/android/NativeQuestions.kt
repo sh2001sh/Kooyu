@@ -1,13 +1,25 @@
 package app.kooyu.android
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -60,26 +72,78 @@ fun questionForm(payload: JSONObject): QuestionForm? {
     return QuestionForm(protocol, questions)
 }
 @Composable fun NativeQuestionFields(item: InboxItem, form: QuestionForm, enabled: Boolean, answer: (NativeAction) -> Unit) {
+    val c = Kooyu.colors
     var selected by remember(item.id) { mutableStateOf<Map<String, List<String>>>(emptyMap()) }
     var custom by remember(item.id) { mutableStateOf<Map<String, String>>(emptyMap()) }
     var skipped by remember(item.id) { mutableStateOf<Set<String>>(emptySet()) }
     form.questions.forEach { q ->
-        Text(q.text, style = MaterialTheme.typography.titleMedium)
-        if (q.body.isNotEmpty()) Text(q.body)
+        Text(q.text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = c.text)
+        if (q.body.isNotEmpty()) Text(q.body, color = c.textSecondary, fontSize = 13.sp)
         q.options.forEach { option ->
             val checked = q.key !in skipped && option.value in selected[q.key].orEmpty() && (form.protocol == "kimi" && q.multiple || custom[q.key].isNullOrBlank())
-            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(enabled && q.key !in skipped) {
-                val previous = selected[q.key].orEmpty(); selected = selected + (q.key to if (q.multiple) { if (option.value in previous) previous - option.value else previous + option.value } else listOf(option.value))
-                if (form.protocol != "kimi" || !q.multiple) custom = custom - q.key
-            }) {
-                if (q.multiple) Checkbox(checked, null, enabled = enabled && q.key !in skipped) else RadioButton(checked, null, enabled = enabled && q.key !in skipped)
-                Column(Modifier.padding(top = 10.dp)) { Text(option.label); if (option.description.isNotEmpty()) Text(option.description, style = MaterialTheme.typography.bodySmall) }
+            Surface(
+                shape = CircleShape,
+                color = if (checked) (if (c.dark) c.raised else c.paper) else c.sunken,
+                border = BorderStroke(if (checked) 1.5.dp else 0.5.dp, if (checked) c.accent else c.borderSubtle),
+                shadowElevation = if (checked && !c.dark) 2.dp else 0.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)
+                    .clickable(enabled && q.key !in skipped) {
+                        val previous = selected[q.key].orEmpty()
+                        selected = selected + (q.key to if (q.multiple) { if (option.value in previous) previous - option.value else previous + option.value } else listOf(option.value))
+                        if (form.protocol != "kimi" || !q.multiple) custom = custom - q.key
+                    }
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(if (checked) c.accent else (if (c.dark) c.sunken else c.paper)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (checked) {
+                            Icon(Icons.Outlined.Check, null, tint = c.onAccent, modifier = Modifier.size(16.dp))
+                        } else {
+                            Box(Modifier.size(8.dp).clip(CircleShape).background(c.textTertiary.copy(alpha = 0.5f)))
+                        }
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text(option.label, fontWeight = if (checked) FontWeight.Bold else FontWeight.Medium, color = c.text, fontSize = 14.5.sp)
+                        if (option.description.isNotEmpty()) Text(option.description, style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .clip(CircleShape)
+                            .background(if (checked) c.accent else Color.Transparent)
+                            .then(if (!checked) Modifier.border(1.5.dp, c.borderSubtle, CircleShape) else Modifier),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (checked) {
+                            Icon(Icons.Outlined.Check, null, tint = c.onAccent, modifier = Modifier.size(13.dp))
+                        }
+                    }
+                }
             }
         }
-        if (q.custom) OutlinedTextField(custom[q.key].orEmpty(), { custom = custom + (q.key to it.take(10000)) }, enabled = enabled && q.key !in skipped, label = { Text(if (q.options.isEmpty()) "你的回答" else "其他回答") }, visualTransformation = if (q.secret) PasswordVisualTransformation() else VisualTransformation.None, modifier = Modifier.fillMaxWidth())
+        if (q.custom) OutlinedTextField(custom[q.key].orEmpty(), { custom = custom + (q.key to it.take(10000)) }, enabled = enabled && q.key !in skipped, label = { Text(if (q.options.isEmpty()) "你的回答" else "其他回答") }, visualTransformation = if (q.secret) PasswordVisualTransformation() else VisualTransformation.None, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp))
         if (form.protocol == "kimi") TextButton(onClick = { skipped = if (q.key in skipped) skipped - q.key else skipped + q.key }, enabled = enabled) { Text(if (q.key in skipped) "继续回答" else "跳过此题") }
     }
     val ready = form.questions.all { (form.protocol == "kimi" && it.key in skipped) || !custom[it.key].isNullOrBlank() || !selected[it.key].isNullOrEmpty() }
-    Button(onClick = { answer(NativeAction("提交回答", form.answer(selected, custom, skipped), false)) }, enabled = enabled && ready) { Text("提交回答") }
-    if (form.protocol != "codex") TextButton(onClick = { answer(NativeAction("取消回答", if (form.protocol == "claude") JSONObject().put("behavior", "deny") else JSONObject().put("cancelled", true), false)) }, enabled = enabled) { Text("取消回答") }
+    Button(
+        onClick = { answer(NativeAction("提交回答", form.answer(selected, custom, skipped), false)) },
+        enabled = enabled && ready,
+        shape = CircleShape,
+        colors = ButtonDefaults.buttonColors(containerColor = c.accent, contentColor = c.onAccent),
+        modifier = Modifier.fillMaxWidth().height(50.dp)
+    ) {
+        Text("提交回答", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+    }
+    if (form.protocol != "codex") TextButton(onClick = { answer(NativeAction("取消回答", if (form.protocol == "claude") JSONObject().put("behavior", "deny") else JSONObject().put("cancelled", true), false)) }, enabled = enabled) { Text("取消回答", color = c.textSecondary) }
 }

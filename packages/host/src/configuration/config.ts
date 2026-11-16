@@ -1,4 +1,4 @@
-import { AsyncEntry } from "@napi-rs/keyring";
+import { kodoSecrets } from "../credentials/vault.js";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import {
@@ -127,12 +127,7 @@ export interface CredentialVault {
   set(ref: string, value: string): Promise<void>;
   delete(ref: string): Promise<void>;
 }
-const systemVault: CredentialVault = {
-  set: (ref, value) => new AsyncEntry("Kodo", ref).setPassword(value),
-  delete: async (ref) => {
-    await new AsyncEntry("Kodo", ref).deletePassword();
-  },
-};
+const systemVault: CredentialVault = kodoSecrets;
 export async function collectProviderCredentials(
   store: Store,
   vault: CredentialVault = systemVault,
@@ -233,7 +228,7 @@ export async function instanceEnv(
     runtimeKey !== undefined
       ? runtimeKey
       : configuration.credentialRef
-        ? await new AsyncEntry("Kodo", configuration.credentialRef).getPassword()
+        ? await kodoSecrets.get(configuration.credentialRef)
         : null;
   if (configuration.credentialRef && !key)
     throw new KodoError("UNAVAILABLE", "系统凭据库中缺少绑定凭据。");

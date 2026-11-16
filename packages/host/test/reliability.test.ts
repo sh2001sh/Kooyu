@@ -632,6 +632,42 @@ test("queued automatic commands reserve the continuation limit", async () => {
   }
 });
 
+test("zero supervision limits allow continuations, failures and unknown costs without a cap", async () => {
+  const f = setup();
+  try {
+    const c = f.draft("supervisor"),
+      s = f.draft();
+    const watch = f.service.watch({
+      controllerSessionId: c.id,
+      targetSessionId: s.id,
+      mode: "continue",
+      continuous: true,
+      limits: { maxContinuations: 0, maxFailures: 0, budgetUsd: 0 },
+    });
+    f.store.saveWatch({ ...watch, continuations: 1000, failures: 1000 });
+    f.service.ingest(s.id, "usage", { input: 10, output: 5, costUsd: null }, "unknown-cost");
+    f.service.acceptSend(s.id, { requestId: randomUUID(), text: "unlimited first" }, c.id);
+    await turn();
+    f.service.acceptSend(s.id, { requestId: randomUUID(), text: "unlimited second" }, c.id);
+    await turn();
+    assert.deepEqual(
+      f.sends.filter((text) => text.startsWith("unlimited")),
+      ["unlimited first", "unlimited second"],
+    );
+    assert.equal(f.store.watches().find((w) => w.id === watch.id)?.state, "active");
+    assert.throws(() =>
+      f.service.watch({
+        controllerSessionId: c.id,
+        targetSessionId: s.id,
+        mode: "continue",
+        limits: { maxContinuations: -1 },
+      }),
+    );
+  } finally {
+    await f.close();
+  }
+});
+
 test("older cumulative snapshots cannot reduce usage or known cost", async () => {
   const f = setup();
   try {

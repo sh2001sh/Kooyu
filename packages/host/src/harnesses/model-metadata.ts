@@ -49,6 +49,7 @@ export function kodoModelOption(model: Model<Api>): HarnessModelOption {
     id: model.id,
     name: model.name,
     provider: model.provider,
+    input: model.input,
     source: "native-catalog",
     ...nativeParameters(
       {

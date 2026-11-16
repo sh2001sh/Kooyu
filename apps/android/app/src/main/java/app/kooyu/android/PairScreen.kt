@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -84,32 +85,26 @@ import androidx.core.content.ContextCompat
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                Icons.Outlined.DesktopWindows,
-                null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(36.dp)
+                painter = painterResource(R.drawable.kooyu_mark_coral),
+                contentDescription = null,
+                tint = Color.Unspecified,
+                modifier = Modifier.size(40.dp)
             )
         }
 
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
-                "连接你的工作台",
+                "连接工作台",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold
-            )
-            Text(
-                "在桌面 Kooyu「设置 → 手机连接」生成二维码，通过手机扫码即可安全配对。",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
         }
 
         OutlinedTextField(
             value = name,
             onValueChange = { name = it.take(60) },
-            label = { Text("电脑名称（可选）") },
-            placeholder = { Text("例如：MacBook Pro、办公室工作站") },
+            label = { Text("设备名称（可选）") },
+            placeholder = { Text("工作台标识") },
             leadingIcon = { Icon(Icons.Outlined.Devices, null) },
             singleLine = true,
             enabled = !busy,
@@ -200,7 +195,7 @@ import androidx.core.content.ContextCompat
                             Spacer(Modifier.width(8.dp))
                             Text("正在连接…")
                         } else {
-                            Text("连接此电脑")
+                            Text("连接此设备")
                         }
                     }
                 }
@@ -238,8 +233,8 @@ import androidx.core.content.ContextCompat
                     OutlinedTextField(
                         value = code,
                         onValueChange = { code = it },
-                        label = { Text("6 位配对码") },
-                        placeholder = { Text("例如：ABC123") },
+                        label = { Text("配对码") },
+                        placeholder = { Text("配对码") },
                         singleLine = true,
                         enabled = !busy,
                         shape = RoundedCornerShape(10.dp),
@@ -261,19 +256,6 @@ import androidx.core.content.ContextCompat
                     }
                 }
             }
-        }
-
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier.padding(top = 8.dp)
-        ) {
-            Icon(Icons.Outlined.Lock, null, tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(14.dp))
-            Text(
-                "相机图像仅在手机本地识别。端对端传输强制使用受信任 HTTPS 加密。",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
     }
 }

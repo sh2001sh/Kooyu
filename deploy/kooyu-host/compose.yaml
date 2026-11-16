@@ -1,0 +1,33 @@
+services:
+  host:
+    build:
+      context: ../..
+      dockerfile: deploy/kooyu-host/Dockerfile
+    restart: unless-stopped
+    init: true
+    ports: ["4310:4310"]
+    environment:
+      KODO_BIND: "0.0.0.0"
+      KODO_HOST_PORT: "4310"
+      KODO_ADMIN_PORT: "4311"
+      KODO_PUBLIC_ORIGIN: "${KODO_PUBLIC_ORIGIN:?Set the HTTPS Host origin}"
+      KODO_TLS_CERT: /run/tls/fullchain.pem
+      KODO_TLS_KEY: /run/tls/privkey.pem
+      KOOYU_CREDENTIAL_BACKEND: file
+      KOOYU_VAULT_KEY_FILE: /run/secrets/vault_key
+      KOOYU_MAX_EXECUTIONS: "4"
+    secrets: [vault_key]
+    volumes:
+      - host-data:/var/lib/kooyu
+      - ${TLS_DIRECTORY:?Set TLS_DIRECTORY}:/run/tls:ro
+      - ${WORKSPACE_DIRECTORY:?Set WORKSPACE_DIRECTORY}:/srv/workspaces
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 4g
+    pids_limit: 512
+    stop_grace_period: 2m
+secrets:
+  vault_key:
+    file: ${VAULT_KEY_FILE:?Set VAULT_KEY_FILE}
+volumes:
+  host-data:

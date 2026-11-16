@@ -89,9 +89,7 @@ for (const width of [1440, 390]) {
         .locator("tbody tr")
         .filter({ hasText: modelName })
         .filter({
-          has: page
-            .locator(".model-identity")
-            .filter({ hasText: new RegExp(`^${modelName}(已修改)?$`) }),
+          has: page.locator(".sx-model-name").filter({ hasText: new RegExp(`^${modelName}$`) }),
         });
       await expect(table.locator("tbody tr").filter({ hasText: modelName })).toHaveCount(2);
       await expect(row).toHaveCount(1);

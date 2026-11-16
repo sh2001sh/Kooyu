@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
@@ -9,6 +12,10 @@
         android:label="Kooyu" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher" android:supportsRtl="true"
         android:usesCleartextTraffic="false" android:theme="@style/Theme.Kooyu">
         <activity android:name=".QrScannerActivity" android:exported="false" />
+        <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.artifacts" android:exported="false" android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/artifact_paths" />
+        </provider>
+        <service android:name=".ReminderService" android:exported="false" android:foregroundServiceType="remoteMessaging" />
         <activity android:name=".MainActivity" android:exported="true" android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

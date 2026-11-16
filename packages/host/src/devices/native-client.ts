@@ -1,10 +1,6 @@
-import type { InboxItem, Snapshot } from "@kodo/protocol";
+import type { InboxItem, Snapshot, ClientAction } from "@kodo/protocol";
 
-export interface NativeAction {
-  label: string;
-  answer: Record<string, unknown>;
-  destructive?: boolean;
-}
+export type NativeAction = ClientAction;
 
 /** Share the same native answers as the web UI; never infer missing capabilities. */
 export function nativeActions(item: InboxItem): NativeAction[] {

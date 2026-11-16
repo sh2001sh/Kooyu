@@ -5,11 +5,13 @@ import type { InboxItem, ProviderConfiguration, Snapshot, Usage } from "@kodo/pr
 import { api, remoteClient } from "../lib/host-client";
 import { formatDate } from "../lib/harnesses";
 import { KodoMark } from "./KodoBrand";
+import { GlobalMemorySettings } from "./settings/GlobalMemorySettings";
 import { GeneralSettings } from "./settings/GeneralSettings";
 import { EngineSettings } from "./settings/EngineSettings";
 import { ProviderSettings } from "./settings/ProviderSettings";
 import { AdvancedSettings } from "./settings/AdvancedSettings";
 import { SettingsPage, SettingsSection } from "./settings/SettingsKit";
+import { WorkCenter } from "./WorkCenter";
 import type { SettingsSectionId } from "./SettingsNavigation";
 
 import { UsagePage } from "./UsageAnalytics";
@@ -113,6 +115,10 @@ export function HealthPage({
 }) {
   return (
     <div className="page-stack">
+      {section === "work" && <WorkCenter snapshot={snapshot} />}
+      {section === "memory" && (
+        <GlobalMemorySettings key={snapshot.hostId} hostId={snapshot.hostId} />
+      )}
       {section === "general" && <GeneralSettings snapshot={snapshot} />}
       {section === "harnesses" && (
         <EngineSettings
@@ -205,7 +211,7 @@ export function DevicesPage({ snapshot, act }: { snapshot: Snapshot; act: Action
         title="快速配对"
         description={
           remoteClient
-            ? "配对和设备撤销需要在电脑端操作"
+            ? "配对和设备撤销需要在设备端操作"
             : "无需配置网络。开启远程连接后，用手机相机扫码"
         }
       >
@@ -218,11 +224,11 @@ export function DevicesPage({ snapshot, act }: { snapshot: Snapshot; act: Action
               <strong>手机即时伴侣</strong>
               <p>
                 {remoteClient
-                  ? "当前已连接电脑"
+                  ? "当前已连接设备"
                   : remote?.state === "connected"
                     ? "远程连接已建立"
                     : remote?.enabled
-                      ? "正在连接中继，请保持电脑联网"
+                      ? "正在连接中继，请保持设备联网"
                       : "生成二维码时开启远程连接，可随时关闭"}
               </p>
             </div>
@@ -271,7 +277,7 @@ export function DevicesPage({ snapshot, act }: { snapshot: Snapshot; act: Action
             </button>
           )}
           <p className="detail-empty-note">
-            电脑需保持开机联网。中继使用 HTTPS 加密传输，不保存会话正文；当前版本非端到端加密。
+            设备需保持开机联网。中继使用 HTTPS 加密传输，不保存会话正文；当前版本非端到端加密。
           </p>
         </div>
       </SettingsSection>

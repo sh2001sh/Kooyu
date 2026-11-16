@@ -5,6 +5,18 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class TranscriptTest {
+    @Test fun imageOnlyMessageKeepsTimestampAndAttachment() {
+        val t = buildTranscript(JSONArray("""[{"id":"image","type":"message","createdAt":"2026-11-15T10:00:00Z","payload":{"role":"user","text":"","attachments":[{"fileId":"file","displayName":"photo.png"}]}}]""").objects())
+        assertEquals(1, t.rows.size)
+        assertEquals("2026-11-15T10:00:00Z", t.rows[0].createdAt)
+        assertEquals("photo.png", t.rows[0].attachments.single().getString("displayName"))
+    }
+    @Test fun binaryAttachmentIsBoundedWithoutUtf8Decoding() {
+        val data = byteArrayOf(0, -1, 127, 10)
+        assertArrayEquals(data, readAttachmentBytes(java.io.ByteArrayInputStream(data), 4))
+        assertThrows(IllegalArgumentException::class.java) { readAttachmentBytes(java.io.ByteArrayInputStream(data), 3) }
+    }
+
     private fun events(json: String) = JSONArray(json).objects()
 
     @Test fun toolLifecycleMergesIntoOneRowAndShowsStatus() {

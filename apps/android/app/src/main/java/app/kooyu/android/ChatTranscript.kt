@@ -30,6 +30,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -39,14 +40,51 @@ import androidx.compose.ui.unit.sp
 
 /** Desktop-style squircle/circle engine badge with the engine's tint and ink. */
 @Composable fun EngineBadge(harnessId: String?, size: Dp = 20.dp, circle: Boolean = true) {
+    val isKooyu = harnessId == null || harnessId == "kodo" || harnessId == "kooyu"
     val v = harnessVisual(harnessId)
     val dark = Kooyu.colors.dark
+    val drawableRes = when (harnessId) {
+        null, "kodo", "kooyu" -> if (dark) R.drawable.kooyu_mark_white else R.drawable.kooyu_mark_coral
+        "codex" -> null
+        "pi" -> R.drawable.harness_pi
+        "claude-code" -> R.drawable.harness_claude_code
+        "deepseek-harness" -> R.drawable.harness_deepseek
+        "zcode" -> R.drawable.harness_zcode
+        "opencode" -> R.drawable.harness_opencode
+        "gemini" -> R.drawable.harness_gemini
+        "cursor" -> R.drawable.harness_cursor
+        "kimi-code" -> R.drawable.harness_kimi_code
+        "grok-build" -> R.drawable.harness_grok_build
+        else -> null
+    }
+    val inkColor = if (dark) v.darkInk else v.ink
+    val shape = if (circle) CircleShape else RoundedCornerShape(size * 0.28f)
+    val borderTint = if (dark) v.darkInk.copy(alpha = 0.18f) else v.ink.copy(alpha = 0.15f)
     Box(
-        Modifier.size(size).clip(if (circle) CircleShape else RoundedCornerShape(size * 0.3f)).background(if (dark) v.darkTint else v.tint),
+        Modifier
+            .size(size)
+            .clip(shape)
+            .background(if (dark) v.darkTint else v.tint)
+            .border(0.5.dp, borderTint, shape),
         contentAlignment = Alignment.Center,
     ) {
-        Text(v.monogram, color = if (dark) v.darkInk else v.ink, fontWeight = FontWeight.Bold,
-            fontSize = (size.value * if (v.monogram.length > 1) 0.36f else 0.5f).sp, maxLines = 1)
+        if (drawableRes != null) {
+            Icon(
+                painter = painterResource(drawableRes),
+                contentDescription = v.name,
+                tint = if (isKooyu) (if (dark) Color.White else Color(0xFFC2422F)) else inkColor,
+                modifier = Modifier.size(size * if (isKooyu) 0.65f else 0.54f)
+            )
+        } else {
+            Text(
+                v.monogram,
+                color = inkColor,
+                fontFamily = if (v.monogram.contains("<") || v.monogram.length > 1) FontFamily.Monospace else FontFamily.Default,
+                fontWeight = FontWeight.Bold,
+                fontSize = (size.value * if (v.monogram.length > 2) 0.32f else if (v.monogram.length > 1) 0.36f else 0.48f).sp,
+                maxLines = 1
+            )
+        }
     }
 }
 
@@ -110,6 +148,13 @@ private fun Modifier.capsule(colors: KooyuColors, tone: ToolStatus? = null) = th
     }
 }
 
+private fun toolIcon(title: String): ImageVector = when {
+    title.contains("命令") || title.contains("command", true) || title.contains("sh", true) -> Icons.Outlined.Terminal
+    title.contains("文件") || title.contains("file", true) -> Icons.Outlined.Code
+    title.contains("搜索") || title.contains("search", true) -> Icons.Outlined.Search
+    else -> Icons.Outlined.Build
+}
+
 @Composable fun ToolCard(row: TranscriptRow, grouped: Boolean = false) {
     val c = Kooyu.colors
     val p = row.payload ?: org.json.JSONObject()
@@ -118,7 +163,7 @@ private fun Modifier.capsule(colors: KooyuColors, tone: ToolStatus? = null) = th
     val container = if (grouped) Modifier else Modifier.capsule(c, summary.status.takeIf { it != ToolStatus.DONE })
     Column(container.fillMaxWidth()) {
         SummaryRow({ open = !open }) {
-            StatusIcon(Icons.Outlined.Build, summary.status)
+            StatusIcon(toolIcon(summary.title), summary.status)
             Text(summary.title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.widthIn(max = 160.dp))
             Text(summary.detail, fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = c.textSecondary, maxLines = 1,
@@ -171,16 +216,52 @@ private fun Modifier.capsule(colors: KooyuColors, tone: ToolStatus? = null) = th
     val c = Kooyu.colors
     var open by rememberSaveable(row.id) { mutableStateOf(live) }
     LaunchedEffect(live) { if (live) open = true }
-    Column(Modifier.capsule(c).fillMaxWidth()) {
-        SummaryRow({ open = !open }) {
-            Box(Modifier.alpha(pulseAlpha(live))) { Icon(Icons.Outlined.Psychology, null, tint = c.textTertiary, modifier = Modifier.size(15.dp)) }
-            Text(if (live) "正在思考…" else "思考过程", fontSize = 12.sp, color = c.textSecondary, modifier = Modifier.weight(1f))
-            Chevron(open)
-        }
-        Expandable(open) {
-            SelectionContainer {
-                Text(row.text, fontSize = 13.sp, lineHeight = 20.sp, color = c.textSecondary,
-                    modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp))
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = if (live) c.accentTint else c.sunken.copy(alpha = 0.55f),
+        border = BorderStroke(1.dp, if (live) c.accent.copy(alpha = 0.35f) else c.borderSubtle),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column {
+            SummaryRow({ open = !open }) {
+                Box(Modifier.alpha(pulseAlpha(live))) {
+                    Icon(
+                        Icons.Outlined.Psychology,
+                        null,
+                        tint = if (live) c.accent else c.textTertiary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                Text(
+                    if (live) "正在思考…" else "思考过程",
+                    fontSize = 12.5.sp,
+                    fontWeight = if (live) FontWeight.SemiBold else FontWeight.Medium,
+                    color = if (live) c.accent else c.textSecondary,
+                    modifier = Modifier.weight(1f)
+                )
+                Chevron(open)
+            }
+            Expandable(open) {
+                SelectionContainer {
+                    Row(
+                        modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 12.dp, top = 2.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(2.5.dp)
+                                .height(36.dp)
+                                .background(c.borderSubtle, RoundedCornerShape(1.dp))
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            row.text,
+                            fontSize = 13.sp,
+                            lineHeight = 20.sp,
+                            color = c.textSecondary,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
             }
         }
     }
@@ -209,7 +290,7 @@ private fun Modifier.capsule(colors: KooyuColors, tone: ToolStatus? = null) = th
                     CopyIconButton(all, "复制子代理输出", 28)
                 }
                 child.parentAgentId?.let { Text("父代理：$it", fontSize = 11.sp, color = c.textTertiary) }
-                if (inner.rows.isEmpty()) Text("尚未收到原生子代理输出；当前仅有状态通知。", fontSize = 12.sp, color = c.textTertiary)
+                if (inner.rows.isEmpty()) Text("状态通知", fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = c.textTertiary)
                 else TranscriptColumn(inner, harnessId, running = tone == ToolStatus.RUNNING, subagent = true)
             }
         }
@@ -242,19 +323,19 @@ private fun Modifier.capsule(colors: KooyuColors, tone: ToolStatus? = null) = th
     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
         Column(
             Modifier.fillMaxWidth(0.86f).wrapContentWidth(Alignment.End)
-                .clip(RoundedCornerShape(18.dp, 18.dp, 6.dp, 18.dp)).background(c.bubble)
-                .border(1.dp, c.borderSubtle, RoundedCornerShape(18.dp, 18.dp, 6.dp, 18.dp))
-                .padding(horizontal = 15.dp, vertical = 10.dp),
+                .clip(RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp)).background(c.bubble)
+                .border(1.dp, c.borderSubtle, RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp))
+                .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             row.origin?.let { Text(it, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = c.textSecondary) }
-            if (parts.text.isNotBlank()) MessageMarkdown(parts.text)
+            if (parts.text.isNotBlank()) MessageMarkdown(parts.text, color = c.text)
             parts.files.forEach { file ->
                 Row(Modifier.clip(RoundedCornerShape(8.dp)).background(c.paper).border(1.dp, c.borderSubtle, RoundedCornerShape(8.dp))
-                    .clickable { preview = file }.padding(horizontal = 8.dp, vertical = 5.dp),
+                    .clickable { preview = file }.padding(horizontal = 10.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Icon(Icons.AutoMirrored.Outlined.InsertDriveFile, null, tint = c.textSecondary, modifier = Modifier.size(14.dp))
-                    Text(file.first, fontSize = 12.sp, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Icon(Icons.AutoMirrored.Outlined.InsertDriveFile, null, tint = c.textSecondary, modifier = Modifier.size(15.dp))
+                    Text(file.first, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
@@ -268,13 +349,17 @@ private fun Modifier.capsule(colors: KooyuColors, tone: ToolStatus? = null) = th
 @Composable fun AssistantTurn(row: TranscriptRow, harnessId: String?, continuation: Boolean) {
     val c = Kooyu.colors
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (!continuation) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            EngineBadge(harnessId, 20.dp)
-            Text(harnessVisual(harnessId).name, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = c.textSecondary, modifier = Modifier.weight(1f))
-            CopyIconButton(row.text)
+        if (!continuation) Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            EngineBadge(harnessId, 22.dp, circle = false)
+            Text(harnessVisual(harnessId).name, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = c.text, modifier = Modifier.weight(1f))
+            CopyIconButton(row.text, size = 26)
         }
         MessageMarkdown(row.text)
-        if (continuation) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { CopyIconButton(row.text, size = 26) }
+        if (continuation) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { CopyIconButton(row.text, size = 24) }
     }
 }
 
@@ -287,7 +372,7 @@ private fun Modifier.capsule(colors: KooyuColors, tone: ToolStatus? = null) = th
 }
 
 /** One transcript block rendered in desktop order and style. */
-@Composable fun TranscriptBlockView(block: TranscriptBlock, harnessId: String?, live: Boolean, continuation: Boolean, subagent: Boolean = false, collapseTools: Boolean = true) {
+@Composable fun TranscriptBlockView(block: TranscriptBlock, harnessId: String?, live: Boolean, continuation: Boolean, subagent: Boolean = false, collapseTools: Boolean = true, onEdit: ((TranscriptRow) -> Unit)? = null, onBranch: ((TranscriptRow) -> Unit)? = null) {
     when (block) {
         is TranscriptBlock.Tools -> ToolGroup(block.rows, collapseTools)
         is TranscriptBlock.Single -> {
@@ -298,6 +383,24 @@ private fun Modifier.capsule(colors: KooyuColors, tone: ToolStatus? = null) = th
                 RowRole.USER -> UserTurn(row)
                 RowRole.ERROR -> ErrorTurn(row, if (subagent) "子代理本轮失败" else harnessVisual(harnessId).name + " 本轮失败")
                 else -> AssistantTurn(row, harnessId, continuation)
+            }
+            if (row.role in listOf(RowRole.USER, RowRole.ASSISTANT)) Row(Modifier.fillMaxWidth(), horizontalArrangement = if (row.role == RowRole.USER) Arrangement.End else Arrangement.Start) {
+                row.createdAt?.let { stamp ->
+                    val label = runCatching { java.time.Instant.parse(stamp).atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("EEE HH:mm")) }.getOrDefault("")
+                    Text(label, fontSize = 11.sp, color = Kooyu.colors.textSecondary, modifier = Modifier.padding(vertical = 12.dp))
+                }
+                if (row.role == RowRole.USER) {
+                    CopyIconButton(row.text)
+                    if (!subagent && onEdit != null) IconButton({ onEdit(row) }) { Icon(Icons.Outlined.Edit, "编辑消息并分支", modifier = Modifier.size(16.dp)) }
+                } else if (!subagent && onBranch != null && row.createdAt != null) {
+                    var expanded by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton({ expanded = true }) { Icon(Icons.Outlined.MoreHoriz, "更多消息操作", modifier = Modifier.size(16.dp)) }
+                        DropdownMenu(expanded, { expanded = false }) {
+                            DropdownMenuItem({ Text("分支到新聊天") }, { expanded = false; onBranch(row) })
+                        }
+                    }
+                }
             }
         }
     }

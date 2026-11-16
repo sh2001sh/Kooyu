@@ -2189,6 +2189,7 @@ small {
 
 .transcript {
   overflow: auto;
+  overflow-anchor: none;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -2196,6 +2197,7 @@ small {
 }
 
 .transcript-inner {
+  flex: 0 0 auto;
   width: 100%;
   max-width: 760px;
   margin: 0 auto;
@@ -4080,6 +4082,17 @@ small {
   flex-wrap: nowrap;
   gap: 2px;
   height: 18px;
+  min-width: 0;
+}
+
+.draft-context-row > .ios-popover-anchor {
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.draft-context-row .draft-crumb-btn {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .draft-crumb-btn {
@@ -10757,4 +10770,462 @@ button.danger:hover:not(:disabled) {
   font-size: 11.5px;
   color: var(--text-tertiary);
   letter-spacing: -0.01em;
+}
+
+/* Goals: current goal pill and inspector panel */
+.goal-pill {
+  max-width: 340px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+}
+.goal-pill__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.goal-pill__status {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+.goal-pill__more {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+.goal-pill--awaiting-review,
+.goal-pill--blocked {
+  background: var(--accent-tint);
+  color: var(--accent-text);
+}
+.goal-pill--awaiting-review .goal-pill__status,
+.goal-pill--blocked .goal-pill__status {
+  color: inherit;
+  font-weight: 650;
+}
+.goal-panel__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.goal-panel__head .workspace-browser__note {
+  margin: 0;
+}
+.goal-panel__ended > summary {
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  margin: 4px 0 10px;
+}
+.goal-panel__ended .goal-card {
+  margin-bottom: 10px;
+}
+.goal-card__summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  min-height: 0;
+}
+.goal-card__summary strong {
+  font-size: 13.5px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.goal-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 12.5px;
+}
+.goal-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.goal-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-sunken);
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.goal-chip--awaiting-review,
+.goal-chip--blocked {
+  background: var(--accent-tint);
+  color: var(--accent-text);
+  border-color: transparent;
+}
+.goal-chip--completed,
+.goal-chip--verify-passed,
+.goal-chip--outcome-passed {
+  color: var(--tone-positive-text, #067647);
+}
+.goal-chip--verify-failed,
+.goal-chip--outcome-failed {
+  color: var(--tone-danger-text, #b42318);
+}
+.goal-chip--cancelled {
+  color: var(--text-tertiary);
+}
+.goal-blocked {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--tone-warn-text, #b54708);
+}
+.goal-text {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.goal-meta {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.goal-list {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+.goal-list li {
+  margin: 2px 0;
+  overflow-wrap: anywhere;
+}
+.goal-list small,
+.goal-check small,
+.goal-artifacts small {
+  color: var(--text-tertiary);
+}
+.goal-result {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-sunken);
+}
+.goal-artifacts {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+}
+.goal-artifacts li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.goal-artifacts li > span:first-child {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.goal-artifacts__links {
+  display: inline-flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.goal-artifacts__links a {
+  color: var(--accent-solid);
+  display: inline-flex;
+}
+.goal-check {
+  margin-top: 4px;
+}
+.goal-check > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.goal-check code {
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+}
+.goal-check pre {
+  margin: 6px 0;
+  max-height: 220px;
+  overflow: auto;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--surface-sunken);
+  font-size: 11px;
+  white-space: pre-wrap;
+}
+.goal-actions-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+.goal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.goal-danger {
+  color: var(--tone-danger-text, #b42318);
+}
+.goal-check-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+}
+.goal-check__method {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+/* Uploaded attachments: composer upload state and chips on sent messages */
+.composer-attachment small {
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.composer-attachment--error {
+  border-color: color-mix(in srgb, var(--tone-danger-text, #b42318) 40%, transparent);
+  color: var(--tone-danger-text, #b42318);
+}
+.message-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.message-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 240px;
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-paper);
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-decoration: none;
+}
+.message-attachment:hover {
+  border-color: var(--border);
+  color: var(--text);
+}
+.message-attachment > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   AWWWARDS / FWA / CSS DESIGN AWARDS ELEVATION LAYER
+   Spatial Interactive Canvas, Experimental Typography & Physics Animations
+   ========================================================================== */
+
+:root {
+  --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-elastic: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --glass-blur: 24px;
+}
+
+.dark {
+  --surface-navigator: #08090d;
+  --surface-paper: #0c0e14;
+  --surface-raised: #12151f;
+  --surface-sunken: #06070a;
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border: rgba(255, 255, 255, 0.11);
+  --border-strong: rgba(255, 255, 255, 0.22);
+}
+
+/* Glassmorphism & Depth Layers */
+.sidebar {
+  background: color-mix(in srgb, var(--surface-navigator) 85%, transparent);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border-right: 1px solid var(--border-subtle);
+  transition:
+    width 0.35s var(--ease-spring),
+    transform 0.35s var(--ease-spring);
+}
+
+.dark .sidebar {
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.04);
+}
+
+.sidebar .brand {
+  position: relative;
+  letter-spacing: -0.03em;
+}
+
+/* Avant-Garde Typography Accents */
+.session-row {
+  transition:
+    transform 0.22s var(--ease-spring),
+    background-color 0.22s var(--ease-spring),
+    border-color 0.22s var(--ease-spring);
+  border-radius: 10px;
+  margin: 1px 6px;
+}
+
+.session-row:hover {
+  transform: translateX(3px);
+  background: var(--fill-hover);
+}
+
+.session-row.is-selected {
+  transform: translateX(4px);
+  background: var(--fill-selected);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.25),
+    inset 0 0 0 1px var(--border-strong);
+}
+
+.dark .session-row.is-selected {
+  box-shadow:
+    0 6px 20px rgba(0, 0, 0, 0.5),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+
+/* Chat Stage as an Architectural Canvas */
+.conversation-main {
+  position: relative;
+  background: var(--surface-paper);
+}
+
+.composer-shell {
+  background: color-mix(in srgb, var(--surface-raised) 90%, transparent);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-subtle);
+  border-radius: 18px;
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.2),
+    0 2px 6px rgba(0, 0, 0, 0.08);
+  transition:
+    border-color 0.25s var(--ease-spring),
+    box-shadow 0.25s var(--ease-spring);
+}
+
+.composer-shell:focus-within {
+  border-color: var(--focus-ring);
+  box-shadow:
+    0 16px 44px rgba(0, 0, 0, 0.35),
+    0 0 0 2px var(--focus-ring);
+}
+
+/* Kinetic Harness Badges */
+.harness-badge {
+  transition:
+    transform 0.25s var(--ease-elastic),
+    box-shadow 0.25s var(--ease-spring);
+}
+
+.harness-badge:hover {
+  transform: scale(1.08) rotate(-1.5deg);
+}
+
+/* Mobile Spatial Hierarchy Fix: Hide intrusive bottom elements in conversation */
+@media (max-width: 768px) {
+  .app.is-conversation-active .bottom-nav-bar,
+  .app.is-conversation-active .mobile-tab-bar {
+    transform: translateY(110%);
+    pointer-events: none;
+    opacity: 0;
+    transition:
+      transform 0.35s var(--ease-spring),
+      opacity 0.25s ease;
+  }
+
+  .conversation-view {
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+/* Message metadata stays available for touch and keyboard users. */
+.message-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.user-turn .message-actions {
+  justify-content: flex-end;
+}
+.message-more {
+  position: relative;
+}
+.message-more summary {
+  display: flex;
+  cursor: pointer;
+  list-style: none;
+  padding: 8px;
+  border-radius: 6px;
+}
+.message-more summary::-webkit-details-marker {
+  display: none;
+}
+.message-more button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  z-index: 10;
+  padding: 12px;
+  background: var(--surface-floating);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+}
+.message-more summary:focus-visible {
+  outline: 2px solid var(--accent);
+}
+
+.sx-model-editor {
+  min-width: 0;
+  max-width: 100%;
+}
+.sx-model-editor > label {
+  display: grid;
+  gap: 8px;
+}
+.sx-model-editor select {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+}
+.sx-model-editor .provider-help {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.sx-model-table .model-identity .provider-help {
+  display: block;
+  margin: 4px 0 0;
 }

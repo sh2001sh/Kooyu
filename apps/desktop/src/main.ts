@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, Tray, nativeImage, dialog, nativeTheme } from "electron";
+import { app, BrowserWindow, Menu, Tray, nativeImage, dialog, nativeTheme, shell } from "electron";
 import { ensureHost } from "./host-client.js";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
@@ -59,7 +59,14 @@ async function show() {
     });
   }
   if (process.platform !== "darwin") window.setMenuBarVisibility(false);
-  window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    try {
+      const target = new URL(url);
+      if (target.protocol === "https:" && !target.username && !target.password)
+        void shell.openExternal(target.href).catch(() => {});
+    } catch {}
+    return { action: "deny" };
+  });
   window.webContents.on("will-navigate", (event, url) => {
     if (new URL(url).origin !== new URL(hostUrl).origin) event.preventDefault();
   });

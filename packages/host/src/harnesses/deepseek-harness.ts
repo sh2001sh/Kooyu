@@ -1,6 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { KodoError } from "@kodo/protocol";
-import { descriptor, needCwd, type HarnessAdapter, type NativeRuntime } from "./adapter.js";
+import {
+  descriptor,
+  needCwd,
+  type AdapterContext,
+  type HarnessAdapter,
+  type NativeRuntime,
+  type Wire,
+} from "./adapter.js";
 import { JsonRpc } from "./rpc.js";
 import { NativeSubagents } from "./subagents.js";
 import { boundModelOption } from "../providers/model-option.js";
@@ -10,6 +17,22 @@ import { inspectDshFiles } from "./session-presence.js";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { listDshHistory, readDshHistory } from "./dsh-history.js";
+import { declaredInput, resolveInput } from "./input-modalities.js";
+
+function nativeConfigWithInput(ctx: AdapterContext) {
+  const config = readDshNativeConfig({ ...ctx.env, ...ctx.launch.env });
+  for (const [provider, route] of Object.entries(config.providers)) {
+    if (!Array.isArray(route.models)) continue;
+    route.models = route.models.map((model: Wire) => ({
+      ...model,
+      input: resolveInput(ctx, provider, model.id, declaredInput(model.input), {
+        baseUrl: model.baseURL ?? route.baseURL ?? "",
+        api: model.api ?? route.api ?? "",
+      }),
+    }));
+  }
+  return config;
+}
 const info = descriptor(
   "deepseek-harness",
   "DeepSeek Harness",
@@ -33,7 +56,7 @@ export const deepSeekAdapter: HarnessAdapter = {
         ctx.launch.args[1] === "sdk",
     ),
   async discoverModels(ctx) {
-    return dshNativeModelOptions(readDshNativeConfig({ ...ctx.env, ...ctx.launch.env }));
+    return dshNativeModelOptions(nativeConfigWithInput(ctx));
   },
   async connect(session, ctx) {
     const cwd = needCwd(ctx);
@@ -43,12 +66,25 @@ export const deepSeekAdapter: HarnessAdapter = {
         "DSH initialize 需要明确的 provider 和 model，请选择模型或 Harness 绑定。",
       );
     const native = !ctx.configuration.binding;
-    const nativeConfig = native ? readDshNativeConfig({ ...ctx.env, ...ctx.launch.env }) : null;
+    const nativeConfig = native ? nativeConfigWithInput(ctx) : null;
     const options = () =>
       ctx.configuration!.binding
         ? [boundModelOption(ctx.configuration!)]
         : dshNativeModelOptions(nativeConfig!);
-    const routeOf = (model: string) => (native ? `${ctx.configuration!.provider}/${model}` : model);
+    const routeOf = (model: string) =>
+      native && !options().some((option) => option.id === model)
+        ? `${ctx.configuration!.provider}/${model}`
+        : model;
+    const supportsImages = async (selected?: string | null): Promise<boolean> => {
+      if (replacement) return (await replacement.supportsImages?.(selected)) ?? false;
+      if (!native) return ctx.configuration!.modelParameters?.input?.includes("image") ?? false;
+      const model = routeOf(selected ?? ctx.model ?? ctx.configuration!.model);
+      return (
+        options()
+          .find((o) => o.id === model)
+          ?.input?.includes("image") ?? false
+      );
+    };
     if (ctx.reasoning)
       validateReasoning(routeOf(ctx.model ?? ctx.configuration.model), ctx.reasoning, options());
     // Overlay the user's own provider routes onto the SDK profile, without editing it.
@@ -186,10 +222,13 @@ export const deepSeekAdapter: HarnessAdapter = {
       confirmSettled();
       return {
         nativeSessionId: nativeId,
+        supportsImages,
         async models() {
           return options();
         },
-        async send(text, commandId, mode, settings) {
+        async send(text, commandId, mode, settings, input) {
+          if (input?.images?.length && !(await supportsImages(settings?.model)))
+            throw new KodoError("UNSUPPORTED", "DSH 当前模型未声明图片输入，图片未发送。");
           if (settings?.reasoning)
             validateReasoning(
               native
@@ -200,7 +239,7 @@ export const deepSeekAdapter: HarnessAdapter = {
             );
           if (mode === "steer")
             throw new KodoError("UNSUPPORTED", "DSH 本接入只提供原生输入队列，未验证 steer。");
-          if (replacement) return replacement.send(text, commandId, mode, settings);
+          if (replacement) return replacement.send(text, commandId, mode, settings, input);
           const wanted =
             native && settings?.model?.includes("/")
               ? settings.model.slice(settings.model.indexOf("/") + 1)
@@ -231,7 +270,7 @@ export const deepSeekAdapter: HarnessAdapter = {
             );
             if (replacement.nativeSessionId !== nativeId)
               throw new Error("DSH 模型切换改变了原生身份。");
-            return replacement.send(text, commandId, mode, settings);
+            return replacement.send(text, commandId, mode, settings, input);
           }
           ctx.assertSendAllowed?.(commandId);
           pending = true;
@@ -240,7 +279,17 @@ export const deepSeekAdapter: HarnessAdapter = {
           try {
             await rpc.request(
               "session/prompt",
-              { sessionId: nativeId, contentBlocks: [{ type: "text", text }] },
+              {
+                sessionId: nativeId,
+                contentBlocks: [
+                  ...(text || !input?.images?.length ? [{ type: "text", text }] : []),
+                  ...(input?.images ?? []).map(({ data, mimeType }) => ({
+                    type: "image",
+                    data,
+                    mimeType,
+                  })),
+                ],
+              },
               commandId,
               0, // Durable enqueue may wait; its receipt is not a completed model turn.
             );

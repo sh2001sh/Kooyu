@@ -21,6 +21,7 @@
 | 交给其他 agent 的完整实现要求 | [实现 prompt](implementation-prompt.md) |
 | UI baseline 的选择与源码提取边界 | [桌面 baseline](desktop-baseline.md) |
 | 参考项目的源码分析与取舍 | [项目调研](research.md) |
+| 自部署 AI 工作伙伴的定位、补齐能力及上游代码落点（设计提案；A 阶段首批已实现，见 [实现记录](test-results-2026-11-14-self-hosted-phase-a.md)） | [Kooyu 自部署方案](kooyu-self-hosted-agent-design-2026-11-14.md) / [固定源码索引](kooyu-self-hosted-agent-sources-2026-11-14.json) |
 | Provider、多协议、模型库参数来源与配置改造 | [配置专项调研](provider-configuration.md) / [专项来源清单](provider-configuration-sources.json) |
 | 三层配置代码审计、公开模型库与独立在线更新 | [模型库来源实测](model-catalog-sources.md) / [抓取证据](model-catalog-sources.json) |
 | 三层配置已实现范围、真实对话与网关限制 | [Provider 实现与验证](test-results-2026-11-12-providers.md) / [机器可读结果](provider-configuration-verification.json) |

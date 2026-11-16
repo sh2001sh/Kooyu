@@ -5,9 +5,11 @@ import android.text.method.LinkMovementMethod
 import android.util.TypedValue
 import android.widget.TextView
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
@@ -20,6 +22,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -27,6 +30,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -118,7 +122,7 @@ fun splitMarkdown(text: String): List<MarkdownSegment> {
                 movementMethod = LinkMovementMethod.getInstance()
                 setPadding(0, 0, 0, 0)
                 includeFontPadding = false
-                setLineSpacing(0f, 1.42f)
+                setLineSpacing(0f, 1.55f)
                 letterSpacing = -0.005f
             }
         },
@@ -144,15 +148,52 @@ fun splitMarkdown(text: String): List<MarkdownSegment> {
 
 @Composable fun CodeBlock(language: String, code: String) {
     val colors = Kooyu.colors
-    Surface(color = colors.sunken, shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, colors.borderSubtle), modifier = Modifier.fillMaxWidth()) {
+    Surface(
+        color = colors.sunken,
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, colors.borderSubtle),
+        modifier = Modifier.fillMaxWidth()
+    ) {
         Column {
-            Row(Modifier.fillMaxWidth().padding(start = 13.dp, end = 4.dp, top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(language.ifBlank { "code" }, fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = colors.textTertiary, modifier = Modifier.weight(1f))
-                CopyIconButton(code, "复制代码", 28)
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .background(colors.sunken.copy(alpha = 0.9f))
+                    .padding(start = 12.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(Modifier.size(7.dp).clip(CircleShape).background(colors.destructive.copy(alpha = 0.6f)))
+                    Box(Modifier.size(7.dp).clip(CircleShape).background(colors.info.copy(alpha = 0.6f)))
+                    Box(Modifier.size(7.dp).clip(CircleShape).background(colors.success.copy(alpha = 0.6f)))
+                }
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    language.ifBlank { "code" }.lowercase(),
+                    fontSize = 11.5.sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.textTertiary,
+                    modifier = Modifier.weight(1f)
+                )
+                CopyIconButton(code, "复制代码", 26)
             }
+            androidx.compose.material3.HorizontalDivider(color = colors.borderSubtle, thickness = 0.5.dp)
             SelectionContainer {
-                Text(code, fontFamily = FontFamily.Monospace, fontSize = 12.5.sp, lineHeight = 19.sp, color = colors.text, softWrap = false,
-                    modifier = Modifier.horizontalScroll(rememberScrollState()).padding(start = 13.dp, end = 13.dp, bottom = 12.dp))
+                Text(
+                    code,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 12.5.sp,
+                    lineHeight = 19.sp,
+                    color = colors.text,
+                    softWrap = false,
+                    modifier = Modifier
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 14.dp, vertical = 12.dp)
+                )
             }
         }
     }

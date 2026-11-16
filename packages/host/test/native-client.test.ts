@@ -208,7 +208,7 @@ test("native pairing delivers bearer once, rejects browser origins, survives rev
     );
     assert.equal(browser.status, 201);
     assert.equal(browser.value.token, undefined);
-    assert.match(browser.headers["set-cookie"][0], /HttpOnly; SameSite=Strict/);
+    assert.match(browser.headers["set-cookie"][0], /HttpOnly; SameSite=Lax/);
   } finally {
     server.closeAllConnections();
     await new Promise<void>((done) => server.close(() => done()));

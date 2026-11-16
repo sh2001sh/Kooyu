@@ -88,7 +88,7 @@ export async function ensureHost(resourcesPath?: string): Promise<string> {
     try {
       info = await r.json();
     } catch {
-      throw new Error("Host 返回的不是有效的 JSON；配置的端口可能被其他程序占用。");
+      throw new Error("Host 返回无效 JSON；配置端口可能已被占用。");
     }
     if (
       !info ||
@@ -96,7 +96,7 @@ export async function ensureHost(resourcesPath?: string): Promise<string> {
       !info.hostId ||
       !Number.isInteger(info.protocolVersion)
     )
-      throw new Error("配置的地址不是有效的 Kooyu Host，请检查端口是否被其他程序占用。");
+      throw new Error("配置地址未能识别为 Kooyu Host，请核对端口配置。");
     if (info.protocolVersion !== PROTOCOL_VERSION)
       throw new Error("Host 协议版本不兼容，请先处理活动任务后升级或重启 Host。");
     if (expectedHostId && info.hostId !== expectedHostId)

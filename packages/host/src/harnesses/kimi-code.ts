@@ -20,6 +20,9 @@ import { boundNativeModel } from "../providers/native-config.js";
 import { NativeInteractions } from "./native-interactions.js";
 import { kimiInteractionResponse } from "./kimi-interactions.js";
 import { presenceMap } from "./session-presence.js";
+import { resolveInput } from "./input-modalities.js";
+import { validateReasoning } from "./model-options.js";
+import { boundModelOption } from "../providers/model-option.js";
 
 const acp = acpHarness("kimi-code", "Kimi Code");
 function usesKimiServer(ctx: AdapterContext): boolean {
@@ -175,9 +178,13 @@ async function connectKimiServer(session: Session, ctx: AdapterContext): Promise
     if (!ready) throw new Error("Kimi Server 未在时限内就绪或没有提供认证令牌。");
     let nativeId = session.nativeSessionId;
     let initialNativePermissionMode: string | null = null;
+    let initialNativeModel: string | undefined;
+    let initialNativeThinking: string | undefined;
     if (nativeId) {
       const existing = await request(`/api/v1/sessions/${encodeURIComponent(nativeId)}`);
       if (existing.id !== nativeId) throw new Error("Kimi Server 未确认原生会话 ID。");
+      initialNativeModel = existing.agent_config?.model;
+      initialNativeThinking = existing.agent_config?.thinking;
       if (typeof existing.agent_config?.permission_mode === "string")
         initialNativePermissionMode = existing.agent_config.permission_mode;
     } else {
@@ -186,6 +193,8 @@ async function connectKimiServer(session: Session, ctx: AdapterContext): Promise
         metadata: { cwd },
       });
       nativeId = created.id;
+      initialNativeModel = created.agent_config?.model;
+      initialNativeThinking = created.agent_config?.thinking;
       if (typeof nativeId !== "string" || !nativeId.startsWith("session_"))
         throw new Error("Kimi Server 未返回有效的原生会话 ID。");
       if (typeof created.agent_config?.permission_mode === "string")
@@ -452,32 +461,64 @@ async function connectKimiServer(session: Session, ctx: AdapterContext): Promise
       await stop();
       throw error;
     }
+    const nativeCatalog = async (): Promise<Wire[]> => {
+      const catalog = await request("/api/v1/models");
+      if (!Array.isArray(catalog.items)) unsupported("Kimi Server 模型目录格式不兼容。");
+      return catalog.items;
+    };
+    const modelOptions = async (): Promise<HarnessModelOption[]> => {
+      return (await nativeCatalog())
+        .filter((item: Wire) => typeof item.provider === "string" && typeof item.model === "string")
+        .map((item: Wire) => ({
+          id: `${item.provider}/${item.model}`,
+          name: typeof item.display_name === "string" ? item.display_name : item.model,
+          source: "discovered" as const,
+          input: resolveInput(
+            ctx,
+            item.provider,
+            item.model,
+            Array.isArray(item.capabilities)
+              ? item.capabilities.includes("image_in")
+                ? ["text", "image"]
+                : ["text"]
+              : undefined,
+          ),
+          ...(Number.isSafeInteger(item.max_context_size)
+            ? { contextWindow: item.max_context_size }
+            : {}),
+          ...(Array.isArray(item.support_efforts)
+            ? {
+                reasoning: item.support_efforts
+                  .filter((value: unknown) => typeof value === "string")
+                  .concat(
+                    Array.isArray(item.capabilities) &&
+                      !item.capabilities.includes("always_thinking")
+                      ? ["off"]
+                      : [],
+                  ),
+              }
+            : Array.isArray(item.capabilities) && item.capabilities.includes("thinking")
+              ? {
+                  reasoning: item.capabilities.includes("always_thinking") ? ["on"] : ["off", "on"],
+                }
+              : {}),
+        }));
+    };
+    const supportsImages = async (selected?: string | null) => {
+      if (ctx.configuration?.binding)
+        return ctx.configuration.modelParameters?.input?.includes("image") ?? false;
+      const model = selected ?? ctx.model ?? initialNativeModel;
+      return (
+        (await modelOptions()).find((option) => option.id === model)?.input?.includes("image") ??
+        false
+      );
+    };
+    let changedThinking = false;
     return {
       nativeSessionId: nativeId,
       capabilities: { steer: "supported", resume: "supported", historyRead: "supported" },
-      async models(): Promise<HarnessModelOption[]> {
-        const catalog = await request("/api/v1/models");
-        if (!Array.isArray(catalog.items)) unsupported("Kimi Server 模型目录格式不兼容。");
-        return catalog.items
-          .filter(
-            (item: Wire) => typeof item.provider === "string" && typeof item.model === "string",
-          )
-          .map((item: Wire) => ({
-            id: `${item.provider}/${item.model}`,
-            name: typeof item.display_name === "string" ? item.display_name : item.model,
-            source: "discovered" as const,
-            ...(Number.isSafeInteger(item.max_context_size)
-              ? { contextWindow: item.max_context_size }
-              : {}),
-            ...(Array.isArray(item.support_efforts)
-              ? {
-                  reasoning: item.support_efforts.filter(
-                    (value: unknown) => typeof value === "string",
-                  ),
-                }
-              : {}),
-          }));
-      },
+      models: modelOptions,
+      supportsImages,
       async permissionOptions() {
         return {
           current:
@@ -504,17 +545,48 @@ async function connectKimiServer(session: Session, ctx: AdapterContext): Promise
         permissionMode = mode;
         nativePermissionMode = selected;
       },
-      async send(text, commandId, mode, settings) {
+      async send(text, commandId, mode, settings, input) {
+        if (input?.images?.length && !(await supportsImages(settings?.model)))
+          unsupported("Kimi 当前模型未声明图片输入，图片未发送。");
         const promptId = commandId || randomUUID();
-        const body: Wire = { content: [{ type: "text", text }], prompt_id: promptId };
+        const body: Wire = {
+          content: [
+            ...(text || !input?.images?.length ? [{ type: "text", text }] : []),
+            ...(input?.images ?? []).map(({ data, mimeType }) => ({
+              type: "image",
+              source: { kind: "base64", media_type: mimeType, data },
+            })),
+          ],
+          prompt_id: promptId,
+        };
         // A live steer belongs to the active turn; do not reset its model or permissions.
         if (mode !== "steer") {
-          let model = settings?.model ?? ctx.model;
+          let model = settings?.model ?? ctx.model ?? initialNativeModel;
           if (ctx.configuration?.binding && (model === ctx.configuration.model || !model))
             model = boundNativeModel(ctx.configuration);
           const thinking = settings ? settings.reasoning : ctx.reasoning;
           if (model) body.model = model;
-          if (thinking) body.thinking = thinking;
+          if (thinking) {
+            validateReasoning(
+              settings?.model ?? model ?? null,
+              thinking,
+              ctx.configuration?.binding
+                ? [boundModelOption(ctx.configuration)]
+                : await modelOptions(),
+            );
+            body.thinking = thinking;
+          } else if (settings && changedThinking) {
+            const entry = (await nativeCatalog()).find(
+              (item) => `${item.provider}/${item.model}` === model,
+            );
+            const restored =
+              model === initialNativeModel
+                ? (initialNativeThinking ?? entry?.default_effort)
+                : entry?.default_effort;
+            if (typeof restored !== "string" || !restored)
+              unsupported("Kimi 未声明默认思考档位，无法确认恢复；请选择明确档位。");
+            body.thinking = restored;
+          }
           const selectedPermission = ctx.permissionMode?.() ?? permissionMode;
           if (selectedPermission) {
             if (
@@ -533,6 +605,8 @@ async function connectKimiServer(session: Session, ctx: AdapterContext): Promise
           body,
         );
         const submittedPromptId = String(result.prompt_id ?? promptId);
+        if (mode !== "steer" && body.thinking)
+          changedThinking = Boolean(settings ? settings.reasoning : ctx.reasoning);
         if (result.status === "running" || (!activePromptId && mode !== "steer"))
           activePromptId = submittedPromptId;
         if (mode === "steer") {

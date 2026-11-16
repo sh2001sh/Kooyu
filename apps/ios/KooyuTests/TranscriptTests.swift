@@ -2,6 +2,14 @@ import XCTest
 @testable import Kooyu
 
 final class TranscriptTests: XCTestCase {
+    func testImageOnlyMessageRetainsMetadata() throws {
+        let data = Data(#"[{"id":"image","type":"message","sequence":1,"createdAt":"2026-11-15T10:00:00Z","payload":{"role":"user","text":"","attachments":[{"fileId":"file","displayName":"photo.png"}]}}]"#.utf8)
+        let transcript = buildTranscript(try JSONDecoder().decode([RuntimeEvent].self, from: data))
+        XCTAssertEqual(transcript.rows.count, 1)
+        XCTAssertEqual(transcript.rows[0].createdAt, "2026-11-15T10:00:00Z")
+        XCTAssertEqual(transcript.rows[0].attachments.first?["displayName"].string, "photo.png")
+    }
+
     private func events(_ json: String) throws -> [RuntimeEvent] {
         var sequence = 0
         let raw = try JSONDecoder().decode([JSONValue].self, from: Data(json.utf8))

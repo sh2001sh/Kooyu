@@ -10,7 +10,14 @@ import {
   type Wire,
 } from "./adapter.js";
 import { launch } from "./rpc.js";
-import { openCodeModelOptions, providerModel, validateReasoning } from "./model-options.js";
+import {
+  openCodeDeclaredInput,
+  openCodeModelOptions,
+  providerModel,
+  validateReasoning,
+} from "./model-options.js";
+import { basename } from "node:path";
+import { resolveInput } from "./input-modalities.js";
 import { randomUUID } from "node:crypto";
 import { OpenCodeEvents } from "./opencode-events.js";
 import { NativeSubagents } from "./subagents.js";
@@ -325,7 +332,46 @@ async function connectOpenCode(
         return openCodeModelOptions(await request("/provider"));
       },
       setPermissionMode,
-      async send(text, _id, mode, settings) {
+      async supportsImages(selected) {
+        if (ctx.configuration?.binding)
+          return Boolean(ctx.configuration.modelParameters?.input?.includes("image"));
+        const qualified =
+          selected ??
+          ctx.model ??
+          (ctx.configuration ? `${ctx.configuration.provider}/${ctx.configuration.model}` : null);
+        // Use the configured default and pin it on image sends, rather than asking
+        // OpenCode to independently choose a possibly different default model.
+        const chosen = qualified ?? (await request("/config")).model;
+        if (typeof chosen !== "string") return false;
+        const target = providerModel(chosen);
+        const catalog = await request("/provider");
+        if (catalog.connected && !catalog.connected.includes(target.provider)) return false;
+        const provider = catalog.all?.find((p: Wire) => p.id === target.provider);
+        const model = provider?.models?.[target.model];
+        if (!model) return false;
+        const api = (
+          {
+            "@ai-sdk/openai-compatible": "openai-completions",
+            "@ai-sdk/anthropic": "anthropic-messages",
+            "@ai-sdk/google": "google-generative-ai",
+          } as Record<string, string>
+        )[model.api?.npm];
+        return (
+          resolveInput(
+            ctx,
+            target.provider,
+            target.model,
+            openCodeDeclaredInput(model),
+            api
+              ? {
+                  baseUrl: model.api?.url ?? provider.options?.baseURL ?? "",
+                  api,
+                }
+              : undefined,
+          )?.includes("image") ?? false
+        );
+      },
+      async send(text, _id, mode, settings, input) {
         if (mode === "steer") unsupported("OpenCode steer 尚未验证。");
         const requestedPermissionMode = ctx.permissionMode?.();
         if (requestedPermissionMode !== appliedPermissionMode)
@@ -335,7 +381,11 @@ async function connectOpenCode(
           ctx.model ??
           (ctx.configuration
             ? `${ctx.configuration.provider}/${ctx.configuration.model}`
-            : undefined);
+            : input?.images?.length
+              ? (await request("/config")).model
+              : undefined);
+        if (input?.images?.length && !(await runtime.supportsImages!(selected)))
+          unsupported("OpenCode 当前模型未声明图片输入，图片未发送。");
         const qualified = ctx.configuration?.binding
           ? `${ctx.configuration.provider}/${ctx.configuration.model}`
           : selected;
@@ -353,7 +403,16 @@ async function connectOpenCode(
         ctx.assertSendAllowed?.(_id);
         events.start();
         await request(`/session/${encodeURIComponent(nativeId)}/prompt_async`, "POST", {
-          parts: [{ type: "text", text }],
+          parts: [
+            ...(text || !input?.images?.length ? [{ type: "text", text }] : []),
+            // FilePartInput with a data URL; OpenCode stores and forwards it as an image.
+            ...(input?.images ?? []).map((image) => ({
+              type: "file",
+              mime: image.mimeType,
+              filename: basename(image.path),
+              url: `data:${image.mimeType};base64,${image.data}`,
+            })),
+          ],
           ...(target ? { model: { providerID: target.provider, modelID: target.model } } : {}),
           ...(effort ? { variant: effort } : {}),
         });

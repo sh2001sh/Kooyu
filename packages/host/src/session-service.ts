@@ -1,3 +1,4 @@
+import { validatePermissionMode } from "./configuration/permissions.js";
 import { z } from "zod";
 import { homedir } from "node:os";
 import { randomUUID, createHash } from "node:crypto";
@@ -58,15 +59,36 @@ import {
   instanceEnv,
   collectProviderCredentials,
 } from "./configuration/config.js";
-import { ProviderService, type ProviderVault } from "./providers/service.js";
+import { ProviderService, systemVault, type ProviderVault } from "./providers/service.js";
 import { EngineManager } from "./configuration/engines.js";
 import { appSettings } from "./configuration/preferences.js";
 import { boundModelOption } from "./providers/model-option.js";
 import { DSH_FALLBACK_MODEL, readDshNativeConfig } from "./harnesses/dsh-native.js";
 import { nativeConfigLocations, nativeDefaults } from "./harnesses/native-defaults.js";
 import { createHarnessTools } from "./kodo/tools.js";
+import { createWorkTools } from "./kodo/work-tools.js";
+import { NotificationService } from "./notifications/service.js";
+import { GoalService } from "./goals/service.js";
+import { WebService } from "./tools/web.js";
+import { FileService } from "./files/store.js";
 import type { Store } from "./storage/store.js";
 
+import { ExecutionCapacity } from "./execution/capacity.js";
+import { LifecycleGate } from "./lifecycle/gate.js";
+import { ActionJournal } from "./execution/actions.js";
+import { PermissionService } from "./applications/permissions.js";
+import { MemoryService } from "./memory/service.js";
+import { AutomationService } from "./automations/service.js";
+
+import { WebhookService } from "./automations/webhooks.js";
+import { NotificationDispatcher } from "./notifications/delivery.js";
+import { ApplicationService } from "./applications/service.js";
+import { OAuthService } from "./applications/oauth.js";
+import { Outbox } from "./messaging/outbox.js";
+
+import { BrowserService } from "./execution/browser.js";
+import { createSelfHostedTools } from "./kodo/self-hosted-tools.js";
+import { ExecutorService } from "./execution/service.js";
 type Wake = {
   id: string;
   watchId: string;
@@ -109,12 +131,39 @@ export interface ServiceOptions {
   onFatal?: (error: unknown) => void;
   providerVault?: ProviderVault;
   providerFetch?: typeof fetch;
+  /** Search API transport; tests inject a fake. */
+  webFetch?: typeof fetch;
+  applicationFetch?: typeof fetch;
+  /** APNs uses the HTTP/2 provider API rather than Fetch. Tests may isolate its transport. */
+  apnsTransport?: import("./notifications/apns.js").ApnsTransport;
+  webEnv?: NodeJS.ProcessEnv;
+  /** Tests only: allow web_fetch to reach loopback fixtures. */
+  webAllowPrivateNetwork?: boolean;
 }
 export class SessionService {
   readonly notifications = new EventEmitter();
   readonly dataDir: string;
   readonly providers: ProviderService;
   readonly engines: EngineManager;
+  /** Durable notification facts (separate from the in-process event broadcast). */
+  readonly feed: NotificationService;
+  readonly goals: GoalService;
+  readonly web: WebService;
+  readonly files: FileService;
+  readonly executors: ExecutorService;
+  readonly browser: BrowserService;
+  readonly webhooks: WebhookService;
+  readonly delivery: NotificationDispatcher;
+  readonly applications: ApplicationService;
+  readonly oauth: OAuthService;
+  readonly outbox: Outbox;
+  readonly lifecycle: LifecycleGate;
+  readonly actions: ActionJournal;
+  readonly permissions: PermissionService;
+  readonly memory: MemoryService;
+  readonly automations: AutomationService;
+  readonly capacity: ExecutionCapacity;
+  private readonly workTimer: ReturnType<typeof setInterval>;
   private runtimeModels = new Map<string, string>();
   private runtime = new Map<string, NativeRuntime>();
   private opening = new Map<string, Promise<NativeRuntime>>();
@@ -160,6 +209,51 @@ export class SessionService {
       fetcher: options.providerFetch,
     });
     this.engines = new EngineManager(store, this.dataDir);
+    this.feed = new NotificationService(store, this.notifications);
+    this.goals = new GoalService(this, this.feed);
+    this.web = new WebService(store, {
+      vault: options.providerVault ?? systemVault,
+      fetcher: options.webFetch,
+      env: options.webEnv,
+      allowPrivateNetwork: options.webAllowPrivateNetwork,
+    });
+    this.files = new FileService(store, this.goals, { dataDir: this.dataDir });
+    this.lifecycle = new LifecycleGate(store);
+    this.actions = new ActionJournal(store, this.lifecycle);
+    this.permissions = new PermissionService(store);
+    this.memory = new MemoryService(store);
+    this.capacity = new ExecutionCapacity(Number(process.env.KOOYU_MAX_EXECUTIONS ?? 4));
+    this.automations = new AutomationService(this);
+    const vault = options.providerVault ?? systemVault;
+    this.webhooks = new WebhookService(this, vault);
+    this.delivery = new NotificationDispatcher(
+      store,
+      this.feed,
+      vault,
+      this.lifecycle,
+      options.applicationFetch,
+      options.apnsTransport,
+    );
+    this.applications = new ApplicationService(this, vault, options.applicationFetch);
+    this.oauth = new OAuthService(this, vault, options.applicationFetch);
+    this.outbox = new Outbox(this);
+    this.browser = new BrowserService(this);
+    this.executors = new ExecutorService(this);
+    this.feed.onPublish = (item) => this.delivery.enqueue(item);
+    this.workTimer = setInterval(() => {
+      if (this.disposed) return;
+      try {
+        this.resumeWork();
+        void this.automations.scan().catch(() => {});
+        void this.webhooks.scan().catch(() => {});
+        void this.delivery.scan().catch(() => {});
+        void this.outbox.scan().catch(() => {});
+      } catch (e) {
+        this.failClosed(e);
+      }
+    }, 1000);
+    this.workTimer.unref();
+
     this.implementations = options.adapters ?? adapters;
     this.onFatal = options.onFatal;
     mkdirSync(this.dataDir, { recursive: true });
@@ -192,6 +286,39 @@ export class SessionService {
   }
   private adapter(id: HarnessId): HarnessAdapter {
     return this.implementations.find((a) => a.descriptor.id === id) ?? getAdapter(id);
+  }
+  health() {
+    const pending = this.store
+      .commands()
+      .filter((c) => ["dispatched", "unknown"].includes(c.status));
+    const sessions = this.store
+      .sessions()
+      .filter((s) => ["running", "waiting-input", "unknown"].includes(s.runState));
+    const background = this.store
+      .records<{ running: boolean }>("background")
+      .filter((b) => b.running).length;
+    const gate = this.lifecycle.status();
+    return {
+      ...gate,
+      capacity: this.capacity.snapshot(),
+      inFlight: gate.inFlight + this.pumping.size + this.opening.size + sessions.length,
+      readyForMaintenance:
+        gate.frozen &&
+        !gate.inFlight &&
+        !this.pumping.size &&
+        !this.opening.size &&
+        !sessions.length &&
+        !pending.length &&
+        !background &&
+        !this.capacity.snapshot().active.length,
+      background,
+      pendingCommands: pending.map((c) => ({ id: c.id, status: c.status })),
+      sessions: sessions.map((s) => ({
+        id: s.id,
+        runState: s.runState,
+        backgroundState: s.executionState,
+      })),
+    };
   }
   snapshot(): Snapshot {
     const installationHealth = this.snapshotInstallationHealth();
@@ -353,27 +480,7 @@ export class SessionService {
     harnessId: HarnessId,
     mode: import("@kodo/protocol").PermissionMode | null,
   ): void {
-    if (!mode) return;
-    if (harnessId === "kimi-code" && ["kimi:manual", "kimi:auto", "kimi:yolo"].includes(mode))
-      return;
-    if (["gemini", "cursor", "kimi-code", "grok-build"].includes(harnessId)) {
-      if (mode.startsWith("acp:")) return;
-      throw new KodoError("UNSUPPORTED", "此 ACP 会话只能选择原生声明的运行模式。");
-    }
-    const supported =
-      harnessId === "codex"
-        ? ["read-only", "workspace-write", "full-access"]
-        : harnessId === "claude-code"
-          ? ["accept-edits", "bypass-permissions"]
-          : harnessId === "zcode"
-            ? ["plan", "build", "edit", "yolo", "guarded"]
-            : harnessId === "opencode"
-              ? ["opencode-ask", "opencode-deny", "opencode-allow"]
-              : harnessId === "pi" || harnessId === "kodo"
-                ? ["kodo-tools-read", "kodo-tools-none"]
-                : [];
-    if (!supported.includes(mode))
-      throw new KodoError("UNSUPPORTED", "此 Harness 不支持所选的会话权限模式。");
+    validatePermissionMode(harnessId, mode);
   }
   addWorkspace(projectId: string | null, rootPath: string): Workspace {
     this.checkDirectory(rootPath);
@@ -455,6 +562,8 @@ export class SessionService {
     const parsed = createSessionSchema.safeParse(value);
     if (!parsed.success) throw new KodoError("INVALID_INPUT", "会话信息不完整或包含无效选项。");
     const input = parsed.data;
+    if (input.executorId && input.executorId !== "local" && input.bindingId === undefined)
+      input.bindingId = null;
     // Direct conversations follow their folder. Kodo can explicitly stay global
     // while using a folder; null is an intentional scope, not an omitted default.
     if (
@@ -480,7 +589,9 @@ export class SessionService {
     validateDraft(
       input,
       this.store.workspaces().find((w) => w.id === input.workspaceId),
-      this.store.hostId,
+      input.executorId && input.executorId !== "local"
+        ? String(this.executors.list().find((e) => e.id === input.executorId)?.hostId ?? "missing")
+        : this.store.hostId,
     );
     const project = this.store.projects().find((p) => p.id === input.projectId),
       defaults = this.bindingDefaults();
@@ -530,6 +641,7 @@ export class SessionService {
       scope: input.projectId ? "project" : "global",
       projectId: input.projectId ?? null,
       workspaceId: input.workspaceId ?? null,
+      ...(input.executorId ? { executorId: input.executorId } : {}),
       hostId: this.store.hostId,
       nativeSessionId: null,
       phase: "draft",
@@ -549,6 +661,7 @@ export class SessionService {
       archived: false,
       pinned: false,
     };
+    this.executors.validateSession(session);
     this.store.transaction(() => this.store.addSession(session));
     return session;
   }
@@ -562,6 +675,7 @@ export class SessionService {
     return binding ? this.providers.bindingModel(binding, s.model) : undefined;
   }
   async openNative(sessionId: string): Promise<Session> {
+    this.lifecycle.assertOpen();
     await this.connect(sessionId);
     return this.store.session(sessionId);
   }
@@ -604,6 +718,46 @@ export class SessionService {
     }
   }
   private async connectNative(id: string): Promise<NativeRuntime> {
+    const remote = this.store.session(id);
+    if (remote.executorId && remote.executorId !== "local") {
+      this.lifecycle.assertOpen();
+      const commandId = this.store.record<{ id: string }>("remote-open", id)?.id ?? randomUUID();
+      this.store.put("remote-open", id, { id: commandId });
+      const command: Command = {
+        id: commandId,
+        sessionId: id,
+        kind: "open",
+        origin: "user",
+        controllerId: null,
+        generation: remote.ownerEpoch,
+        bindingRevision: null,
+        status: "dispatched",
+        nativeRunId: null,
+        body: { executorId: remote.executorId },
+        createdAt: new Date().toISOString(),
+      };
+      this.store.saveCommand(command);
+      try {
+        const runtime = await this.executors.connect(remote);
+        this.runtime.set(id, runtime);
+        this.store.saveCommand({ ...command, status: "confirmed" });
+        this.store.saveSession({
+          ...this.store.session(id),
+          phase: "native",
+          nativeSessionId: runtime.nativeSessionId,
+          connectionState: "connected",
+        });
+        return runtime;
+      } catch (error) {
+        this.store.saveCommand({
+          ...command,
+          status: error instanceof KodoError ? "rejected" : "unknown",
+          error: this.errorText(error),
+        });
+        throw error;
+      }
+    }
+
     const connection = (this.connections.get(id) ?? 0) + 1;
     this.connections.set(id, connection);
     const session = this.store.session(id),
@@ -671,6 +825,7 @@ export class SessionService {
             ? configuration?.model
             : (session.model ?? undefined),
         reasoning: session.reasoning ?? undefined,
+        modelInput: (model) => this.providers.nativeModelInput(model),
         permissionMode: () => this.store.session(id).permissionMode ?? null,
         launch,
         env,
@@ -694,7 +849,29 @@ export class SessionService {
           if (!this.disposed && this.connections.get(id) === connection)
             this.resolveNativeInteraction(id, requestId, reason);
         },
-        tools: session.kind === "supervisor" ? createHarnessTools(this, session) : undefined,
+        tools:
+          session.kind === "supervisor"
+            ? [
+                ...createHarnessTools(this, session),
+                ...createWorkTools(this, session),
+                ...createSelfHostedTools(this, session),
+              ]
+            : undefined,
+        toolAction: (callId, args, operation) =>
+          this.actions.run(
+            {
+              sessionId: id,
+              turnId: this.store.record<{ id: string }>("active-tool-turn", id)?.id ?? "initial",
+              toolCallId: callId,
+              actor: session.harnessId,
+            },
+            args,
+            operation,
+          ),
+        memoryContext:
+          session.kind === "supervisor"
+            ? () => this.memory.promptContext(this.store.session(id).projectId)
+            : undefined,
         sdkSessionOwners: () =>
           Object.fromEntries(
             this.store
@@ -703,6 +880,7 @@ export class SessionService {
               .map((s) => [s.nativeSessionId, s.harnessId]),
           ),
         assertSendAllowed: (commandId) => {
+          this.lifecycle.assertOpen();
           const command = this.store.command(commandId);
           const fence = this.store.record<{ revision: number }>("send-fence", id)?.revision ?? 0;
           if (
@@ -862,6 +1040,7 @@ export class SessionService {
   failClosed(error: unknown): void {
     if (this.disposed) return;
     this.disposed = true;
+    clearInterval(this.workTimer);
     clearInterval(this.deadlineTimer);
     console.error(`Host automation halted: ${this.errorText(error)}`);
     for (const buffer of this.textBuffers.values()) clearTimeout(buffer.timer);
@@ -981,6 +1160,15 @@ export class SessionService {
         this.inbox(`error:${event.id}`, sessionId, "error", event.payload);
       }
       if (type === "usage") this.usage(session, event, p);
+      if (p.backgroundState === "running")
+        this.store.put("background", sessionId, { running: true });
+      if (type === "settled" || p.backgroundState === "settled")
+        this.store.remove("background", sessionId);
+      if (
+        ["turn-ended", "settled"].includes(type) &&
+        !this.store.record<{ running: boolean }>("background", sessionId)?.running
+      )
+        this.store.afterCommit(() => this.capacity.release(sessionId));
       this.store.saveSession(session);
       for (const watch of this.store
         .watches()
@@ -1432,6 +1620,7 @@ export class SessionService {
       .filter(
         (session) =>
           session.nativeSessionId &&
+          (!session.executorId || session.executorId === "local") &&
           (!sessionIds || sessionIds.includes(session.id)) &&
           this.adapter(session.harnessId).inspectSessions &&
           !this.nativeInspectionBlocked(session),
@@ -1525,6 +1714,8 @@ export class SessionService {
     return result;
   }
   private async inspectionContext(session: Session): Promise<AdapterContext> {
+    if (session.executorId && session.executorId !== "local")
+      throw new KodoError("UNSUPPORTED", "远程路径仅由指定节点解释。");
     const workspace = this.store.workspaces().find((item) => item.id === session.workspaceId);
     const env = await instanceEnv(session.harnessId, undefined, this.dataDir);
     if (session.bindingId && session.bindingRevision != null) {
@@ -1577,6 +1768,12 @@ export class SessionService {
   }
   async nativeRead(id: string) {
     const session = this.store.session(id);
+    if (session.executorId && session.executorId !== "local")
+      return this.scrub(
+        session.nativeSessionId
+          ? await this.executors.inspect(session, "read")
+          : { nativeSessionId: null, messages: [] },
+      );
     if (!session.nativeSessionId) return { nativeSessionId: null, messages: [] };
     const adapter = this.adapter(session.harnessId);
     let raw: unknown;
@@ -1617,6 +1814,8 @@ export class SessionService {
   }
   async nativeList(id: string) {
     const session = this.store.session(id);
+    if (session.executorId && session.executorId !== "local")
+      return this.scrub(await this.executors.inspect(session, "list"));
     const adapter = this.adapter(session.harnessId);
     if (adapter.standaloneList)
       return this.scrub(
@@ -1632,6 +1831,9 @@ export class SessionService {
     return this.scrub(await runtime.list());
   }
   async quota(id: string) {
+    const remote = this.store.session(id);
+    if (remote.executorId && remote.executorId !== "local")
+      return this.scrub(await this.executors.inspect(remote, "quota"));
     const live = this.runtime.get(id);
     if (live?.quota) return this.scrub(await live.quota());
     if (this.sessionCapability(this.store.session(id), "quota") !== "supported")
@@ -1706,7 +1908,8 @@ export class SessionService {
   }
   acceptSend(sessionId: string, value: unknown, controllerId: string | null = null): Command {
     const input = sendSchema.parse(value),
-      body = { text: input.text, mode: input.mode },
+      attachmentIds = input.attachmentIds?.length ? [...new Set(input.attachmentIds)] : undefined,
+      body = { text: input.text, mode: input.mode, ...(attachmentIds ? { attachmentIds } : {}) },
       previous = this.store.command(input.requestId);
     if (previous) {
       if (
@@ -1725,10 +1928,19 @@ export class SessionService {
     }
     if (this.disposed || this.failed.has(sessionId))
       throw new KodoError("CONFLICT", "会话已隔离或 Host 已停止，请重启并对账。");
+    this.lifecycle.assertOpen();
     const command = this.store.transaction(() => {
       const s = this.store.session(sessionId);
       if (controllerId) this.requireControl(controllerId, s);
-      else this.pauseTargetInside(s.id, "用户接管");
+      else {
+        const scheduledWork = this.store
+          .commands(s.id)
+          .some(
+            (c) =>
+              c.origin === "automation" && ["accepted", "dispatched", "unknown"].includes(c.status),
+          );
+        this.pauseTargetInside(s.id, "用户接管", false, scheduledWork);
+      }
       const fresh = this.store.session(sessionId);
       if (input.mode === "steer" && this.sessionCapability(fresh, "steer") !== "supported")
         throw new KodoError("UNSUPPORTED", "该 harness 不支持当前轮直接引导，请使用排队发送。");
@@ -1736,6 +1948,9 @@ export class SessionService {
         throw new KodoError("CONFLICT", "只有正在运行的回合可以直接引导。");
       if (input.mode === "new" && fresh.runState !== "idle")
         throw new KodoError("CONFLICT", "当前会话非空闲，请排队或使用已支持的 steer。");
+      const attachments = attachmentIds?.map((fileId) =>
+        this.files.attachmentFor(fileId, [sessionId, controllerId]),
+      );
       const c: Command = {
         id: input.requestId,
         sessionId,
@@ -1746,7 +1961,7 @@ export class SessionService {
         bindingRevision: fresh.bindingRevision,
         status: "accepted",
         nativeRunId: null,
-        body,
+        body: attachments ? { ...body, attachments } : body,
         createdAt: new Date().toISOString(),
       };
       this.store.saveCommand(c);
@@ -1758,7 +1973,13 @@ export class SessionService {
     return command;
   }
   private schedule(id: string): void {
-    if (this.disposed || this.failed.has(id) || this.store.record("deleted-session", id)) return;
+    if (
+      this.disposed ||
+      this.lifecycle.status().frozen ||
+      this.failed.has(id) ||
+      this.store.record("deleted-session", id)
+    )
+      return;
     queueMicrotask(() => {
       void this.pump(id).catch((e) => {
         if (!this.disposed) this.isolate(id, e);
@@ -1775,7 +1996,7 @@ export class SessionService {
       return;
     this.pumping.add(id);
     try {
-      while (!this.disposed && !this.failed.has(id)) {
+      while (!this.disposed && !this.lifecycle.status().frozen && !this.failed.has(id)) {
         const s = this.store.session(id);
         const commands = this.store.commands(id);
         if (commands.some((c) => c.status === "unknown")) return;
@@ -1815,6 +2036,24 @@ export class SessionService {
             continue;
           }
         }
+        if (
+          c.body.mode !== "steer" &&
+          !this.capacity.acquire(id, s.executorId ?? "local", c.origin === "user" ? 10 : 0, () =>
+            this.schedule(id),
+          )
+        )
+          return;
+        try {
+          this.automations.assertDispatch(c);
+        } catch (e) {
+          if (e instanceof KodoError && e.code === "UNAVAILABLE") {
+            this.capacity.release(id);
+            return;
+          }
+          this.store.saveCommand({ ...c, status: "cancelled" });
+          this.capacity.release(id);
+          continue;
+        }
         let runtime: NativeRuntime;
         // Starting a native process can take seconds; show the user's message and the
         // running state now. The event id matches the one ingested at dispatch.
@@ -1834,6 +2073,7 @@ export class SessionService {
               origin: c.origin,
               controllerId: c.controllerId,
               commandId: c.id,
+              ...(c.body.attachments ? { attachments: c.body.attachments } : {}),
             },
             `command:${c.id}`,
           );
@@ -1841,7 +2081,13 @@ export class SessionService {
         const activeCommand = c;
         try {
           runtime = await this.connect(id);
+          this.lifecycle.assertOpen();
+          this.automations.assertDispatch(c);
         } catch (e) {
+          if (c.origin === "automation" && e instanceof KodoError && e.code === "UNAVAILABLE") {
+            this.capacity.release(id);
+            return;
+          }
           this.store.transaction(() => {
             this.store.saveCommand({
               ...activeCommand,
@@ -1907,6 +2153,7 @@ export class SessionService {
           ...(c.body.mode !== "steer" ? { settings } : {}),
         };
         this.store.transaction(() => {
+          if (c.body.mode !== "steer") this.store.put("active-tool-turn", id, { id: c.id });
           this.store.saveCommand({ ...c, status: "dispatched" });
           this.store.saveSession({
             ...this.store.session(id),
@@ -1923,6 +2170,7 @@ export class SessionService {
             origin: c.origin,
             controllerId: c.controllerId,
             commandId: c.id,
+            ...(c.body.attachments ? { attachments: c.body.attachments } : {}),
           },
           `command:${c.id}`,
         );
@@ -1936,11 +2184,41 @@ export class SessionService {
       }
     } finally {
       this.pumping.delete(id);
+      const current = this.store.session(id);
+      const hasRunningBackground = this.store.record<{ running: boolean }>(
+        "background",
+        id,
+      )?.running;
+      if (current.runState === "idle" && !hasRunningBackground) this.capacity.release(id);
     }
   }
   private async deliver(id: string, c: Command, runtime: NativeRuntime): Promise<void> {
     try {
-      const instructions = this.store.session(id).personalInstructions;
+      // Attachments are resolved per capability at dispatch: inline text, native images
+      // when the model declares them, otherwise a reference to a Host copy.
+      const remote = this.store.session(id).executorId;
+      const prepared =
+        (!remote || remote === "local") && Array.isArray(c.body.attachments)
+          ? await this.files.prepareAttachments(
+              id,
+              c.body.attachments as import("@kodo/protocol").MessageAttachment[],
+              {
+                images: await Promise.resolve(
+                  runtime.supportsImages?.(
+                    (c.body.settings as { model?: string | null } | undefined)?.model ?? null,
+                  ) ?? false,
+                ).catch(() => false),
+              },
+            )
+          : null;
+      if (prepared) c = { ...c, body: { ...c.body, attachments: prepared.attachments } };
+      const branch = this.store.record<{
+        context: string;
+        attachments?: import("@kodo/protocol").MessageAttachment[];
+      }>("branch-context", id);
+      let instructions = [branch?.context, this.store.session(id).personalInstructions]
+        .filter(Boolean)
+        .join("\n\n");
       const firstMessage =
         instructions &&
         c.body.mode !== "steer" &&
@@ -1952,13 +2230,25 @@ export class SessionService {
               command.kind === "send" &&
               ["dispatched", "confirmed", "unknown"].includes(command.status),
           );
+      const branchFiles =
+        firstMessage && branch?.attachments?.length
+          ? await this.files.prepareAttachments(id, branch.attachments, {
+              images: await Promise.resolve(
+                runtime.supportsImages?.(
+                  (c.body.settings as { model?: string | null } | undefined)?.model ?? null,
+                ) ?? false,
+              ),
+            })
+          : null;
+      if (branchFiles) instructions = branchFiles.compose(instructions);
+      const text = prepared ? prepared.compose(String(c.body.text)) : String(c.body.text);
+      const images = [...(branchFiles?.images ?? []), ...(prepared?.images ?? [])];
       const result = await runtime.send(
-        firstMessage
-          ? `用户个人指令：\n${instructions}\n\n本条消息：\n${String(c.body.text)}`
-          : String(c.body.text),
+        firstMessage ? `用户个人指令：\n${instructions}\n\n本条消息：\n${text}` : text,
         c.id,
         c.body.mode as "new" | "queue" | "steer",
         c.body.settings as import("@kodo/protocol").ModelSettings | undefined,
+        images.length ? { images } : undefined,
       );
       this.store.transaction(() => {
         this.store.saveCommand({ ...c, status: "confirmed", nativeRunId: result.nativeRunId });
@@ -2010,7 +2300,8 @@ export class SessionService {
     }
   }
   private inbox(id: string, sessionId: string, type: string, payload: unknown): void {
-    if (!this.store.record("inbox", id))
+    if (this.store.record("inbox", id)) return;
+    this.store.transaction(() => {
       this.store.put("inbox", id, {
         id,
         sessionId,
@@ -2019,6 +2310,16 @@ export class SessionService {
         createdAt: new Date().toISOString(),
         resolved: false,
       } satisfies InboxItem);
+      const kind = inboxNotificationKind(type, payload);
+      if (kind)
+        this.feed.publish({
+          id: `inbox:${id}`,
+          kind,
+          sessionId,
+          inboxItemId: id,
+          preview: this.store.session(sessionId).title,
+        });
+    });
   }
   async confirmManagement(sessionId: string, requestId: string, params: unknown): Promise<boolean> {
     const session = this.store.session(sessionId);
@@ -2073,6 +2374,9 @@ export class SessionService {
       ...(resume ? { runState: "running" } : {}),
     });
   }
+  remoteInteraction(sessionId: string, requestId: string, payload: unknown): Promise<unknown> {
+    return this.interact(sessionId, requestId, payload);
+  }
   private interact(sessionId: string, requestId: string, payload: unknown): Promise<unknown> {
     const id = `${sessionId}:${requestId}`;
     this.store.put("interaction-state", id, { sessionId, requestId });
@@ -2107,8 +2411,14 @@ export class SessionService {
     this.ingest(pending.sessionId, "state", { interactionResolved: id, runState: "running" });
     return { status: "processed" };
   }
-  private pauseTargetInside(id: string, reason: string, cancelUser = false): void {
+  private pauseTargetInside(
+    id: string,
+    reason: string,
+    cancelUser = false,
+    pauseAutomations = true,
+  ): void {
     const session = this.store.session(id);
+    if (pauseAutomations) this.automations.onTakeover(id);
     session.ownerEpoch++;
     this.store.saveSession(session);
     if (cancelUser)
@@ -2251,6 +2561,7 @@ export class SessionService {
       generation: (existing?.generation ?? 0) + 1,
       cursor: String(input.cursor),
       goal: input.goal,
+      goalId: input.goalId !== undefined ? input.goalId : (existing?.goalId ?? null),
       runId: input.runId,
       continuous: input.continuous,
       trigger: input.trigger,
@@ -2359,15 +2670,14 @@ export class SessionService {
   private limitReason(w: Supervision): string | null {
     const l = w.limits ?? {};
     if (l.endAt && Date.now() >= Date.parse(l.endAt)) return "已到结束时间";
-    if (l.maxContinuations !== undefined && (w.continuations ?? 0) >= l.maxContinuations)
+    if ((l.maxContinuations ?? 0) > 0 && (w.continuations ?? 0) >= l.maxContinuations!)
       return "达到自动续聊次数";
-    if (l.maxFailures !== undefined && (w.failures ?? 0) >= l.maxFailures)
-      return "达到连续失败阈值";
-    if (l.budgetUsd !== undefined) {
+    if ((l.maxFailures ?? 0) > 0 && (w.failures ?? 0) >= l.maxFailures!) return "达到连续失败阈值";
+    if ((l.budgetUsd ?? 0) > 0) {
       const ids = [w.targetSessionId, w.controllerSessionId],
         usage = this.store.records<Usage>("usage").filter((u) => ids.includes(u.sessionId));
       if (usage.some((u) => u.costUsd === null)) return "费用未知，无法核对托管预算";
-      if (usage.reduce((n, u) => n + (u.costUsd ?? 0), 0) >= l.budgetUsd) return "达到托管预算";
+      if (usage.reduce((n, u) => n + (u.costUsd ?? 0), 0) >= l.budgetUsd!) return "达到托管预算";
     }
     for (const b of this.store.records<{ projectId?: string; bindingId?: string; usd: number }>(
       "budget",
@@ -2404,7 +2714,7 @@ export class SessionService {
       }
   }
   private drainWakes(): void {
-    if (this.disposed) return;
+    if (this.disposed || this.lifecycle.status().frozen) return;
     const wakes = this.store.db
       .prepare("SELECT data FROM wakes WHERE state='pending'")
       .all()
@@ -2441,6 +2751,7 @@ export class SessionService {
               sessionId: wake.targetId,
               cursor: wake.sequence,
               goal: w.goal,
+              goalRecord: this.goals.wakeContext(w.goalId),
               target: {
                 title: target.title,
                 harnessId: target.harnessId,
@@ -2587,8 +2898,8 @@ export class SessionService {
           ["accepted", "dispatched", "unknown"].includes(c.status),
       ).length;
     if (
-      w.limits?.maxContinuations !== undefined &&
-      (w.continuations ?? 0) + pending >= w.limits.maxContinuations
+      (w.limits?.maxContinuations ?? 0) > 0 &&
+      (w.continuations ?? 0) + pending >= w.limits!.maxContinuations!
     )
       throw new KodoError("CONFLICT", "自动续聊次数已由待处理命令占用。");
   }
@@ -2764,6 +3075,14 @@ export class SessionService {
   }
   async sessionModelOptions(id: string, refresh = false, discover = false) {
     const session = this.store.session(id);
+    if (session.executorId && session.executorId !== "local")
+      return this.scrub(await this.executors.inspect(session, "models")) as {
+        modelSupport: "binding-or-model" | "native-only" | "binding-required" | "native-models";
+        session: Session;
+        models: HarnessModelOption[];
+        defaultModel: { provider?: string; model: string } | null;
+        effectiveModel: string | null;
+      };
     const bound = this.binding(session);
     if (bound)
       return {
@@ -3037,6 +3356,122 @@ export class SessionService {
       throw new KodoError("CONFLICT", "ACP 会话未连接，无法核对原生可选模式。");
     return this.updateSession(id, value);
   }
+  branch(id: string, value: unknown): Session {
+    const input = z
+      .object({
+        requestId: z.string().uuid(),
+        eventId: z.string().min(1).max(1000),
+        edit: z.boolean().default(false),
+      })
+      .strict()
+      .parse(value);
+    this.lifecycle.assertOpen();
+    const fingerprint = JSON.stringify({ id, ...input });
+    return this.store.transaction(() => {
+      const prior = this.store.record<{ fingerprint: string; sessionId: string }>(
+        "branch-request",
+        input.requestId,
+      );
+      if (prior) {
+        if (prior.fingerprint !== fingerprint)
+          throw new KodoError("CONFLICT", "分支请求 ID 已用于不同内容。");
+        return this.store.session(prior.sessionId);
+      }
+      const source = this.store.session(id);
+      const anchor = this.store.db
+        .prepare("SELECT sequence,data FROM events WHERE session_id=? AND id=?")
+        .get(id, input.eventId);
+      if (!anchor) throw new KodoError("NOT_FOUND", "所选消息已不可用。");
+      const event = JSON.parse(String(anchor.data)) as RuntimeEvent;
+      const payload = event.payload as Wire;
+      if (event.type !== "message" || !["user", "assistant"].includes(payload.role))
+        throw new KodoError("INVALID_INPUT", "只能从对话消息创建分支。");
+      if (input.edit && payload.role !== "user")
+        throw new KodoError("INVALID_INPUT", "只能编辑用户消息。");
+      const records = this.store.db
+        .prepare(
+          "SELECT data FROM events WHERE session_id=? AND sequence<=? AND json_extract(data,'$.type')='message' ORDER BY sequence LIMIT 1001",
+        )
+        .all(id, Number(anchor.sequence))
+        .map((r) => JSON.parse(String(r.data)) as RuntimeEvent);
+      if (records.length > 1000)
+        throw new KodoError("UNSUPPORTED", "对话过长，无法完整创建分支，请选择较早的消息。");
+      const history = input.edit ? records.filter((e) => e.id !== event.id) : records;
+      const attachments = [
+        ...new Map(
+          records.flatMap((e) => {
+            const p = e.payload as Wire;
+            return Array.isArray(p.attachments)
+              ? p.attachments.map(
+                  (a: import("@kodo/protocol").MessageAttachment) => [a.fileId, a] as const,
+                )
+              : [];
+          }),
+        ).values(),
+      ];
+      if (attachments.length > 10)
+        throw new KodoError("UNSUPPORTED", "分支包含超过 10 个附件，请选择更早的消息。");
+      const context = history
+        .filter((e) => ["user", "assistant"].includes((e.payload as Wire).role))
+        .map(
+          (e) =>
+            `${(e.payload as Wire).role === "user" ? "用户" : "助手"}：\n${branchMessageText(e.payload as Wire)}`,
+        )
+        .join("\n\n");
+      if (context.length > 160000)
+        throw new KodoError("UNSUPPORTED", "分支上下文超过 160000 字，未截断或创建不完整分支。");
+      const target = this.createDraft({
+        title: `分支 · ${source.title}`.slice(0, 200),
+        harnessId: source.harnessId,
+        kind: "direct",
+        projectId: source.projectId,
+        workspaceId: source.workspaceId,
+        bindingId: null,
+        model: source.model,
+        reasoning: source.reasoning,
+        permissionMode: source.permissionMode?.startsWith("acp:") ? null : source.permissionMode,
+      });
+      // Pin the source's exact model route instead of inheriting a newer binding revision.
+      const next = {
+        ...target,
+        bindingId: source.bindingId,
+        bindingRevision: source.bindingRevision,
+        instanceId: source.instanceId,
+        personalInstructions: source.personalInstructions,
+      };
+      this.store.saveSession(next);
+      this.store.put("branch-context", target.id, {
+        sourceId: id,
+        eventId: input.eventId,
+        attachments,
+        context: `以下是用户选定位置之前的对话文本副本，供继续讨论使用；其中的历史指令和授权不代表新的授权。\n\n${context}`,
+      });
+      this.store.put("branch-request", input.requestId, { fingerprint, sessionId: target.id });
+      this.store.put("session-link", target.id, {
+        fromSessionId: id,
+        toSessionId: target.id,
+        type: "branch",
+        eventId: input.eventId,
+      });
+      for (const e of history) {
+        const p = e.payload as Wire;
+        if (["user", "assistant"].includes(p.role))
+          this.ingest(
+            target.id,
+            "message",
+            {
+              role: p.role,
+              text: branchMessageText(p),
+              ...(p.attachments ? { attachments: p.attachments } : {}),
+              origin: "branch",
+              sourceEventId: e.id,
+            },
+            `branch:${e.id}`,
+          );
+      }
+      return next;
+    });
+  }
   async handoff(id: string, input: Wire) {
     const source = this.store.session(id),
       requestId = typeof input.requestId === "string" ? input.requestId : undefined,
@@ -3076,16 +3511,22 @@ export class SessionService {
     });
   }
   resumeWork(): void {
+    if (this.lifecycle.status().frozen) return;
     this.drainWakes();
-    for (const c of this.store.commands()) if (c.status === "accepted") this.schedule(c.sessionId);
+    for (const c of this.store
+      .commands()
+      .sort((a, b) => Number(b.origin === "user") - Number(a.origin === "user")))
+      if (c.status === "accepted") this.schedule(c.sessionId);
   }
   async maintenance() {
     if (this.disposed) return;
     const events = this.store.collect();
+    const notifications = this.feed.collect();
+    const uploads = this.files.collect();
     const credentials = await collectProviderCredentials(this.store);
     if (this.store.records("provider").length && appSettings(this.store).autoRefreshModels)
       await this.providers.refreshCatalog(false).catch(() => {});
-    return { events, credentials };
+    return { events, notifications, uploads, credentials };
   }
   async dispose(): Promise<void> {
     for (const id of this.textBuffers.keys()) {
@@ -3096,6 +3537,10 @@ export class SessionService {
       }
     }
     this.disposed = true;
+    this.lifecycle.close();
+    this.executors.dispose();
+    clearInterval(this.workTimer);
+    await this.delivery.drain();
     clearInterval(this.deadlineTimer);
     clearInterval(this.maintenanceTimer);
     clearInterval(this.nativeSyncTimer);
@@ -3104,7 +3549,33 @@ export class SessionService {
     this.interactions.clear();
     await Promise.allSettled([...this.runtime.values()].map((r) => r.close()));
     this.runtime.clear();
+    await this.browser.close();
+    await this.actions.drain();
     await this.providers.close();
     await this.engines.close();
   }
+}
+
+/** Which inbox items also become notification facts. Ordinary errors stay in the activity log. */
+function inboxNotificationKind(type: string, payload: unknown) {
+  if (type === "limit") return "limit-paused" as const;
+  if (type === "notification") return "supervision-notice" as const;
+  if (type !== "interaction") return null;
+  const p = (payload ?? {}) as Wire;
+  const method = String(p.method ?? p.action ?? "").toLowerCase();
+  const questions = p.input?.questions ?? p.params?.questions;
+  return Array.isArray(questions) || /question|elicit|user_input|ask/.test(method)
+    ? ("question" as const)
+    : ("approval-required" as const);
+}
+
+function branchMessageText(p: Wire): string {
+  if (typeof p?.text === "string") return p.text;
+  if (typeof p?.content === "string") return p.content;
+  if (Array.isArray(p?.content))
+    return p.content
+      .filter((c: Wire) => ["text", "output_text"].includes(c?.type))
+      .map((c: Wire) => c.text)
+      .join("\n");
+  return p?.message ? branchMessageText(p.message) : "";
 }

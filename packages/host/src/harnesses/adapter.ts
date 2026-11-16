@@ -21,6 +21,13 @@ export interface AdapterContext {
   configuration?: BindingRuntime;
   model?: string;
   reasoning?: string;
+  modelInput?: (model: {
+    provider: string;
+    id: string;
+    baseUrl: string;
+    api: string;
+    declaredInput?: ("text" | "image")[];
+  }) => ("text" | "image")[] | undefined;
   permissionMode?: () => PermissionMode | null;
   env: NodeJS.ProcessEnv;
   launch: NativeLaunch;
@@ -37,10 +44,16 @@ export interface AdapterContext {
   interact(id: string, payload: unknown): Promise<unknown>;
   /** Invalidate a native request answered elsewhere or withdrawn by its transport. */
   resolveInteraction?: (id: string, reason?: "resolved" | "withdrawn") => void;
+  memoryContext?: () => unknown;
+  toolAction?: <T>(callId: string, args: unknown, operation: () => Promise<T>) => Promise<T>;
   tools?: import("@earendil-works/pi-coding-agent").ToolDefinition[];
   sdkSessionOwners?: () => Record<string, "kodo" | "pi">;
   assertSendAllowed?: (commandId: string) => void;
   recreateEmptyNativeDraft?: boolean;
+}
+export interface NativeInput {
+  /** Base64 data plus a read-only Host copy, for protocols that take local paths. */
+  images?: { type: "image"; data: string; mimeType: string; path: string }[];
 }
 export interface NativeRuntime {
   nativeSessionId: string;
@@ -50,7 +63,14 @@ export interface NativeRuntime {
     commandId: string,
     mode: "new" | "queue" | "steer",
     settings?: ModelSettings,
+    /** Structured input beyond text, only passed when the runtime declares support. */
+    input?: NativeInput,
   ): Promise<{ nativeRunId: string | null }>;
+  /**
+   * True only when the protocol and the model that will run this turn declare image
+   * input. Unknown means false: the Host then sends the image as a file reference.
+   */
+  supportsImages?(model?: string | null): boolean | Promise<boolean>;
   models?(): Promise<HarnessModelOption[]>;
   permissionOptions?(): Promise<{
     current: PermissionMode | null;

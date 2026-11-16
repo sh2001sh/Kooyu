@@ -6,6 +6,7 @@ import {
   Folder,
   Inbox,
   Layers,
+  LayoutList,
   MessageSquare,
   Pin,
   Plus,
@@ -52,6 +53,7 @@ export interface SessionRowsProps {
   onDeleteSession?: (session: Session) => void;
   onDeleteProject?: (project: Project) => void;
   onEditProject: (project: Project) => void;
+  onOpenProjectOverview?: (projectId: string) => void;
   act: (work: () => Promise<unknown>) => Promise<void>;
 }
 
@@ -95,6 +97,7 @@ export function SessionRows({
   onDeleteSession,
   onDeleteProject,
   onEditProject,
+  onOpenProjectOverview,
   act,
 }: SessionRowsProps) {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
@@ -243,6 +246,17 @@ export function SessionRows({
             <Plus size={13} />
           </button>
           {project && actions.more({ kind: "project", value: project })}
+          {project && onOpenProjectOverview && (
+            <button
+              type="button"
+              className="tree-group__add"
+              aria-label={`查看${project.name}项目概览`}
+              title="项目概览"
+              onClick={() => onOpenProjectOverview(project.id)}
+            >
+              <LayoutList size={13} />
+            </button>
+          )}
         </div>
         {isOpen && items.length > 0 && (
           <div className="tree-group__rows">{items.map((s) => renderSessionRow(s, viewMode))}</div>

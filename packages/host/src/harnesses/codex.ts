@@ -1,4 +1,5 @@
 import { boundModelOption } from "../providers/model-option.js";
+import { declaredInput, resolveInput } from "./input-modalities.js";
 import {
   descriptor,
   needCwd,
@@ -399,10 +400,49 @@ export const codexAdapter: HarnessAdapter = {
         } while (cursor && models.length < 1000);
         return models;
       };
+      // model/list reports inputModalities per model; read once per connection.
+      let modalities: Promise<Map<string, string[]>> | undefined;
+      const modelModalities = () =>
+        (modalities ??= (async () => {
+          const found = new Map<string, string[]>();
+          let cursor: string | undefined;
+          do {
+            const page = await rpc.request("model/list", {
+              limit: 100,
+              ...(cursor ? { cursor } : {}),
+            });
+            for (const entry of (page.data ?? []) as Wire[])
+              if (Array.isArray(entry.inputModalities))
+                for (const key of [entry.id, entry.model])
+                  if (typeof key === "string") found.set(key, entry.inputModalities);
+            cursor = page.nextCursor ?? undefined;
+          } while (cursor && found.size < 2000);
+          return found;
+        })().catch((error) => {
+          modalities = undefined;
+          throw error;
+        }));
+      const supportsImages = async (selected?: string | null) => {
+        if (ctx.configuration?.binding)
+          return Boolean(ctx.configuration.modelParameters?.input?.includes("image"));
+        const model = selected ?? targetModel ?? result.model;
+        if (typeof model !== "string") return false;
+        return (
+          resolveInput(
+            ctx,
+            "openai",
+            model,
+            declaredInput((await modelModalities()).get(model)),
+          )?.includes("image") ?? false
+        );
+      };
       return {
         nativeSessionId: nativeId,
         models,
-        async send(text, commandId, mode, settings) {
+        supportsImages,
+        async send(text, commandId, mode, settings, input) {
+          if (input?.images?.length && !(await supportsImages(settings?.model)))
+            unsupported("Codex 当前模型未声明图片输入，图片未发送。");
           const model = settings?.model ?? targetModel ?? result.model;
           if (settings?.reasoning) {
             const catalog = ctx.configuration?.binding
@@ -424,7 +464,11 @@ export const codexAdapter: HarnessAdapter = {
                     ...permissionPolicy(ctx.permissionMode?.()),
                   }
                 : {}),
-              input: [{ type: "text", text }],
+              input: [
+                ...(text || !input?.images?.length ? [{ type: "text", text }] : []),
+                // UserInput "localImage": Codex reads the Host's read-only copy itself.
+                ...(input?.images ?? []).map((image) => ({ type: "localImage", path: image.path })),
+              ],
             },
             commandId,
           );

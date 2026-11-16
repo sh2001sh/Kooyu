@@ -6,6 +6,7 @@ import { KodoError, type HarnessId, type PermissionMode } from "@kodo/protocol";
 import { acpModelOptions, selectOptions } from "./model-options.js";
 import { boundNativeModel } from "../providers/native-config.js";
 import { NativeSubagents } from "./subagents.js";
+import { resolveInput } from "./input-modalities.js";
 export function acpHarness(id: HarnessId, name: string): HarnessAdapter {
   const info = descriptor(
     id,
@@ -308,6 +309,21 @@ export function acpHarness(id: HarnessId, name: string): HarnessAdapter {
             await setOption("thought_level", ctx.reasoning, `initial-reasoning:${session.id}`);
           else if (ctx.reasoning !== ctx.configuration?.binding?.reasoning)
             unsupported("此 ACP 未声明思考切换接口；只能使用绑定配置中的默认档位。");
+        const supportsImages = (selected?: string | null) => {
+          if (caps.promptCapabilities?.image !== true) return false;
+          // The Google-to-Chat bridge currently accepts text and tools only.
+          if (
+            id === "gemini" &&
+            (ctx.configuration?.binding?.route === "gateway" ||
+              ctx.configuration?.protocol === "openai-completions")
+          )
+            return false;
+          if (ctx.configuration?.binding)
+            return ctx.configuration.modelParameters?.input?.includes("image") ?? false;
+          const model = selected ?? targetModel ?? initialModel;
+          const input = typeof model === "string" ? resolveInput(ctx, id, model) : undefined;
+          return input ? input.includes("image") : true;
+        };
         return {
           nativeSessionId: nativeId,
           capabilities: {
@@ -316,14 +332,22 @@ export function acpHarness(id: HarnessId, name: string): HarnessAdapter {
             steer: "unsupported",
           },
           async models() {
-            return acpModelOptions(config, models);
+            return acpModelOptions(config, models).map((model) => ({
+              ...model,
+              input: supportsImages(model.id) ? ["text", "image"] : ["text"],
+            }));
           },
           async permissionOptions() {
             return permissionOptions();
           },
           setPermissionMode,
-          async send(text, commandId, mode, settings) {
+          // ACP: image content blocks are allowed only when the agent declares
+          // promptCapabilities.image during initialize.
+          supportsImages,
+          async send(text, commandId, mode, settings, input) {
             if (mode === "steer") unsupported("ACP 通用层未承诺运行中 steer。");
+            if (input?.images?.length && !supportsImages(settings?.model))
+              unsupported("此 ACP 代理未声明图片输入，图片未发送。");
             if (closed) throw new KodoError("CONFLICT", "ACP 连接已关闭，无法发送。");
             if (sending) unsupported("ACP 当前已有活动或准备中的回合，请等待结束后发送。");
             sending = true;
@@ -356,7 +380,17 @@ export function acpHarness(id: HarnessId, name: string): HarnessAdapter {
               promptDispatched = true;
               const response = await rpc.request(
                 "session/prompt",
-                { sessionId: nativeId, prompt: [{ type: "text", text }] },
+                {
+                  sessionId: nativeId,
+                  prompt: [
+                    ...(text || !input?.images?.length ? [{ type: "text", text }] : []),
+                    ...(input?.images ?? []).map((image) => ({
+                      type: "image",
+                      data: image.data,
+                      mimeType: image.mimeType,
+                    })),
+                  ],
+                },
                 commandId,
                 24 * 3600000,
               );

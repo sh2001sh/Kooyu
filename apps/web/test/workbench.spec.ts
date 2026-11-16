@@ -304,10 +304,7 @@ for (const mobile of [false, true])
     });
     await page.addInitScript((id) => localStorage.setItem("kodo.session", id), controller.id);
     await page.goto("/");
-    await expect(page.getByLabel("消息", { exact: true })).toHaveAttribute(
-      "placeholder",
-      /告诉 Kooyu/,
-    );
+    await expect(page.getByLabel("消息", { exact: true })).toHaveAttribute("placeholder", "Kooyu");
     await expect(page.getByText("Kooyu 管理操作 · 等待确认", { exact: true })).toBeVisible();
     await expect(page.getByText("最多自动续聊 2 次", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "结构化回答", exact: true })).toHaveCount(0);

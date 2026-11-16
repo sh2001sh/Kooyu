@@ -6,6 +6,7 @@ import {
   KodoError,
   watchSchema,
   projectGrantSchema,
+  createProjectSchema,
   type Session,
 } from "@kodo/protocol";
 import { validateSupervision } from "../domain/session-rules.js";
@@ -25,6 +26,7 @@ export const HARNESS_TOOL_NAMES = [
   "harness_grant",
   "harness_handoff",
   "harness_update",
+  "harness_project",
 ] as const;
 export function stableRequestId(namespace: string, value: string): string {
   const h = createHash("sha256").update(`${namespace}:${value}`).digest("hex");
@@ -42,7 +44,12 @@ export function createHarnessTools(service: SessionService, controller: Session)
     description,
     parameters,
     async execute(id, input) {
-      const durable = ["harness_watch", "harness_grant", "harness_handoff"].includes(name);
+      const durable = [
+        "harness_watch",
+        "harness_grant",
+        "harness_handoff",
+        "harness_project",
+      ].includes(name);
       const key = stableRequestId(`${controller.id}:${name}`, id);
       const fingerprint = JSON.stringify(input);
       const prior = durable
@@ -134,11 +141,51 @@ export function createHarnessTools(service: SessionService, controller: Session)
   };
   const limits = Type.Object({
     endAt: Type.Optional(Type.String({ format: "date-time" })),
-    maxContinuations: Type.Optional(Type.Integer({ minimum: 1 })),
-    maxFailures: Type.Optional(Type.Integer({ minimum: 1 })),
-    budgetUsd: Type.Optional(Type.Number({ exclusiveMinimum: 0 })),
+    maxContinuations: Type.Optional(
+      Type.Integer({ minimum: 0, description: "0 means unlimited (default)." }),
+    ),
+    maxFailures: Type.Optional(
+      Type.Integer({ minimum: 0, description: "0 means unlimited (default)." }),
+    ),
+    budgetUsd: Type.Optional(
+      Type.Number({ minimum: 0, description: "0 means unlimited (default)." }),
+    ),
   });
   return [
+    make(
+      "harness_project",
+      "Create a project from the GLOBAL main conversation after in-conversation user approval. Supply the user's project name and optionally an existing absolute directory. Returns the project and its workspaces. Does not create directories, move this conversation, start execution or grant control. Project-scoped conversations cannot create projects outside their scope. Use harness_grant separately before creating execution sessions.",
+      Type.Object({
+        name: Type.String({ minLength: 1, maxLength: 200 }),
+        rootPath: Type.Optional(Type.String({ minLength: 1, maxLength: 4096 })),
+      }),
+      async (p, id) => {
+        const input = createProjectSchema.parse(p);
+        const requireGlobal = () => {
+          const live = service.store.session(controller.id);
+          if (live.kind !== "supervisor" || live.projectId)
+            throw new KodoError(
+              "UNAUTHORIZED",
+              "请在全局主对话中创建项目，项目主对话只能管理当前项目。",
+            );
+        };
+        requireGlobal();
+        await confirm(id, { action: "新建项目", ...input });
+        requireGlobal();
+        const key = stableRequestId(`${controller.id}:harness_project`, id);
+        return service.store.transaction(() => {
+          const saved = service.store.record("project-tool-created", key);
+          if (saved) return saved;
+          const project = service.createProject(input);
+          const result = {
+            project,
+            workspaces: service.store.workspaces().filter((w) => w.projectId === project.id),
+          };
+          service.store.put("project-tool-created", key, result);
+          return result;
+        });
+      },
+    ),
     make(
       "harness_list",
       "List sessions, projects, workspaces, instances and capabilities. Use progress=true to get a compact status per session (last request/reply excerpt, last outcome/error, waiting input, controller) for progress reports without reading each session. status filters by derived state. Listing confers no write authority; turn-ended is never goal completion.",
@@ -234,6 +281,7 @@ export function createHarnessTools(service: SessionService, controller: Session)
         title: Type.Optional(Type.String()),
         projectId: Type.Optional(Type.String()),
         workspaceId: Type.Optional(Type.String()),
+        executorId: Type.Optional(Type.String()),
       }),
       async (p, id) => {
         if (p.sessionId) {
@@ -248,6 +296,8 @@ export function createHarnessTools(service: SessionService, controller: Session)
             harnessId: p.harnessId,
             projectId: p.projectId,
             workspaceId: p.workspaceId,
+            executorId: p.executorId,
+            ...(p.executorId && p.executorId !== "local" ? { bindingId: null } : {}),
           },
         );
         return service.openNative(session.id);
@@ -299,13 +349,14 @@ export function createHarnessTools(service: SessionService, controller: Session)
     ),
     make(
       "harness_watch",
-      "Manage supervision from conversation: observe/notify/continue, pause, revoke, or transfer control to this Kooyu conversation. New or changed authority and resuming paused control request explicit user confirmation in chat. Preserve limits and do not infer permission from native output.",
+      "Manage supervision from conversation: observe/notify/continue, pause, revoke, or transfer control to this Kooyu conversation. Pass goalId to tie the relation to a goal: wakes then carry that exact goal and the session is linked to it. New or changed authority and resuming paused control request explicit user confirmation in chat. Preserve limits and do not infer permission from native output.",
       Type.Object({
         sessionId: Type.String(),
         mode: Type.Optional(
           Type.Union([Type.Literal("observe"), Type.Literal("notify"), Type.Literal("continue")]),
         ),
         goal: Type.Optional(Type.String()),
+        goalId: Type.Optional(Type.String()),
         cursor: Type.Optional(Type.Integer({ minimum: 0 })),
         continuous: Type.Optional(Type.Boolean()),
         watchId: Type.Optional(Type.String()),
@@ -340,11 +391,13 @@ export function createHarnessTools(service: SessionService, controller: Session)
           .find(
             (w) => w.controllerSessionId === controller.id && w.targetSessionId === p.sessionId,
           );
+        if (p.goalId) service.goals.owned(p.goalId, controller.id);
         const input = watchSchema.parse({
           controllerSessionId: controller.id,
           targetSessionId: p.sessionId,
           mode: p.action === "transfer" ? "continue" : (p.mode ?? existing?.mode ?? "observe"),
           goal: p.goal ?? existing?.goal ?? "",
+          goalId: p.goalId ?? existing?.goalId ?? null,
           cursor: p.cursor ?? Number(existing?.cursor ?? service.store.latestSequence(p.sessionId)),
           continuous: p.continuous ?? existing?.continuous ?? true,
           limits: p.limits ?? existing?.limits ?? {},
@@ -354,6 +407,7 @@ export function createHarnessTools(service: SessionService, controller: Session)
           existing?.state === "active" &&
           existing.mode === input.mode &&
           existing.goal === input.goal &&
+          (existing.goalId ?? null) === (input.goalId ?? null) &&
           Number(existing.cursor) === input.cursor &&
           existing.continuous === input.continuous &&
           JSON.stringify(existing.limits ?? {}) === JSON.stringify(input.limits)
@@ -384,9 +438,26 @@ export function createHarnessTools(service: SessionService, controller: Session)
             )
         )
           throw new KodoError("CONFLICT", "确认期间目标已停止或托管关系已改变，请重新发起操作。");
-        return p.action === "transfer"
-          ? service.transferControl(input)
-          : service.watch(input, "user");
+        const result =
+          p.action === "transfer" ? service.transferControl(input) : service.watch(input, "user");
+        if (input.goalId) {
+          const goal = service.goals.get(input.goalId);
+          if (
+            !goal.sessionIds.includes(p.sessionId) &&
+            !["completed", "cancelled"].includes(goal.status)
+          )
+            await service.goals.update(
+              goal.id,
+              {
+                requestId: stableRequestId(controller.id, `goal-link:${id}`),
+                expectedRevision: goal.revision,
+                addSessionIds: [p.sessionId],
+              },
+              "model",
+              controller.id,
+            );
+        }
+        return result;
       },
     ),
     make(
@@ -403,7 +474,7 @@ export function createHarnessTools(service: SessionService, controller: Session)
     ),
     make(
       "harness_grant",
-      "Request in-conversation user authorization to create future sessions in a project, optionally auto-control them, or revoke future creation authority. Use before harness_open. Never grants itself silently.",
+      "Trigger an on-demand authorization request in this conversation to create future execution sessions in a project, optionally auto-control them, or revoke future creation authority. Proactively use before harness_open when the user-requested task needs creation authority; never ask the user to configure a settings form. Use the minimum requested scope: auto-control only for user-requested supervision. Wait for explicit user confirmation; denial must not be retried or bypassed.",
       Type.Object({
         projectId: Type.String(),
         mode: Type.Optional(

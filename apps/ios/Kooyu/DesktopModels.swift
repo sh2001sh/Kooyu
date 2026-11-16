@@ -26,8 +26,8 @@ struct ConnectionBook: Codable, Sendable {
         if activeHostId == id { activeHostId = devices.first?.hostId }
     }
 }
-struct HostWorkspace: Codable, Identifiable, Sendable { let id, rootPath: String; let projectId: String? }
-struct HostHarness: Codable, Identifiable, Sendable { let id, name: String; var modelSupport: String?; var health: JSONValue?; var nativeDefaults: JSONValue? }
+struct HostWorkspace: Codable, Identifiable, Sendable { let id, rootPath: String; let projectId: String?; var hostId: String? }
+struct HostHarness: Codable, Identifiable, Sendable { let id, name: String; var modelSupport: String?; var health: JSONValue?; var nativeDefaults: JSONValue?; var capabilities: JSONValue? }
 struct UsageRecord: Codable, Identifiable, Sendable {
     let id, sessionId, source, scope, costKind, createdAt: String
     let projectId: String?
@@ -61,6 +61,7 @@ func filteredUsage(_ records: [UsageRecord], days: Int = 14, project: String = "
 }
 struct SessionDraft: Sendable {
     var title = "", harnessId = "kodo", kind = "supervisor", projectId = "", workspaceId = "", choice = "inherit", model = "", reasoning = "", permission = "", firstMessage = ""
+    var executorId = "local", customPath = ""
     var body: JSONValue {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let firstLine = String(firstMessage.split(separator: "\n").first?.prefix(48) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -72,16 +73,18 @@ struct SessionDraft: Sendable {
         else if choice == "model" { value["bindingId"] = .null; value["model"] = .string(model) }
         if !reasoning.isEmpty { value["reasoning"] = .string(reasoning) }
         if !permission.isEmpty { value["permissionMode"] = .string(permission) }
+        if executorId != "local" { value["executorId"] = .string(executorId); value["bindingId"] = .null; value["model"] = .null }
         return .object(value)
     }
     func validation(_ snapshot: Snapshot?) -> String? {
         guard let snapshot, let harness = snapshot.harnesses?.first(where: { $0.id == harnessId }) else { return "请选择可用引擎。" }
         if title.count > 200 || firstMessage.count > 200000 { return "标题或首条消息过长。" }
-        if (harnessId != "kodo" && harnessId != "pi" || !projectId.isEmpty) && workspaceId.isEmpty { return "请选择工作位置。" }
+        if executorId != "local" && !customPath.isEmpty { return "远程会话请选择节点已登记的目录。" }
+        if (harnessId != "kodo" && harnessId != "pi" || !projectId.isEmpty) && workspaceId.isEmpty && customPath.isEmpty { return "请选择工作位置。" }
         if !workspaceId.isEmpty && snapshot.workspaces?.contains(where: { $0.id == workspaceId && (projectId.isEmpty || $0.projectId == projectId) }) != true { return "工作位置与项目不匹配。" }
         let projectBinding = snapshot.projects.first { $0.id == projectId }?.bindingDefaults?[harnessId].string ?? ""
         let inherited = projectBinding.isEmpty ? snapshot.bindingDefaults?["harnessBindingIds"][harnessId].string ?? "" : projectBinding
-        if harness.modelSupport == "binding-required" && !(choice.hasPrefix("binding:") || choice == "inherit" && !inherited.isEmpty) { return "此引擎需要选择可用的模型绑定。" }
+        if executorId == "local" && harness.modelSupport == "binding-required" && !(choice.hasPrefix("binding:") || choice == "inherit" && !inherited.isEmpty) { return "此引擎需要选择可用的模型绑定。" }
         if choice == "model" && model.isEmpty { return "请选择模型。" }
         return nil
     }
@@ -97,7 +100,7 @@ func permissionOptions(_ harness: String) -> [(String, String)] {
     case "kodo", "pi": return [("kodo-tools-read", "仅阅读工具"), ("kodo-tools-none", "禁用工具")]
     case "zcode": return [("plan", "Plan"), ("build", "Build"), ("edit", "Edit"), ("guarded", "Guarded"), ("yolo", "YOLO")]
     case "kimi-code": return [("kimi:manual", "逐项审批"), ("kimi:auto", "自动判断"), ("kimi:yolo", "跳过审批")]
-    case "opencode": return [("opencode-ask", "逐次审批"), ("opencode-deny", "禁用工具"), ("opencode-allow", "允许工具")]
+    case "opencode": return [("opencode-ask", "逐项询问"), ("opencode-deny", "禁用工具"), ("opencode-allow", "自动允许")]
     default: return []
     }
 }

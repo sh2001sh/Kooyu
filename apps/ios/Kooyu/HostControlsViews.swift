@@ -20,7 +20,7 @@ struct HistorySearchView: View {
                 }
             }
             if !model.error.isEmpty { Text(model.error).foregroundStyle(.red) }
-        }.navigationTitle("搜索完整历史").searchable(text: $query, prompt: "当前电脑的会话与消息内容")
+        }.navigationTitle("搜索完整历史").searchable(text: $query, prompt: "当前设备的会话与消息内容")
             .toolbar { Button("完成") { dismiss() } }
             .task(id: query) {
                 result = nil; guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { loading = false; return }
@@ -40,27 +40,30 @@ struct HostControlsView: View {
     @State private var goal = ""
     @State private var trigger = "turn-ended"
     @State private var continuous = false
-    @State private var continuations = ""
-    @State private var failures = ""
-    @State private var budget = ""
-    @State private var endAt = ""
-    @State private var project = ""
-    @State private var grantMode = "create-only"
+    @State private var continuations = "0"
+    @State private var failures = "0"
+    @State private var budget = "0"
+    @State private var endAt = Date().addingTimeInterval(3600)
+    @State private var hasDeadline = false
     @State private var confirmation: String?
     private var sessions: [HostSession] { model.snapshot?.sessions.filter { !$0.archived } ?? [] }
     private var limitsValid: Bool {
-        [continuations, failures].allSatisfy { $0.isEmpty || (Int($0) ?? 0) > 0 } && (budget.isEmpty || Double(budget).map { $0.isFinite && $0 > 0 } == true) && (endAt.isEmpty || ISO8601DateFormatter().date(from: endAt) != nil)
+        [continuations, failures].allSatisfy { $0.isEmpty || (Int($0) ?? -1) >= 0 } && (budget.isEmpty || Double(budget).map { $0.isFinite && $0 >= 0 } == true)
     }
     private var limits: JSONValue {
         var values: [String: JSONValue] = [:]
-        if let n = Double(continuations) { values["maxContinuations"] = .number(n) }
-        if let n = Double(failures) { values["maxFailures"] = .number(n) }
-        if let n = Double(budget) { values["budgetUsd"] = .number(n) }
-        if !endAt.isEmpty { values["endAt"] = .string(endAt) }
+        values["maxContinuations"] = .number(Double(continuations) ?? 0)
+        values["maxFailures"] = .number(Double(failures) ?? 0)
+        values["budgetUsd"] = .number(Double(budget) ?? 0)
+        if hasDeadline { values["endAt"] = .string(ISO8601DateFormatter().string(from: endAt)) }
         return .object(values)
     }
     var body: some View {
         Form {
+            Section {
+                Text("主对话需要在项目中创建执行对话时，会主动发起授权请求。你可以在对话中确认，也可以直接要求主对话授权或撤销授权。")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
             Section("当前托管") {
                 if model.snapshot?.supervisions?.isEmpty != false { Text("暂无托管关系。") }
                 ForEach(Array((model.snapshot?.supervisions ?? []).enumerated()), id: \.offset) { _, watch in watchRow(watch) }
@@ -70,16 +73,10 @@ struct HostControlsView: View {
             Section {
                 Button("创建托管") { confirmation = "create" }.disabled(!model.canWrite || controller.isEmpty || target.isEmpty || !limitsValid)
                 if mode == "continue" { Button("转交目标的控制权") { confirmation = "transfer" }.disabled(!model.canWrite || controller.isEmpty || target.isEmpty || !limitsValid) }
-                Text("自动继续会让主对话按上述边界继续目标会话，控制权转交会使旧控制者的待发操作失效。").font(.footnote).foregroundStyle(.secondary)
-            }
-            Section("项目授权") {
-                Picker("项目", selection: $project) { Text("请选择").tag(""); ForEach(model.snapshot?.projects ?? []) { Text($0.name).tag($0.id) } }
-                Picker("能力", selection: $grantMode) { Text("只可创建").tag("create-only"); Text("可创建与控制").tag("create-and-control"); Text("撤销授权").tag("revoke") }
-                Button("提交项目授权") { confirmation = "grant" }.disabled(!model.canWrite || controller.isEmpty || project.isEmpty || !limitsValid)
             }
             if !model.error.isEmpty { Text(model.error).foregroundStyle(.red) }
-        }.navigationTitle("托管与项目授权")
-            .confirmationDialog("确认提交到当前电脑？", isPresented: Binding(get: { confirmation != nil }, set: { if !$0 { confirmation = nil } }), titleVisibility: .visible) {
+        }.navigationTitle("会话托管")
+            .confirmationDialog("确认提交到当前设备？", isPresented: Binding(get: { confirmation != nil }, set: { if !$0 { confirmation = nil } }), titleVisibility: .visible) {
                 if let action = confirmation { Button("确认", role: action.hasPrefix("revoke:") || action == "transfer" ? .destructive : nil) { confirmation = nil; Task { await submit(action) } } }
             }
     }
@@ -95,10 +92,12 @@ struct HostControlsView: View {
     }
     private var limitFields: some View {
         Group {
-            TextField("最大继续次数（可选）", text: $continuations).keyboardType(.numberPad)
-            TextField("最大连续失败次数（可选）", text: $failures).keyboardType(.numberPad)
-            TextField("费用上限 USD（可选）", text: $budget).keyboardType(.decimalPad)
-            TextField("截止时间 ISO 8601（可选）", text: $endAt).textInputAutocapitalization(.never).autocorrectionDisabled()
+            TextField("最大继续次数", text: $continuations).keyboardType(.numberPad)
+            TextField("最大连续失败次数", text: $failures).keyboardType(.numberPad)
+            TextField("费用上限 USD", text: $budget).keyboardType(.decimalPad)
+            Text("0 表示不限制；留空保存时按 0 处理。").font(.footnote).foregroundStyle(.secondary)
+            Toggle("设置截止时间", isOn: $hasDeadline)
+            if hasDeadline { DatePicker("截止日期和时间", selection: $endAt, displayedComponents: [.date, .hourAndMinute]) }
         }
     }
     private func watchRow(_ watch: JSONValue) -> some View {
@@ -113,7 +112,6 @@ struct HostControlsView: View {
     }
     private func submit(_ action: String) async {
         if action.hasPrefix("revoke:") { _ = await model.execute("/watches/" + String(action.dropFirst(7)), method: "PATCH", values: ["state": .string("revoked")]); return }
-        if action == "grant" { _ = await model.execute("/sessions/\(controller)/grant", values: ["projectId": .string(project), "mode": .string(grantMode), "goal": .string(goal), "limits": limits]); return }
         _ = await model.execute(action == "transfer" ? "/watches/transfer" : "/watches", values: ["controllerSessionId": .string(controller), "targetSessionId": .string(target), "mode": .string(mode), "goal": .string(goal), "continuous": .bool(continuous), "trigger": .string(trigger), "limits": limits])
     }
 }

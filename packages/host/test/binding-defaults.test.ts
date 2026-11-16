@@ -214,7 +214,7 @@ test("v5 migrates mirrored binding IDs, preserves history, and removes old confi
     for (const kind of ["profile", "profile-revision", "profile-defaults", "provider-legacy"])
       assert.equal(store.records(kind).length, 0);
     await assert.rejects(service.openNative(sessionId), /需创建新会话/);
-    assert.equal(store.db.prepare("PRAGMA user_version").get()?.user_version, 6);
+    assert.equal(store.db.prepare("PRAGMA user_version").get()?.user_version, 9);
   } finally {
     await service.dispose();
     store.close();
@@ -257,7 +257,7 @@ test("v6 renames stored kernel tool modes to kodo-tools-* without touching other
     assert.equal(store.session(ids.kodo).permissionMode, "kodo-tools-read");
     assert.equal(store.session(ids.pi).permissionMode, "kodo-tools-none");
     assert.equal(store.session(ids.codex).permissionMode, "read-only");
-    assert.equal(store.db.prepare("PRAGMA user_version").get()!.user_version, 6);
+    assert.equal(store.db.prepare("PRAGMA user_version").get()!.user_version, 9);
   } finally {
     store.close();
     rmSync(dir, { recursive: true, force: true });

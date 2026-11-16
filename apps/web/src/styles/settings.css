@@ -1197,6 +1197,8 @@ button.sx-toggle.is-on .sx-toggle__knob,
   .sx-model-table,
   .sx-model-table tbody {
     display: block;
+    min-width: 0;
+    width: 100%;
   }
   .sx-model-table thead {
     display: none;
@@ -1607,4 +1609,10 @@ button.sx-toggle.is-on .sx-toggle__knob,
     text-align: center;
     gap: 12px;
   }
+}
+.global-memory-entry {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
 }

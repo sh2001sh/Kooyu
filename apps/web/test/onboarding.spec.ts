@@ -28,11 +28,11 @@ test("first launch can skip everything and reopen from general settings", async 
 }) => {
   const before = await (await request.get("/api/provider-configuration")).json();
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "为主 Agent 连接模型（可选）" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "模型配置" })).toBeVisible();
   await page.getByRole("button", { name: "跳过引导", exact: true }).click();
   await expect(page.getByRole("navigation", { name: "系统工具" })).toBeVisible();
   await page.reload();
-  await expect(page.getByRole("heading", { name: "为主 Agent 连接模型（可选）" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "模型配置" })).toHaveCount(0);
   const after = await (await request.get("/api/provider-configuration")).json();
   expect(after.providers.length).toBe(before.providers.length);
   expect((await (await request.get("/api/onboarding")).json()).status).toBe("skipped");
@@ -42,7 +42,7 @@ test("first launch can skip everything and reopen from general settings", async 
     .getByRole("button", { name: "通用", exact: true })
     .click();
   await page.getByRole("button", { name: "打开设置引导" }).click();
-  await expect(page.getByRole("heading", { name: "为主 Agent 连接模型（可选）" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "模型配置" })).toBeVisible();
 });
 
 test("skip API, resume at Harness step and complete without a main binding", async ({
@@ -53,13 +53,13 @@ test("skip API, resume at Harness step and complete without a main binding", asy
   await page.goto("/");
   await expect(page.getByRole("button", { name: "跳过 API，先准备引擎" })).toBeInViewport();
   await page.getByRole("button", { name: "跳过 API，先准备引擎" }).click();
-  await expect(page.getByRole("heading", { name: "接上你想用的执行引擎" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "执行引擎", exact: true })).toBeVisible();
   await page.reload();
-  await expect(page.getByRole("heading", { name: "接上你想用的执行引擎" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "执行引擎", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "继续", exact: true }).click();
   await expect(page.getByText("主 Agent API 暂未配置", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "进入工作台", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "你的工作台，准备好了" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "工作台" })).toHaveCount(0);
   expect((await (await request.get("/api/onboarding")).json()).status).toBe("completed");
 });
 
@@ -94,9 +94,7 @@ for (const mobile of [false, true])
       try {
         await page.goto("/");
         const source = page.getByLabel("模型来源", { exact: true });
-        await expect(
-          page.getByRole("heading", { name: "为主 Agent 连接模型（可选）" }),
-        ).toBeVisible();
+        await expect(page.getByRole("heading", { name: "模型配置" })).toBeVisible();
         await expect(page.locator(".setup-connection")).toHaveAttribute("aria-busy", "false");
         await expect
           .poll(
@@ -118,7 +116,7 @@ for (const mobile of [false, true])
         await page.getByRole("button", { name: "保存并获取模型", exact: true }).click();
         await expect(page.getByLabel("主 Agent 模型", { exact: true })).toBeVisible();
         await page.getByRole("button", { name: "使用此模型，继续" }).click();
-        await expect(page.getByRole("heading", { name: "接上你想用的执行引擎" })).toBeVisible();
+        await expect(page.getByRole("heading", { name: "执行引擎", exact: true })).toBeVisible();
         await expect(page.getByText("正在检测安装方式…")).toHaveCount(0);
         expect(await page.locator(".setup-shell").evaluate((el) => el.scrollTop)).toBe(0);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
@@ -144,9 +142,7 @@ for (const mobile of [false, true])
           methods.every((method) => method.startsWith("GET ") && method.includes("/models")),
         ).toBe(true);
         await page.reload();
-        await expect(
-          page.getByRole("heading", { name: "为主 Agent 连接模型（可选）" }),
-        ).toHaveCount(0);
+        await expect(page.getByRole("heading", { name: "模型配置" })).toHaveCount(0);
       } finally {
         const current = await (await request.get("/api/app-settings")).json();
         await request.patch("/api/app-settings", {
@@ -162,7 +158,7 @@ for (const mobile of [false, true])
 test("discovery failure preserves API and offers manual model parameters", async ({ page }) => {
   await page.goto("/");
   const source = page.getByLabel("模型来源", { exact: true });
-  await expect(page.getByRole("heading", { name: "为主 Agent 连接模型（可选）" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "模型配置" })).toBeVisible();
   await expect(page.locator(".setup-connection")).toHaveAttribute("aria-busy", "false");
   await expect
     .poll(
@@ -178,7 +174,7 @@ test("discovery failure preserves API and offers manual model parameters", async
   await page.getByRole("button", { name: "列表没有想用的模型？手动添加" }).click();
   await page.getByLabel("模型 ID", { exact: true }).fill("unknown-onboarding-model");
   await page.getByRole("button", { name: "添加模型", exact: true }).click();
-  await expect(page.getByText("这个模型还缺少能力参数", { exact: true })).toBeVisible();
+  await expect(page.getByText("模型能力参数", { exact: true })).toBeVisible();
   await expect(page.getByLabel("上下文窗口（tokens）", { exact: true })).toHaveValue("");
   await page.getByRole("button", { name: "跳过引导", exact: true }).click();
 });

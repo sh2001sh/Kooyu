@@ -1,4 +1,5 @@
 import type { EndpointProtocol, ModelParameters } from "./providers.js";
+export { assistantContent, isThinkingChannel, splitAssistantText } from "./assistant-content.js";
 // Browser-safe constants/helpers: clients do not ship Host validation schemas.
 export const NATIVE_HARNESS_IDS = [
   "pi",

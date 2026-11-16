@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { createHash } from "node:crypto";
-import { AsyncEntry } from "@napi-rs/keyring";
+import { secretVault } from "../credentials/vault.js";
 import {
   InMemoryCredentialStore,
   type Credential,
@@ -36,18 +36,15 @@ async function load(root: string): Promise<NativeConfiguration> {
     hashes = new Map<string, string>();
   for (const [provider, credential] of Object.entries(auth)) {
     if (!["api_key", "oauth"].includes(credential.type)) continue;
-    const entry = new AsyncEntry(
-      "Kodo",
-      `native:${createHash("sha256").update(root).digest("hex")}:${provider}`,
-    );
+    const account = `native:${createHash("sha256").update(root).digest("hex")}:${provider}`;
     const sourceHash = createHash("sha256").update(JSON.stringify(credential)).digest("hex");
     hashes.set(provider, sourceHash);
-    const cached = await entry.getPassword();
+    const cached = await secretVault().get("Kodo", account);
     const saved = cached
       ? (JSON.parse(cached) as { sourceHash: string; credential: Credential })
       : undefined;
     const current = saved?.sourceHash === sourceHash ? saved.credential : credential;
-    await entry.setPassword(JSON.stringify({ sourceHash, credential: current }));
+    await secretVault().set("Kodo", account, JSON.stringify({ sourceHash, credential: current }));
     await memory.modify(provider, async () => current);
   }
   const credentials: CredentialStore = {
@@ -59,10 +56,11 @@ async function load(root: string): Promise<NativeConfiguration> {
         async (current) => {
           const next = await fn(current);
           if (next)
-            await new AsyncEntry(
+            await secretVault().set(
               "Kodo",
               `native:${createHash("sha256").update(root).digest("hex")}:${id}`,
-            ).setPassword(JSON.stringify({ sourceHash: hashes.get(id), credential: next }));
+              JSON.stringify({ sourceHash: hashes.get(id), credential: next }),
+            );
           return next;
         },
         options,
@@ -70,10 +68,10 @@ async function load(root: string): Promise<NativeConfiguration> {
     },
     async delete(id, options) {
       await memory.delete(id, options);
-      await new AsyncEntry(
+      await secretVault().delete(
         "Kodo",
         `native:${createHash("sha256").update(root).digest("hex")}:${id}`,
-      ).deletePassword();
+      );
     },
   };
   return {

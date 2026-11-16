@@ -55,10 +55,10 @@ export function SetupModel({
       }}
     >
       <div className="setup-model-info">
-        <strong>{missing ? "这个模型还缺少能力参数" : "主模型参数"}</strong>
+        <strong>{missing ? "模型能力参数" : "主模型参数"}</strong>
         <p>
           {missing
-            ? "请从服务商文档确认后填写，Kooyu 不会替未知参数猜默认值。"
+            ? "参数待指定"
             : "上下文 " +
               p.contextWindow!.toLocaleString() +
               " · 最大输出 " +

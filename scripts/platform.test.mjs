@@ -54,7 +54,7 @@ test("explicit non-JSON services produce a readable port conflict error", async 
       { KODO_HOST_URL: `http://127.0.0.1:${server.address().port}` },
       async () => {
         await assert.rejects(ensureHost(), (error) => {
-          assert.match(error.message, /不是有效的 JSON.*端口/);
+          assert.match(error.message, /无效 JSON.*端口.*占用/);
           assert.doesNotMatch(error.message, /Unexpected token/);
           return true;
         });

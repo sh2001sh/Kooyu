@@ -2,6 +2,8 @@
 import { createInterface } from "node:readline";
 import { appendFileSync } from "node:fs";
 import { crc32 } from "node:zlib";
+import { createHash } from "node:crypto";
+const uploads = new Map();
 const mode = process.argv[2];
 let initialized = false;
 let config = [
@@ -109,6 +111,7 @@ for await (const line of createInterface({ input: process.stdin })) {
             protocolVersion: 1,
             agentCapabilities: {
               loadSession: true,
+              ...(process.env.SYNTHETIC_ACP_IMAGE ? { promptCapabilities: { image: true } } : {}),
               ...(process.env.SYNTHETIC_ACP_RESUME
                 ? { sessionCapabilities: { resume: true } }
                 : {}),
@@ -188,6 +191,7 @@ for await (const line of createInterface({ input: process.stdin })) {
         model,
         displayName: model,
         supportedReasoningEfforts: [{ reasoningEffort: "native-deep" }],
+        inputModalities: model === "model-a" ? ["text", "image"] : ["text"],
       })),
       nextCursor: null,
     };
@@ -333,6 +337,25 @@ for await (const line of createInterface({ input: process.stdin })) {
       atRevision: 2,
       atLogEpoch: "epoch-test",
     };
+  else if (mode === "zcode" && r.method === "v4/attachment/begin") {
+    uploads.set(r.params.uploadId, { ...r.params, chunks: [] });
+    result = { state: "staging", uploadId: r.params.uploadId, nextChunkIndex: 0 };
+  } else if (mode === "zcode" && r.method === "v4/attachment/chunk") {
+    const upload = uploads.get(r.params.uploadId);
+    if (r.params.chunkIndex !== upload.chunks.length) throw new Error("Invalid chunk index");
+    upload.chunks.push(Buffer.from(r.params.dataBase64, "base64"));
+    result = { uploadId: r.params.uploadId, nextChunkIndex: upload.chunks.length };
+  } else if (mode === "zcode" && r.method === "v4/attachment/commit") {
+    const upload = uploads.get(r.params.uploadId);
+    const bytes = Buffer.concat(upload.chunks);
+    if (
+      bytes.length !== upload.totalBytes ||
+      upload.chunks.length !== upload.totalChunks ||
+      `sha256:${createHash("sha256").update(bytes).digest("hex")}` !== upload.checksum
+    )
+      throw new Error("Invalid uploaded bytes");
+    result = { ref: `attachment:${r.params.uploadId}` };
+  } else if (mode === "zcode" && r.method === "v4/attachment/abort") result = {};
   else if (mode === "dsh" && r.method === "session/prompt") {
     result = { messageId: "native-message-test" };
     if (process.env.SYNTHETIC_DSH_STATUS) {

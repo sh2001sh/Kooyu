@@ -38,14 +38,11 @@ export function GeneralSettings({ snapshot }: { snapshot: Snapshot }) {
           .finally(() => setBusy(false));
       }}
     >
-      <SettingsPage title={t("nav.general")} description={t("general.desc")}>
+      <SettingsPage title={t("nav.general")}>
         {loadError && <p className="sx-note is-error">{loadError}</p>}
 
         <SettingsSection title="首次设置引导">
-          <SettingsRow
-            label="重新检查主 Agent 与执行引擎"
-            description="添加 API、选择主模型，并检测或安装 Harness。已有配置会保留。"
-          >
+          <SettingsRow label="重新检查主 Agent 与执行引擎">
             <button
               type="button"
               onClick={() => window.dispatchEvent(new Event("kooyu:open-setup"))}

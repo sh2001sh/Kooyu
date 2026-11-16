@@ -276,7 +276,18 @@ test("conversation grants future creation and creates one linked cross-harness h
       mode: "create-and-control",
       limits: { maxContinuations: 3 },
     });
+    assert.equal(f.store.records("project-grant").length, 0);
+    assert.throws(
+      () =>
+        f.service.createManagedDraft(f.controller.id, randomUUID(), {
+          projectId: f.project.id,
+          harnessId: "pi",
+          title: "Before approval",
+        }),
+      /新建会话需要用户授权项目范围/,
+    );
     await f.approve(grant);
+    assert.equal(f.store.records("project-grant").length, 1);
     const created = f.service.createManagedDraft(f.controller.id, randomUUID(), {
       projectId: f.project.id,
       harnessId: "pi",
@@ -387,6 +398,60 @@ test("harness_update renames after confirmation, archives with confirmation, and
       /移出本项目/,
     );
     assert.equal(f.store.session(f.target.id).projectId, f.project.id);
+  } finally {
+    await f.close();
+  }
+});
+
+test("global main creates projects only after approval, persists deduplication, and grants no execution authority", async () => {
+  const f = await fixture();
+  try {
+    const id = randomUUID();
+    const input = { name: "Created from mobile main", rootPath: f.service.dataDir };
+    const before = f.store.projects().length;
+    const pending = f.call(f.controller, "harness_project", input, id);
+    assert.equal(f.store.projects().length, before);
+    const result = (await f.approve(pending)) as Wire;
+    assert.equal(result.project.name, input.name);
+    assert.equal(result.workspaces.length, 1);
+    assert.equal(f.store.projects().length, before + 1);
+    assert.deepEqual(await f.call(f.controller, "harness_project", input, id), result);
+    assert.equal(f.store.projects().length, before + 1);
+    assert.equal(f.connections.length, 0);
+    assert.equal(f.store.records("project-grant").length, 0);
+    await assert.rejects(
+      f.call(f.controller, "harness_project", { name: "different" }, id),
+      /不同内容/,
+    );
+  } finally {
+    await f.close();
+  }
+});
+
+test("project creation denial is durable and project scope cannot escape", async () => {
+  const f = await fixture();
+  try {
+    const count = f.store.projects().length;
+    const id = randomUUID();
+    const pending = f.call(f.controller, "harness_project", { name: "Declined project" }, id);
+    const rejected = assert.rejects(pending, /未允许/);
+    await f.approve(pending, "decline").catch(() => {});
+    await rejected;
+    await assert.rejects(
+      f.call(f.controller, "harness_project", { name: "Declined project" }, id),
+      /未允许/,
+    );
+    const scoped = f.service.createDraft({
+      title: "Project main",
+      harnessId: "kodo",
+      kind: "supervisor",
+      projectId: f.project.id,
+    });
+    await assert.rejects(
+      f.call(scoped, "harness_project", { name: "Outside scope" }),
+      /全局主对话/,
+    );
+    assert.equal(f.store.projects().length, count);
   } finally {
     await f.close();
   }

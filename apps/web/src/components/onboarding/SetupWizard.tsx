@@ -7,11 +7,7 @@ import { MobiusLoader } from "../MobiusLoader";
 import { SetupConnection } from "./SetupConnection";
 import { SetupEngines } from "./SetupEngines";
 
-const steps = [
-  { title: "连接主 Agent", description: "可选 · 添加 API，选择主模型" },
-  { title: "准备执行引擎", description: "检测或安装需要的 Harness" },
-  { title: "开始使用", description: "确认配置，进入工作台" },
-];
+const steps = [{ title: "模型连接" }, { title: "执行引擎" }, { title: "工作台" }];
 
 export function SetupWizard({
   initial,
@@ -82,12 +78,7 @@ export function SetupWizard({
       <div className="setup-layout">
         <aside className="setup-sidebar" aria-label="首次设置进度">
           <div className="setup-intro">
-            <h1>
-              让想法，
-              <br />
-              有人接着做。
-            </h1>
-            <p>按需连接主模型，或直接使用熟悉的执行工具。</p>
+            <h1>KOOYU</h1>
           </div>
           <ol className="setup-steps">
             {steps.map((step, i) => (
@@ -101,37 +92,19 @@ export function SetupWizard({
                 </span>
                 <div>
                   <strong>{step.title}</strong>
-                  <small>{step.description}</small>
                 </div>
               </li>
             ))}
           </ol>
-          <div className="setup-sidebar-note">
-            <ShieldCheck size={17} />
-            <p>密钥交由本机系统凭据库保存。引导不会自动发送模型消息。</p>
-          </div>
         </aside>
         <main className="setup-main" aria-label="首次设置">
           <div className="setup-content">
             <div className="setup-mobile-progress" aria-hidden="true">
-              第 {state.step + 1} 步，共 3 步 · {steps[state.step]?.title}
+              {state.step + 1} / 3 · {steps[state.step]?.title}
             </div>
             <h2 ref={heading} tabIndex={-1}>
-              {state.step === 0
-                ? "为主 Agent 连接模型（可选）"
-                : state.step === 1
-                  ? "接上你想用的执行引擎"
-                  : "你的工作台，准备好了"}
+              {state.step === 0 ? "模型配置" : state.step === 1 ? "执行引擎" : "工作台"}
             </h2>
-            <p className="setup-lead">
-              {state.step === 0
-                ? "想让 Kooyu 理解目标、安排任务时再连接模型。你也可以跳过，直接使用各个 Harness。"
-                : state.step === 1
-                  ? "已安装的工具会自动识别。选装需要的即可，主 Agent API 不影响原生引擎的独立使用。"
-                  : binding
-                    ? "主 Agent 已保存配置。执行引擎沿用各自的登录与设置，随时可以在设置中调整。"
-                    : "你可以直接使用各个 Harness；主 Agent 的 API 随时可以到设置中补充。"}
-            </p>
             {error && (
               <div className="setup-error" role="alert">
                 <p>{error}</p>

@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { createRoot } from "react-dom/client";
 import {
   ChevronLeft,
@@ -35,6 +43,8 @@ import { DraftWorkspace, type DraftPreset } from "./components/DraftWorkspace";
 import { HarnessBadge } from "./components/KodoBrand";
 import { DeleteDialog, ProjectModal, ProjectEditModal } from "./components/Modals";
 import { SessionDetail } from "./components/SessionDetail";
+import { GoalPill, useGoals } from "./components/GoalPanel";
+import { moveAttachments } from "./components/Attachments";
 import { SessionRows, type SidebarViewMode } from "./components/SessionRows";
 import {
   SETTINGS_LABEL_KEYS,
@@ -48,6 +58,7 @@ import { Sidebar } from "./components/Sidebar";
 import { MobiusLoader } from "./components/MobiusLoader";
 import { SplashScreen } from "./components/SplashScreen";
 import { useT } from "./lib/i18n";
+import { Modal } from "./components/Motion";
 import { Transcript } from "./components/TranscriptView";
 import { ConversationNav } from "./components/ConversationNav";
 import {
@@ -57,6 +68,9 @@ import {
   PairScreen,
   UsagePage,
 } from "./components/UtilityPages";
+import { WorkCenter } from "./components/WorkCenter";
+import { WorkbenchHub } from "./components/WorkbenchHub";
+import { useWorkNotifications } from "./lib/work-notifications";
 import "./styles/craft-tokens.css";
 import "./styles/app.css";
 import "./styles/settings.css";
@@ -96,7 +110,19 @@ function App() {
     localStorage.getItem("kodo.viewMode") === "harness" ? "harness" : "project",
   );
   const [showArchived, setShowArchived] = useState(false);
-  const [compose, setCompose] = useState("");
+  const draftStorageKey = (id: string) => `kooyu.draft:${hostPath}:${id}`;
+  const [compose, setCompose] = useState(() =>
+    selected ? (localStorage.getItem(draftStorageKey(selected)) ?? "") : "",
+  );
+  const composeValue = useRef(compose);
+  composeValue.current = compose;
+  const readingPositions = useRef(new Map<string, { top: number; bottom: boolean }>());
+  const restorePosition = useRef<string | null>(null);
+  const [editingMessage, setEditingMessage] = useState<{
+    sessionId: string;
+    eventId: string;
+    text: string;
+  }>();
   const [inDraft, setInDraft] = useState(false);
   const [draftPreset, setDraftPreset] = useState<DraftPreset>({ harnessId: "kodo", nonce: 0 });
   const [projectForm, setProjectForm] = useState(false);
@@ -107,6 +133,11 @@ function App() {
     | null
   >(null);
   const [detail, setDetail] = useState("");
+  const [hubContext, setHubContext] = useState({
+    project: "",
+    tab: "work" as "work" | "artifacts" | "project",
+    nonce: 0,
+  });
   const [filePreview, setFilePreview] = useState<{
     sessionId: string;
     path: string;
@@ -129,6 +160,13 @@ function App() {
   snapshotRef.current = snapshot;
   const draftNonceRef = useRef(0);
   const scroll = useRef<HTMLDivElement>(null);
+  const historyScroll = useRef<{
+    height: number;
+    top: number;
+    anchorId?: string;
+    anchorTop?: number;
+  } | null>(null);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const bottom = useRef(true);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   selectedRef.current = selected;
@@ -139,25 +177,40 @@ function App() {
         projectId?: string | null;
         workspaceId?: string | null;
         harnessId?: HarnessId;
+        text?: string;
       } = {},
     ) => {
+      if (selectedRef.current)
+        localStorage.setItem(
+          `kooyu.draft:${hostPath}:${selectedRef.current}`,
+          composeValue.current,
+        );
       draftNonceRef.current += 1;
       // Reuse a folder so "+" in a group does not ask for the path again: the folder of
       // the latest conversation in that project, else the last folder chosen anywhere.
       const sessions = snapshotRef.current?.sessions ?? [];
       const workspaces = snapshotRef.current?.workspaces ?? [];
       const known = (id: string | null | undefined) =>
-        id && workspaces.some((w) => w.id === id) ? id : null;
+        id && workspaces.some((w) => w.id === id && w.hostId === snapshotRef.current?.hostId)
+          ? id
+          : null;
       const latestIn = (projectId: string | null | undefined) =>
         [...sessions]
-          .filter((s) => s.workspaceId && (projectId ? s.projectId === projectId : true))
+          .filter(
+            (s) =>
+              s.workspaceId &&
+              (!s.executorId || s.executorId === "local") &&
+              (projectId ? s.projectId === projectId : true),
+          )
           .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]?.workspaceId ?? null;
       const workspaceId =
         preset.workspaceId !== undefined
           ? preset.workspaceId
           : preset.projectId
             ? (known(latestIn(preset.projectId)) ??
-              workspaces.find((w) => w.projectId === preset.projectId)?.id ??
+              workspaces.find(
+                (w) => w.projectId === preset.projectId && w.hostId === snapshotRef.current?.hostId,
+              )?.id ??
               null)
             : (known(localStorage.getItem("kodo.lastWorkspace")) ?? known(latestIn(null)));
       const projectId =
@@ -177,6 +230,7 @@ function App() {
         workspaceId,
         harnessId: preset.harnessId ?? preferences.defaultHarnessId,
         nonce: draftNonceRef.current,
+        text: preset.text,
       });
       setMobileNav(false);
     },
@@ -403,36 +457,65 @@ function App() {
     const id = selectedRef.current;
     if (!id) return;
     const request = ++pageRequest.current;
+    const priorHistory = historyRef.current;
     setAnchorEventId(undefined);
     historyRef.current = before !== undefined;
-    setHistoryMode(historyRef.current);
-    const r = await api<{
-      events: RuntimeEvent[];
-      commands: Command[];
-      olderCursor: number | null;
-    }>(`/sessions/${id}?${before === undefined ? "tail=300" : `before=${before}`}`);
-    if (selectedRef.current !== id || request !== pageRequest.current) return;
-    if (before === undefined) {
-      bottom.current = true;
-      setEvents((current) =>
-        [
-          ...new Map(
-            [
-              ...r.events,
-              ...current.filter((e) => e.sequence > (r.events.at(-1)?.sequence ?? 0)),
-            ].map((e) => [e.sequence, e]),
-          ).values(),
-        ]
-          .sort((a, b) => a.sequence - b.sequence)
-          .slice(-300),
-      );
-    } else {
-      bottom.current = false;
-      setEvents(r.events);
-      scroll.current?.scrollTo({ top: 0 });
+    setLoadingHistory(true);
+    try {
+      const r = await api<{
+        events: RuntimeEvent[];
+        commands: Command[];
+        olderCursor: number | null;
+      }>(`/sessions/${id}?${before === undefined ? "tail=300" : `before=${before}`}`);
+      if (selectedRef.current !== id || request !== pageRequest.current) return;
+      if (before === undefined) {
+        historyScroll.current = null;
+        bottom.current = true;
+        setShowScrollToBottom(false);
+        setEvents((current) =>
+          [
+            ...new Map(
+              [
+                ...r.events,
+                ...current.filter((e) => e.sequence > (r.events.at(-1)?.sequence ?? 0)),
+              ].map((e) => [e.sequence, e]),
+            ).values(),
+          ]
+            .sort((a, b) => a.sequence - b.sequence)
+            .slice(-300),
+        );
+      } else {
+        bottom.current = false;
+        const el = scroll.current;
+        const anchor =
+          el &&
+          [...el.querySelectorAll<HTMLElement>('[id^="message-"]')].find(
+            (row) => row.getBoundingClientRect().bottom > el.getBoundingClientRect().top,
+          );
+        const content = anchor?.querySelector(".markdown") ?? anchor;
+        historyScroll.current = el
+          ? {
+              height: el.scrollHeight,
+              top: el.scrollTop,
+              anchorId: anchor?.id,
+              anchorTop: content?.getBoundingClientRect().top,
+            }
+          : null;
+        setEvents((current) =>
+          [...new Map([...r.events, ...current].map((e) => [e.sequence, e])).values()].sort(
+            (a, b) => a.sequence - b.sequence,
+          ),
+        );
+      }
+      setCommands(r.commands);
+      setOlderCursor(r.olderCursor);
+      setHistoryMode(before !== undefined);
+    } catch (error) {
+      if (request === pageRequest.current) historyRef.current = priorHistory;
+      throw error;
+    } finally {
+      if (request === pageRequest.current) setLoadingHistory(false);
     }
-    setCommands(r.commands);
-    setOlderCursor(r.olderCursor);
   };
 
   useEffect(() => {
@@ -441,6 +524,8 @@ function App() {
     const eventId = searchFocus?.sessionId === selected ? searchFocus.eventId : undefined;
     localStorage.setItem("kodo.session" + hostPath, selected);
     setEvents([]);
+    historyScroll.current = null;
+    setLoadingHistory(false);
     setCommands([]);
     setDetail("");
     setShowScrollToBottom(false);
@@ -491,6 +576,20 @@ function App() {
     };
   }, [selected, searchFocus]);
 
+  useLayoutEffect(() => {
+    const prior = historyScroll.current;
+    if (prior && scroll.current) {
+      historyScroll.current = null;
+      const anchor = prior.anchorId ? document.getElementById(prior.anchorId) : null;
+      const content = anchor?.querySelector(".markdown") ?? anchor;
+      scroll.current.scrollTop =
+        prior.top +
+        (content && prior.anchorTop !== undefined
+          ? content.getBoundingClientRect().top - prior.anchorTop
+          : scroll.current.scrollHeight - prior.height);
+    }
+  }, [events]);
+
   useEffect(() => {
     if (anchorEventId)
       scroll.current
@@ -499,7 +598,25 @@ function App() {
   }, [events, anchorEventId]);
 
   useEffect(() => {
-    if (bottom.current) {
+    if (!selected) return;
+    const timer = setTimeout(() => {
+      localStorage.setItem(draftStorageKey(selected), compose);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [selected, compose]);
+
+  useEffect(() => {
+    if (bottom.current && !historyRef.current && !anchorEventId) {
+      if (restorePosition.current === selected && events.length) {
+        restorePosition.current = null;
+        const saved = selected ? readingPositions.current.get(selected) : undefined;
+        if (saved && !saved.bottom && scroll.current) {
+          bottom.current = false;
+          scroll.current.scrollTop = saved.top;
+          setShowScrollToBottom(true);
+          return;
+        }
+      }
       scroll.current?.scrollTo({ top: scroll.current.scrollHeight, behavior: "instant" });
     }
   }, [events]);
@@ -567,10 +684,15 @@ function App() {
     };
   }, [query]);
 
+  useWorkNotifications(scope === "health" || scope === "inbox" ? null : selected, (id) => {
+    setScope("all");
+    setSelected(id);
+  });
   const session = snapshot?.sessions.find((s) => s.id === selected);
+  const { goals, reload: reloadGoals } = useGoals(session, events);
   const project = snapshot?.projects.find((p) => p.id === session?.projectId);
   const workspace = snapshot?.workspaces.find((w) => w.id === session?.workspaceId);
-  const isSpecial = ["health", "usage", "devices", "inbox"].includes(scope);
+  const isSpecial = ["health", "usage", "devices", "inbox", "work", "workbench"].includes(scope);
   const isSettings = scope === "health";
   const pending = snapshot?.inbox.filter((i) => !i.resolved && !i.read) ?? [];
 
@@ -605,23 +727,44 @@ function App() {
       matchesSessionFilter(s),
   );
 
+  const openWorkbench = (project = "", tab: "work" | "artifacts" | "project" = "work") => {
+    if (selected && !isSpecial) {
+      localStorage.setItem(draftStorageKey(selected), composeValue.current);
+      if (scroll.current)
+        readingPositions.current.set(selected, {
+          top: scroll.current.scrollTop,
+          bottom: bottom.current,
+        });
+    }
+    setHubContext((old) => ({ project, tab, nonce: old.nonce + 1 }));
+    setScope("workbench");
+    setDetail("");
+    setMobileNav(false);
+    setInDraft(false);
+  };
   const scopeName =
-    scope === "all"
-      ? "全部会话"
-      : scope === "masters"
-        ? "主对话"
-        : scope === "inbox"
-          ? "待处理"
-          : scope === "health"
-            ? "Harness 与配置"
-            : scope === "usage"
-              ? "用量与预算"
-              : scope === "devices"
-                ? "手机访问"
-                : (snapshot?.projects.find((p) => p.id === scope)?.name ?? "会话");
+    scope === "workbench"
+      ? "项目与工作"
+      : scope === "all"
+        ? "全部会话"
+        : scope === "masters"
+          ? "主对话"
+          : scope === "inbox"
+            ? "待处理"
+            : scope === "health"
+              ? "Harness 与配置"
+              : scope === "usage"
+                ? "用量与预算"
+                : scope === "devices"
+                  ? "手机访问"
+                  : (snapshot?.projects.find((p) => p.id === scope)?.name ?? "会话");
 
   const navigate = (next: string) => {
-    if (next === "usage" || next === "devices") {
+    if (next === "workbench") {
+      openWorkbench(snapshot?.projects.some((p) => p.id === scope) ? scope : "");
+      return;
+    }
+    if (next === "usage" || next === "devices" || next === "work") {
       setSettingsSection(next);
       next = "health";
     } else if (next === "health" && scope !== "health") {
@@ -630,7 +773,7 @@ function App() {
     setScope(next);
     setInDraft(false);
     setMobileNav(false);
-    if (!isSpecial && ["health", "usage", "devices", "inbox"].includes(next)) {
+    if (!isSpecial && ["health", "usage", "devices", "inbox", "work"].includes(next)) {
       setDetail("");
     }
   };
@@ -641,6 +784,17 @@ function App() {
   };
 
   const choose = (id: string, eventId?: string) => {
+    if (selected) {
+      localStorage.setItem(draftStorageKey(selected), composeValue.current);
+      if (scroll.current)
+        readingPositions.current.set(selected, {
+          top: scroll.current.scrollTop,
+          bottom: bottom.current,
+        });
+    }
+    setCompose(localStorage.getItem(draftStorageKey(id)) ?? "");
+    restorePosition.current = eventId ? null : id;
+    bottom.current = true;
     if (snapshotRef.current?.sessions.find((session) => session.id === id)?.unread)
       void act(() => api("/sessions/" + id, "PATCH", { unread: false }));
     pageRequest.current++;
@@ -652,8 +806,8 @@ function App() {
     setMobileNav(false);
   };
 
-  const submit = async (text: string): Promise<boolean> => {
-    if (!session || !text.trim() || !connected) return false;
+  const submit = async (text: string, attachmentIds: string[] = []): Promise<boolean> => {
+    if (!session || (!text.trim() && !attachmentIds.length) || !connected) return false;
     const idle = session.runState === "idle";
     // Show the message and the running state at once; the host confirms them shortly.
     const optimisticId = crypto.randomUUID();
@@ -665,7 +819,13 @@ function App() {
     let accepted = false;
     await act(async () => {
       try {
-        const result = await send(session.id, text, idle ? "new" : "queue", optimisticId);
+        const result = await send(
+          session.id,
+          text,
+          idle ? "new" : "queue",
+          optimisticId,
+          attachmentIds,
+        );
         setCommands((c) => [...c.filter((item) => item.id !== result.id), result]);
         setCompose("");
         accepted = true;
@@ -680,6 +840,10 @@ function App() {
   };
 
   const scrollToBottomSmooth = () => {
+    if (historyRef.current) {
+      void act(() => loadPage());
+      return;
+    }
     bottom.current = true;
     setShowScrollToBottom(false);
     scroll.current?.scrollTo({ top: scroll.current.scrollHeight, behavior: "smooth" });
@@ -791,6 +955,7 @@ function App() {
           <SessionRows
             act={act}
             onEditProject={(project) => setEditingProject(project)}
+            onOpenProjectOverview={(id) => openWorkbench(id, "project")}
             viewMode={viewMode}
             onViewModeChange={setViewMode}
             scope={scope}
@@ -868,6 +1033,10 @@ function App() {
                   </div>
                   <h1>{t(SETTINGS_LABEL_KEYS[settingsSection])}</h1>
                 </div>
+              ) : scope === "work" ? (
+                <div className="page-heading">
+                  <h1>{t("nav.work")}</h1>
+                </div>
               ) : (
                 <h1>{scopeName}</h1>
               )}
@@ -881,6 +1050,20 @@ function App() {
               </button>
             </header>
             <div className="page-content">
+              {scope === "workbench" && snapshot && (
+                <WorkbenchHub
+                  key={hubContext.nonce}
+                  snapshot={snapshot}
+                  initialProject={hubContext.project}
+                  initialTab={hubContext.tab}
+                  onOpenSession={choose}
+                  onCompose={(projectId, text) =>
+                    openNewDraft({ projectId, harnessId: "kodo", text })
+                  }
+                  onBack={selected ? () => choose(selected) : () => navigate("all")}
+                />
+              )}
+              {scope === "work" && snapshot && <WorkCenter snapshot={snapshot} />}
               {scope === "health" && snapshot && (
                 <>
                   <SettingsMobileNav
@@ -956,6 +1139,15 @@ function App() {
               <div className="chat-actions">
                 <button
                   type="button"
+                  className="icon-button"
+                  title="项目工作与成果"
+                  aria-label="项目工作与成果"
+                  onClick={() => openWorkbench(session.projectId ?? "", "artifacts")}
+                >
+                  <Layers size={18} />
+                </button>
+                <button
+                  type="button"
                   className={
                     detail === "files" || detail === "changes"
                       ? "icon-button active"
@@ -999,6 +1191,7 @@ function App() {
               <span className={`runtime-pill ${isSupervised ? "is-supervised" : ""}`}>
                 {isSupervised ? "自动继续已启用" : "自动继续未启用"}
               </span>
+              <GoalPill goals={goals} onOpen={() => setDetail("goals")} />
               {workspace && (
                 <span className="runtime-pill runtime-pill--path" title={workspace.rootPath}>
                   <Folder size={12} />
@@ -1032,13 +1225,18 @@ function App() {
                         {olderCursor !== null && (
                           <button
                             type="button"
+                            disabled={loadingHistory}
                             onClick={() => void act(() => loadPage(olderCursor))}
                           >
                             更早记录
                           </button>
                         )}
                         {historyMode && (
-                          <button type="button" onClick={() => void act(() => loadPage())}>
+                          <button
+                            type="button"
+                            disabled={loadingHistory}
+                            onClick={() => void act(() => loadPage())}
+                          >
                             返回最新记录
                           </button>
                         )}
@@ -1048,6 +1246,19 @@ function App() {
                       </div>
                       <Transcript
                         events={events}
+                        onEdit={(eventId, text) =>
+                          setEditingMessage({ sessionId: session.id, eventId, text })
+                        }
+                        onBranch={(eventId) =>
+                          void act(async () => {
+                            const next = await api<Session>(
+                              `/sessions/${session.id}/branch`,
+                              "POST",
+                              { requestId: crypto.randomUUID(), eventId },
+                            );
+                            setSelected(next.id);
+                          })
+                        }
                         onOpenFile={(path) => {
                           setFilePreview({ sessionId: session.id, path, key: Date.now() });
                           setDetail("files");
@@ -1089,13 +1300,18 @@ function App() {
                           {olderCursor !== null && (
                             <button
                               type="button"
+                              disabled={loadingHistory}
                               onClick={() => void act(() => loadPage(olderCursor))}
                             >
                               更早记录
                             </button>
                           )}
                           {historyMode && (
-                            <button type="button" onClick={() => void act(() => loadPage())}>
+                            <button
+                              type="button"
+                              disabled={loadingHistory}
+                              onClick={() => void act(() => loadPage())}
+                            >
                               返回最新记录
                             </button>
                           )}
@@ -1257,6 +1473,8 @@ function App() {
                     usage={sessionUsage}
                     act={act}
                     onSelectDetail={(next) => setDetail(next)}
+                    goals={goals}
+                    reloadGoals={reloadGoals}
                     onClose={() => setDetail("")}
                     onDeleted={() => {
                       setSelected(null);
@@ -1303,6 +1521,7 @@ function App() {
             }}
             onFirstSendFailed={async (s, message) => {
               setOptimistic((current) => (current?.sessionId === s.id ? null : current));
+              moveAttachments("draft", s.id);
               if (selectedRef.current === s.id) setCompose(message);
               await refresh().catch(() => undefined);
             }}
@@ -1394,6 +1613,39 @@ function App() {
         />
       )}
 
+      {editingMessage && (
+        <Modal title="编辑消息" onClose={() => setEditingMessage(undefined)}>
+          <form
+            className="ios-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const edited = editingMessage;
+              void act(async () => {
+                const next = await api<Session>(`/sessions/${edited.sessionId}/branch`, "POST", {
+                  requestId: crypto.randomUUID(),
+                  eventId: edited.eventId,
+                  edit: true,
+                });
+                setSelected(next.id);
+                setCompose(edited.text);
+                setEditingMessage(undefined);
+              });
+            }}
+          >
+            <p>修改后在新聊天中继续，带入此消息之前的对话文本。</p>
+            <textarea
+              aria-label="消息内容"
+              value={editingMessage.text}
+              rows={6}
+              maxLength={200000}
+              onChange={(e) => setEditingMessage({ ...editingMessage, text: e.target.value })}
+            />
+            <button type="submit" disabled={busy || !editingMessage.text.trim()}>
+              保存到新聊天草稿
+            </button>
+          </form>
+        </Modal>
+      )}
       {editingProject && (
         <ProjectEditModal
           key={editingProject.id}

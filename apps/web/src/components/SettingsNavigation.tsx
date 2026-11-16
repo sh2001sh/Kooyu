@@ -1,6 +1,7 @@
 import { useT, type MessageKey } from "../lib/i18n";
 import {
   Activity,
+  Brain,
   ArrowLeft,
   Cpu,
   PanelLeft,
@@ -13,7 +14,7 @@ import {
 } from "lucide-react";
 
 export type SettingsSectionId =
-  "general" | "harnesses" | "providers" | "usage" | "devices" | "advanced";
+  "general" | "harnesses" | "providers" | "usage" | "devices" | "advanced" | "work" | "memory";
 
 export interface SettingsSectionMeta {
   id: SettingsSectionId;
@@ -24,6 +25,8 @@ export interface SettingsSectionMeta {
 }
 
 export const SETTINGS_SECTIONS: Record<SettingsSectionId, SettingsSectionMeta> = {
+  memory: { id: "memory", label: "全局记忆", short: "记忆", group: "偏好", Icon: Brain },
+  work: { id: "work", label: "工作中心", short: "工作", group: "数据与设备", Icon: Activity },
   general: { id: "general", label: "通用", short: "通用", group: "偏好", Icon: Settings2 },
   harnesses: { id: "harnesses", label: "引擎", short: "引擎", group: "引擎与模型", Icon: Cpu },
   providers: {
@@ -52,6 +55,8 @@ export const SETTINGS_SECTIONS: Record<SettingsSectionId, SettingsSectionMeta> =
 
 /** i18n keys for section labels and group titles. */
 export const SETTINGS_LABEL_KEYS: Record<SettingsSectionId, MessageKey> = {
+  memory: "nav.memory",
+  work: "nav.work",
   general: "nav.general",
   harnesses: "nav.engines",
   providers: "nav.providers",
@@ -61,9 +66,9 @@ export const SETTINGS_LABEL_KEYS: Record<SettingsSectionId, MessageKey> = {
 };
 
 export const SETTINGS_GROUPS: Array<{ title: MessageKey; items: SettingsSectionId[] }> = [
-  { title: "nav.group.preferences", items: ["general"] },
+  { title: "nav.group.preferences", items: ["general", "memory"] },
   { title: "nav.group.models", items: ["harnesses", "providers"] },
-  { title: "nav.group.account", items: ["usage", "devices", "advanced"] },
+  { title: "nav.group.account", items: ["work", "usage", "devices", "advanced"] },
 ];
 
 export type SettingsCounts = Partial<Record<SettingsSectionId, string | number>>;
@@ -188,6 +193,8 @@ export function SettingsMobileNav({
 }) {
   const ordered: SettingsSectionId[] = [
     "general",
+    "memory",
+    "work",
     "harnesses",
     "providers",
     "usage",

@@ -36,16 +36,12 @@ import { ComposerModelControls } from "./ComposerModelControls";
 import { PermissionControls } from "./PermissionControls";
 import { DirectoryPicker } from "./DirectoryPicker";
 import { ProjectModal } from "./Modals";
-import {
-  messageWithTextAttachments,
-  TextAttachmentButton,
-  TextAttachmentList,
-  useTextAttachments,
-} from "./TextAttachments";
+import { AttachmentButton, AttachmentList, useAttachments } from "./Attachments";
 
 type Action = (work: () => Promise<unknown>) => Promise<void>;
 
 export interface DraftPreset {
+  text?: string;
   projectId?: string | null;
   workspaceId?: string | null;
   harnessId?: HarnessId;
@@ -104,8 +100,11 @@ export function DraftWorkspace({
 
   const initialProject = preset.projectId ?? "";
   const initialWorkspace =
-    preset.workspaceId ??
-    (initialProject ? (workspaces.find((w) => w.projectId === initialProject)?.id ?? "") : "");
+    workspaces.find((w) => w.id === preset.workspaceId && w.hostId === snapshot?.hostId)?.id ??
+    (initialProject
+      ? (workspaces.find((w) => w.projectId === initialProject && w.hostId === snapshot?.hostId)
+          ?.id ?? "")
+      : "");
 
   const [harnessId, setHarnessId] = useState<HarnessId>(preset.harnessId ?? "kodo");
   const bindings = useMemo(
@@ -114,9 +113,18 @@ export function DraftWorkspace({
   );
   const [project, setProject] = useState<string>(initialProject);
   const [workspace, setWorkspace] = useState<string>(initialWorkspace);
+  const [executorId, setExecutorId] = useState("local");
+  const [executors, setExecutors] = useState<
+    Array<{ id: string; hostId: string; name: string; status: string; capabilities: string[] }>
+  >([]);
+  useEffect(() => {
+    void api<typeof executors>("/executors")
+      .then(setExecutors)
+      .catch(() => {});
+  }, []);
   const [customPath, setCustomPath] = useState("");
   const [title, setTitle] = useState("");
-  const [compose, setCompose] = useState("");
+  const [compose, setCompose] = useState(preset.text ?? "");
   const [modelChoice, setModelChoice] = useState("inherit");
   const [customModel, setCustomModel] = useState("");
   const [modelQuery, setModelQuery] = useState("");
@@ -140,7 +148,7 @@ export function DraftWorkspace({
     branch: string | null;
     git: boolean;
   }>();
-  const attachments = useTextAttachments();
+  const attachments = useAttachments("draft", null);
   const firstSendRef = useRef(false);
   const [firstMessage, setFirstMessage] = useState<string | null>(null);
 
@@ -198,13 +206,19 @@ export function DraftWorkspace({
       const nextHarness = preset.harnessId ?? "kodo";
       const nextProject = preset.projectId ?? "";
       const matchedWs = nextProject
-        ? workspaces.find((w) => w.projectId === nextProject)
+        ? workspaces.find((w) => w.projectId === nextProject && w.hostId === snapshot?.hostId)
         : undefined;
       setHarnessId(nextHarness);
       setProject(nextProject);
-      setWorkspace(preset.workspaceId ?? matchedWs?.id ?? "");
+      setWorkspace(
+        workspaces.find((w) => w.id === preset.workspaceId && w.hostId === snapshot?.hostId)?.id ??
+          matchedWs?.id ??
+          "",
+      );
+      setExecutorId("local");
       setCustomPath("");
       setTitle("");
+      setCompose(preset.text ?? "");
       setModelChoice("inherit");
       setProviderChoiceId(undefined);
       setCustomModel("");
@@ -219,7 +233,7 @@ export function DraftWorkspace({
   }, [preset.nonce]);
 
   useEffect(() => {
-    if (!workspace || workspace === "__new_path__") {
+    if (executorId !== "local" || !workspace || workspace === "__new_path__") {
       setWorkspaceContext(undefined);
       return;
     }
@@ -235,7 +249,7 @@ export function DraftWorkspace({
     return () => {
       current = false;
     };
-  }, [workspace]);
+  }, [workspace, executorId]);
 
   // Auto-grow composer textarea smoothly without browser resize grip
   useEffect(() => {
@@ -253,7 +267,7 @@ export function DraftWorkspace({
   const nativeDiscoveredModels = cachedPayload?.models ?? harnessDesc?.models ?? [];
 
   useEffect(() => {
-    if (modelsCache[harnessId]) return;
+    if (executorId !== "local" || modelsCache[harnessId]) return;
     let cancelled = false;
     setLoadingModelHarness(harnessId);
     setModelLoadError("");
@@ -270,14 +284,16 @@ export function DraftWorkspace({
     return () => {
       cancelled = true;
     };
-  }, [harnessId, modelsCache]);
+  }, [harnessId, modelsCache, executorId]);
 
   const orderedWorkspaces = useMemo(() => {
-    if (!project) return workspaces;
-    const matched = workspaces.filter((w) => w.projectId === project);
-    const others = workspaces.filter((w) => w.projectId !== project);
+    const hostId = executors.find((e) => e.id === executorId)?.hostId ?? snapshot?.hostId;
+    const available = workspaces.filter((w) => w.hostId === hostId);
+    if (!project) return available;
+    const matched = available.filter((w) => w.projectId === project);
+    const others = available.filter((w) => w.projectId !== project);
     return [...matched, ...others];
-  }, [project, workspaces]);
+  }, [project, workspaces, executorId, executors, snapshot?.hostId]);
 
   const inherited = useMemo(
     () =>
@@ -336,6 +352,8 @@ export function DraftWorkspace({
   const createSessionRecord = async (fallbackTitle?: string): Promise<Session> => {
     let workspaceId = workspace && workspace !== "__new_path__" ? workspace : null;
     if (workspace === "__new_path__" && customPath.trim()) {
+      if (executorId !== "local")
+        throw new Error("远程会话请选择节点已登记的目录；可在工作中心登记节点路径。");
       workspaceId = (
         await api<{ id: string }>("/workspaces", "POST", {
           projectId: project || null,
@@ -376,7 +394,7 @@ export function DraftWorkspace({
       kind,
       projectId: project || null,
       workspaceId,
-      ...bindingPayload,
+      ...(executorId !== "local" ? { executorId, bindingId: null, model: null } : bindingPayload),
       ...(reasoning ? { reasoning } : {}),
       ...(["codex", "claude-code", "zcode", "opencode", "pi", "kodo", "kimi-code"].includes(
         harnessId,
@@ -395,18 +413,19 @@ export function DraftWorkspace({
   };
 
   const handleSendFirst = () => {
-    const text = messageWithTextAttachments(compose, attachments.attachments);
+    const text = compose;
+    const attachmentIds = attachments.readyIds;
     if (
-      !text.trim() ||
+      (!text.trim() && !attachmentIds.length) ||
       !connected ||
       busy ||
       firstSendRef.current ||
       sendBlockedReason ||
-      attachments.loading
+      attachments.uploading
     )
       return;
-    if (text.length > 200000) {
-      attachments.setError("消息与文本附件合计不能超过 200,000 字符。");
+    if (attachments.failed) {
+      attachments.setError("有附件上传失败，请移除后再发送。");
       return;
     }
     firstSendRef.current = true;
@@ -418,7 +437,7 @@ export function DraftWorkspace({
       onFirstSendStarted(created, text, requestId);
       try {
         // A fresh draft is idle: deliver immediately rather than through the queue.
-        await send(created.id, text, "new", requestId);
+        await send(created.id, text, "new", requestId, attachmentIds);
         attachments.clear();
         setCompose("");
         setTitle("");
@@ -438,7 +457,10 @@ export function DraftWorkspace({
     (!["kodo", "pi"].includes(harnessId) || (harnessId === "kodo" && !!project)) &&
     (!workspace || (workspace === "__new_path__" && !customPath.trim()))
       ? "请先选择工作位置。"
-      : modelSupport === "binding-required" && modelChoice === "inherit" && !inherited.binding
+      : executorId === "local" &&
+          modelSupport === "binding-required" &&
+          modelChoice === "inherit" &&
+          !inherited.binding
         ? "请先选择 Harness 绑定。"
         : "";
   // For Kodo the project picker sets the management scope, not the working folder.
@@ -618,7 +640,11 @@ export function DraftWorkspace({
                   className={`ios-menu__item ${project === p.id ? "is-selected" : ""}`}
                   onClick={() => {
                     setProject(p.id);
-                    const matched = workspaces.find((w) => w.projectId === p.id);
+                    const hostId =
+                      executors.find((e) => e.id === executorId)?.hostId ?? snapshot?.hostId;
+                    const matched = workspaces.find(
+                      (w) => w.projectId === p.id && w.hostId === hostId,
+                    );
                     setWorkspace(matched?.id ?? "");
                     setProjectOpen(false);
                   }}
@@ -714,17 +740,20 @@ export function DraftWorkspace({
                 className="ios-menu__item"
                 onClick={() => {
                   setWorkspaceOpen(false);
-                  setShowDirectoryPicker(true);
+                  if (executorId === "local") setShowDirectoryPicker(true);
                 }}
+                disabled={executorId !== "local"}
               >
                 <FolderOpen size={14} className="ios-menu__icon" aria-hidden="true" />
-                <span className="ios-menu__title">选择本机文件夹</span>
+                <span className="ios-menu__title">
+                  {executorId === "local" ? "选择本机文件夹" : "在工作中心登记节点目录"}
+                </span>
               </button>
             </IosPopover>
             {selectedWorkspace && (
               <span className="draft-context-meta" title={`Host ${selectedWorkspace.hostId}`}>
                 <Monitor size={12} aria-hidden="true" />
-                本机
+                {executorId === "local" ? "本机" : "远程节点"}
               </span>
             )}
             {workspaceContext?.git && (
@@ -812,7 +841,7 @@ export function DraftWorkspace({
                     e.currentTarget.style.setProperty("--my", `${e.clientY - r.top}px`);
                   }}
                 >
-                  <TextAttachmentList
+                  <AttachmentList
                     attachments={attachments.attachments}
                     error={attachments.error}
                     disabled={busy}
@@ -841,8 +870,10 @@ export function DraftWorkspace({
                     aria-label="消息"
                     placeholder={
                       connected
-                        ? `问问 ${harnessId === "kodo" ? "Kooyu 主对话" : HARNESS_NAMES[harnessId]}，或输入任务说明…`
-                        : "Host 未连接，暂时无法发送"
+                        ? harnessId === "kodo"
+                          ? "Kooyu"
+                          : HARNESS_NAMES[harnessId]
+                        : "Host 未连接"
                     }
                     value={compose}
                     onChange={(e) => setCompose(e.target.value)}
@@ -854,10 +885,33 @@ export function DraftWorkspace({
                     }}
                   />
 
+                  {executors.length > 1 && harnessId !== "kodo" && (
+                    <label className="draft-executor">
+                      执行节点
+                      <select
+                        aria-label="执行节点"
+                        value={executorId}
+                        disabled={busy}
+                        onChange={(e) => {
+                          setExecutorId(e.target.value);
+                          setWorkspace("");
+                          setCustomPath("");
+                          setModelChoice("native");
+                          setProviderChoiceId(null);
+                        }}
+                      >
+                        {executors.map((e) => (
+                          <option key={e.id} value={e.id}>
+                            {e.name} · {e.status === "online" ? "在线" : "离线"}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
                   <div className="composer-toolbar composer-toolbar--draft">
                     <div className="composer-pickers">
-                      <TextAttachmentButton
-                        loading={attachments.loading}
+                      <AttachmentButton
+                        loading={false}
                         disabled={busy || !connected}
                         onAdd={(files) => void attachments.add(files)}
                       />
@@ -904,6 +958,8 @@ export function DraftWorkspace({
                           }`}
                           onClick={() => {
                             setHarnessId("kodo");
+                            setExecutorId("local");
+                            if (executorId !== "local") setWorkspace("");
                             setPermissionMode(null);
                             setModelChoice("inherit");
                             setProviderChoiceId(undefined);
@@ -974,169 +1030,175 @@ export function DraftWorkspace({
                     </div>
 
                     <div className="composer-actions-right">
-                      <ComposerModelControls
-                        harnessId={harnessId}
-                        modelSupport={modelSupport}
-                        modelOpen={modelOpen}
-                        onModelOpenChange={(next) => openOnlyPopover(next ? "model" : null)}
-                        reasoningOpen={reasoningOpen}
-                        onReasoningOpenChange={(next) => openOnlyPopover(next ? "reasoning" : null)}
-                        modelLabel={activeModelSummary}
-                        modelTitle={resolvedDraftModel || activeModelSummary}
-                        modelDataValue={modelChoice}
-                        searchAriaLabel="模型 ID"
-                        searchQuery={modelQuery}
-                        onSearchQueryChange={setModelQuery}
-                        showSearch={modelSupport !== "binding-required"}
-                        loading={loadingModelHarness === harnessId}
-                        refreshDisabled={loadingModelHarness === harnessId}
-                        onRefresh={() =>
-                          setModelsCache((prev) => {
-                            const next = { ...prev };
-                            delete next[harnessId];
-                            return next;
-                          })
-                        }
-                        emptyText={
-                          modelLoadError || "原生目录未返回模型候选。请检查 Harness 安装或登录。"
-                        }
-                        onRetry={() =>
-                          setModelsCache((prev) => {
-                            const next = { ...prev };
-                            delete next[harnessId];
-                            return next;
-                          })
-                        }
-                        topItems={
-                          !trimmedQuery
-                            ? [
-                                {
-                                  key: "inherit",
-                                  dataValue: "inherit",
-                                  title: "继承默认",
-                                  subtitle: `${inherited.source} · ${inheritShort}`,
-                                  selected: modelChoice === "inherit",
-                                  onSelect: () => {
-                                    setModelChoice("inherit");
-                                    setProviderChoiceId(undefined);
-                                    setCustomModel("");
-                                    setModelOpen(false);
-                                  },
-                                },
-                                ...(modelSupport !== "binding-required"
-                                  ? [
-                                      {
-                                        key: "native",
-                                        dataValue: "native",
-                                        title: "原生配置与登录",
-                                        ...(nativeModel
-                                          ? { subtitle: `当前：${shortModelLabel(nativeModel)}` }
-                                          : {}),
-                                        selected: modelChoice === "native",
-                                        onSelect: () => {
-                                          setModelChoice("native");
-                                          setProviderChoiceId(null);
-                                          setCustomModel("");
-                                          setModelOpen(false);
-                                        },
-                                      },
-                                    ]
-                                  : []),
-                              ]
-                            : []
-                        }
-                        bindingItems={
-                          modelSupport !== "native-models"
-                            ? bindings
-                                .filter(
-                                  (p) =>
-                                    !trimmedQuery ||
-                                    p.name
-                                      .toLocaleLowerCase()
-                                      .includes(trimmedQuery.toLocaleLowerCase()) ||
-                                    p.model
-                                      .toLocaleLowerCase()
-                                      .includes(trimmedQuery.toLocaleLowerCase()) ||
-                                    p.providerId
-                                      .toLocaleLowerCase()
-                                      .includes(trimmedQuery.toLocaleLowerCase()),
-                                )
-                                .map((p) => {
-                                  const val = `binding:${p.id}`;
-                                  return {
-                                    key: p.id,
-                                    dataValue: val,
-                                    title: p.name,
-                                    subtitle: `${p.model} · r${p.revision}`,
-                                    selected: modelChoice === val,
+                      {executorId === "local" && (
+                        <ComposerModelControls
+                          harnessId={harnessId}
+                          modelSupport={modelSupport}
+                          modelOpen={modelOpen}
+                          onModelOpenChange={(next) => openOnlyPopover(next ? "model" : null)}
+                          reasoningOpen={reasoningOpen}
+                          onReasoningOpenChange={(next) =>
+                            openOnlyPopover(next ? "reasoning" : null)
+                          }
+                          modelLabel={activeModelSummary}
+                          modelTitle={resolvedDraftModel || activeModelSummary}
+                          modelDataValue={modelChoice}
+                          searchAriaLabel="模型 ID"
+                          searchQuery={modelQuery}
+                          onSearchQueryChange={setModelQuery}
+                          showSearch={modelSupport !== "binding-required"}
+                          loading={loadingModelHarness === harnessId}
+                          refreshDisabled={loadingModelHarness === harnessId}
+                          onRefresh={() =>
+                            setModelsCache((prev) => {
+                              const next = { ...prev };
+                              delete next[harnessId];
+                              return next;
+                            })
+                          }
+                          emptyText={
+                            modelLoadError || "原生目录未返回模型候选。请检查 Harness 安装或登录。"
+                          }
+                          onRetry={() =>
+                            setModelsCache((prev) => {
+                              const next = { ...prev };
+                              delete next[harnessId];
+                              return next;
+                            })
+                          }
+                          topItems={
+                            !trimmedQuery
+                              ? [
+                                  {
+                                    key: "inherit",
+                                    dataValue: "inherit",
+                                    title: "继承默认",
+                                    subtitle: `${inherited.source} · ${inheritShort}`,
+                                    selected: modelChoice === "inherit",
                                     onSelect: () => {
-                                      setProviderChoiceId(
-                                        p.selectionMode === "provider" ? p.id : null,
-                                      );
-                                      setModelChoice(val);
+                                      setModelChoice("inherit");
+                                      setProviderChoiceId(undefined);
+                                      setCustomModel("");
+                                      setModelOpen(false);
+                                    },
+                                  },
+                                  ...(modelSupport !== "binding-required"
+                                    ? [
+                                        {
+                                          key: "native",
+                                          dataValue: "native",
+                                          title: "原生配置与登录",
+                                          ...(nativeModel
+                                            ? { subtitle: `当前：${shortModelLabel(nativeModel)}` }
+                                            : {}),
+                                          selected: modelChoice === "native",
+                                          onSelect: () => {
+                                            setModelChoice("native");
+                                            setProviderChoiceId(null);
+                                            setCustomModel("");
+                                            setModelOpen(false);
+                                          },
+                                        },
+                                      ]
+                                    : []),
+                                ]
+                              : []
+                          }
+                          bindingItems={
+                            modelSupport !== "native-models"
+                              ? bindings
+                                  .filter(
+                                    (p) =>
+                                      !trimmedQuery ||
+                                      p.name
+                                        .toLocaleLowerCase()
+                                        .includes(trimmedQuery.toLocaleLowerCase()) ||
+                                      p.model
+                                        .toLocaleLowerCase()
+                                        .includes(trimmedQuery.toLocaleLowerCase()) ||
+                                      p.providerId
+                                        .toLocaleLowerCase()
+                                        .includes(trimmedQuery.toLocaleLowerCase()),
+                                  )
+                                  .map((p) => {
+                                    const val = `binding:${p.id}`;
+                                    return {
+                                      key: p.id,
+                                      dataValue: val,
+                                      title: p.name,
+                                      subtitle: `${p.model} · r${p.revision}`,
+                                      selected: modelChoice === val,
+                                      onSelect: () => {
+                                        setProviderChoiceId(
+                                          p.selectionMode === "provider" ? p.id : null,
+                                        );
+                                        setModelChoice(val);
+                                        setCustomModel("");
+                                        setModelOpen(false);
+                                      },
+                                    };
+                                  })
+                              : []
+                          }
+                          modelItems={
+                            modelSupport !== "binding-required"
+                              ? filteredModels.map((m) => {
+                                  const val = modelOptionValue(harnessId, m);
+                                  const optionVal = `model:${val}`;
+                                  const label = draftLabels.get(m)!;
+                                  return {
+                                    key: `${m.provider ?? ""}:${m.id}`,
+                                    dataValue: optionVal,
+                                    title: label.title,
+                                    subtitle: label.subtitle,
+                                    selected: modelChoice === optionVal,
+                                    onSelect: () => {
+                                      setModelChoice(optionVal);
                                       setCustomModel("");
                                       setModelOpen(false);
                                     },
                                   };
                                 })
-                            : []
-                        }
-                        modelItems={
-                          modelSupport !== "binding-required"
-                            ? filteredModels.map((m) => {
-                                const val = modelOptionValue(harnessId, m);
-                                const optionVal = `model:${val}`;
-                                const label = draftLabels.get(m)!;
-                                return {
-                                  key: `${m.provider ?? ""}:${m.id}`,
-                                  dataValue: optionVal,
-                                  title: label.title,
-                                  subtitle: label.subtitle,
-                                  selected: modelChoice === optionVal,
+                              : []
+                          }
+                          customItem={
+                            trimmedQuery &&
+                            modelSupport !== "binding-required" &&
+                            !hasExactQueryMatch
+                              ? {
+                                  key: `__custom__:${trimmedQuery}`,
+                                  title: `使用模型 “${trimmedQuery}”`,
+                                  selected:
+                                    modelChoice === "__custom__" && customModel === trimmedQuery,
+                                  accent: true,
                                   onSelect: () => {
-                                    setModelChoice(optionVal);
-                                    setCustomModel("");
+                                    setCustomModel(trimmedQuery);
+                                    setModelChoice("__custom__");
                                     setModelOpen(false);
                                   },
-                                };
-                              })
-                            : []
-                        }
-                        customItem={
-                          trimmedQuery && modelSupport !== "binding-required" && !hasExactQueryMatch
-                            ? {
-                                key: `__custom__:${trimmedQuery}`,
-                                title: `使用模型 “${trimmedQuery}”`,
-                                selected:
-                                  modelChoice === "__custom__" && customModel === trimmedQuery,
-                                accent: true,
-                                onSelect: () => {
-                                  setCustomModel(trimmedQuery);
-                                  setModelChoice("__custom__");
-                                  setModelOpen(false);
-                                },
-                              }
-                            : null
-                        }
-                        optionRole="option"
-                        parametersModel={draftModelParameters}
-                        popoverAriaLabel="草稿模型设置"
-                        reasoningLevels={draftReasoningOptions}
-                        reasoningValue={reasoning}
-                        reasoningDefault={harnessDesc?.nativeDefaults?.reasoning ?? undefined}
-                        reasoningSliderLabel="新对话思考强度"
-                        onReasoningChange={setReasoning}
-                      />
+                                }
+                              : null
+                          }
+                          optionRole="option"
+                          parametersModel={draftModelParameters}
+                          popoverAriaLabel="草稿模型设置"
+                          reasoningLevels={draftReasoningOptions}
+                          reasoningValue={reasoning}
+                          reasoningDefault={harnessDesc?.nativeDefaults?.reasoning ?? undefined}
+                          reasoningSliderLabel="新对话思考强度"
+                          onReasoningChange={setReasoning}
+                        />
+                      )}
 
                       <button
                         type="button"
                         className="send-button"
                         aria-label="发送消息"
                         disabled={
-                          (!compose.trim() && !attachments.attachments.length) ||
+                          (!compose.trim() && !attachments.readyIds.length) ||
                           !connected ||
                           busy ||
-                          attachments.loading ||
+                          attachments.uploading ||
                           !!sendBlockedReason
                         }
                         onClick={handleSendFirst}
@@ -1156,6 +1218,7 @@ export function DraftWorkspace({
           act={act}
           onClose={() => setShowProjectForm(false)}
           onCreated={(id, workspaceId) => {
+            setExecutorId("local");
             setProject(id);
             setWorkspace(workspaceId ?? "");
             setCustomPath("");
@@ -1169,7 +1232,10 @@ export function DraftWorkspace({
           onClose={() => setShowDirectoryPicker(false)}
           onSelect={(path) => {
             const existing = workspaces.find(
-              (w) => w.rootPath === path && w.projectId === (project || null),
+              (w) =>
+                w.rootPath === path &&
+                w.projectId === (project || null) &&
+                w.hostId === snapshot?.hostId,
             );
             setCustomPath(existing ? "" : path);
             setWorkspace(existing?.id ?? "__new_path__");

@@ -15,6 +15,8 @@ export const LANGUAGES: { value: "system" | Locale; label: string }[] = [
 const STRINGS = {
   "settings.title": { "zh-CN": "设置", en: "Settings", ja: "設定" },
   "settings.back": { "zh-CN": "返回对话", en: "Back to chats", ja: "チャットに戻る" },
+  "nav.work": { "zh-CN": "工作中心", en: "Work center", ja: "ワークセンター" },
+  "nav.memory": { "zh-CN": "全局记忆", en: "Global memory", ja: "グローバルメモリ" },
   "nav.general": { "zh-CN": "通用", en: "General", ja: "一般" },
   "nav.engines": { "zh-CN": "引擎", en: "Engines", ja: "エンジン" },
   "nav.providers": { "zh-CN": "模型来源", en: "Model sources", ja: "モデルソース" },

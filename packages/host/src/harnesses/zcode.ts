@@ -1,7 +1,8 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
+import { resolveInput } from "./input-modalities.js";
 import { descriptor, needCwd, unsupported, type HarnessAdapter, type Wire } from "./adapter.js";
 import { JsonRpc, RpcRejected } from "./rpc.js";
 import { ZCodeFrames } from "./zcode-frames.js";
@@ -122,7 +123,22 @@ export const zcodeAdapter: HarnessAdapter = {
             zcodeModelOptions(snapshot.config, builtin),
             zcodeUserModelOptions(userProviderConfig({ ...ctx.env, ...ctx.launch.env }), builtin),
             zcodeBuiltinModelOptions(builtin),
-          );
+          ).map((option) => {
+            const route = providerModel(option.id);
+            const personal = zcodeUserModelOptions(
+              userProviderConfig({ ...ctx.env, ...ctx.launch.env }),
+              builtin,
+            ).find((candidate) => candidate.id === option.id);
+            return {
+              ...option,
+              input: resolveInput(
+                ctx,
+                route.provider,
+                route.model,
+                personal?.input ?? option.input,
+              ),
+            };
+          });
     const rpc = new JsonRpc(ctx, false),
       nativeId = session.nativeSessionId ?? `sess_${randomUUID()}`,
       connectionId = randomUUID(),
@@ -470,13 +486,31 @@ export const zcodeAdapter: HarnessAdapter = {
       } finally {
         clearTimeout(timeout);
       }
+      const supportsImages = (selected?: string | null) => {
+        if (ctx.configuration?.binding)
+          return ctx.configuration.modelParameters?.input?.includes("image") ?? false;
+        const model =
+          selected ??
+          ctx.model ??
+          (snapshot.config?.provider && snapshot.config?.model
+            ? `${snapshot.config.provider}/${snapshot.config.model}`
+            : undefined);
+        return (
+          modelOptions()
+            .find((option) => option.id === model)
+            ?.input?.includes("image") ?? false
+        );
+      };
       return {
         nativeSessionId: nativeId,
+        supportsImages,
         async models() {
           return modelOptions();
         },
-        async send(text, id, mode, settings) {
+        async send(text, id, mode, settings, input) {
           if (failed) throw new Error("ZCode 原生订阅已失联，请恢复并对账。");
+          if (input?.images?.length && !supportsImages(settings?.model))
+            unsupported("ZCode 当前模型未声明图片输入，图片未发送。");
           const selected = settings?.model ?? ctx.model ?? ctx.configuration?.model;
           const target = selected
             ? providerModel(
@@ -492,11 +526,53 @@ export const zcodeAdapter: HarnessAdapter = {
             modelOptions(),
           );
           ctx.assertSendAllowed?.(id);
+          const attachments: Wire[] = [];
+          for (const image of input?.images ?? []) {
+            const bytes = Buffer.from(image.data, "base64");
+            if (bytes.length > 20 * 1024 * 1024) unsupported("ZCode 图片超过 20 MiB 上限。");
+            const uploadId = randomUUID();
+            const params = { connectionId, sessionId: nativeId, uploadId };
+            const chunkSize = 512 * 1024;
+            try {
+              const begin = await rpc.request("v4/attachment/begin", {
+                ...params,
+                fileName: basename(image.path),
+                mime: image.mimeType,
+                totalBytes: bytes.length,
+                totalChunks: Math.ceil(bytes.length / chunkSize),
+                checksum: `sha256:${createHash("sha256").update(bytes).digest("hex")}`,
+              });
+              let ref = begin.ref;
+              if (begin.state !== "committed") {
+                for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+                  ctx.assertSendAllowed?.(id);
+                  await rpc.request("v4/attachment/chunk", {
+                    ...params,
+                    chunkIndex: offset / chunkSize,
+                    dataBase64: bytes.subarray(offset, offset + chunkSize).toString("base64"),
+                  });
+                }
+                ref = (await rpc.request("v4/attachment/commit", params)).ref;
+              }
+              if (typeof ref !== "string" || !ref) throw new Error("ZCode 未确认图片附件引用。");
+              attachments.push({
+                ref,
+                fileName: basename(image.path),
+                mime: image.mimeType,
+                bytes: bytes.length,
+              });
+            } catch (error) {
+              await rpc.request("v4/attachment/abort", params).catch(() => {});
+              throw error;
+            }
+          }
+          ctx.assertSendAllowed?.(id);
           const permissionMode = ctx.permissionMode?.();
           await command(
             "sendText",
             {
               text,
+              ...(attachments.length ? { attachments } : {}),
               ...(permissionMode ? { mode: permissionMode } : {}),
               ...(target && mode !== "steer"
                 ? {

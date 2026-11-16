@@ -228,7 +228,7 @@ struct SubagentView: View {
                     }
                     if let parent = child.parentAgentId { Text("父代理：\(parent)").font(.system(size: 11)).foregroundStyle(KY.textTertiary) }
                     if inner.rows.isEmpty {
-                        Text("尚未收到原生子代理输出；当前仅有状态通知。").font(.system(size: 12)).foregroundStyle(KY.textTertiary)
+                        Text("状态通知").font(.system(size: 11, design: .monospaced)).foregroundStyle(KY.textTertiary)
                     } else {
                         TranscriptStack(transcript: inner, harnessId: harnessId, running: tone == .running, subagent: true)
                     }
@@ -278,6 +278,7 @@ struct UserTurnView: View {
             VStack(alignment: .leading, spacing: 6) {
                 if let origin = row.origin { Text(origin).font(.system(size: 11, weight: .semibold)).foregroundStyle(KY.textSecondary) }
                 if !parts.text.isEmpty { MarkdownView(text: parts.text, fill: false) }
+                ForEach(Array(row.attachments.enumerated()), id: \.offset) { _, file in Label(file["displayName"].string, systemImage: "paperclip").font(.caption).foregroundStyle(KY.textSecondary) }
                 ForEach(Array(parts.files.enumerated()), id: \.offset) { _, file in
                     Button { preview = AttachmentPreview(name: file.name, content: file.content) } label: {
                         Label(file.name, systemImage: "doc.text").font(.system(size: 12)).foregroundStyle(KY.text).lineLimit(1)
@@ -342,6 +343,8 @@ struct TranscriptBlockView: View {
     let live: Bool
     let continuation: Bool
     var subagent = false
+    var onEdit: ((TranscriptRow) -> Void)? = nil
+    var onBranch: ((TranscriptRow) -> Void)? = nil
     var body: some View {
         switch block {
         case .tools(let rows): ToolGroupView(rows: rows)
@@ -352,6 +355,25 @@ struct TranscriptBlockView: View {
             case .user: UserTurnView(row: row)
             case .error: ErrorTurnView(row: row, title: subagent ? "子代理本轮失败" : "\(harnessVisual(harnessId).name) 本轮失败")
             default: AssistantTurnView(row: row, harnessId: harnessId, continuation: continuation)
+            }
+            if row.role == .user || row.role == .assistant {
+                HStack(spacing: 8) {
+                    if row.role == .user { Spacer() }
+                    if let stamp = row.createdAt, let date = messageDate(stamp) {
+                        Text(date, format: .dateTime.weekday(.wide).hour().minute()).font(.caption2).foregroundStyle(KY.textSecondary)
+                    }
+                    if row.role == .user {
+                        CopyButton(text: row.text)
+                        if !subagent, let onEdit {
+                            Button { onEdit(row) } label: { Image(systemName: "pencil").frame(width: 44, height: 44) }
+                                .buttonStyle(.plain).accessibilityLabel("编辑消息并分支")
+                        }
+                    } else if !subagent, row.createdAt != nil, let onBranch {
+                        Menu { Button("分支到新聊天", systemImage: "arrow.triangle.branch") { onBranch(row) } } label: {
+                            Image(systemName: "ellipsis").frame(width: 44, height: 44)
+                        }.accessibilityLabel("更多消息操作")
+                    }
+                }.foregroundStyle(KY.textSecondary)
             }
         }
     }
@@ -373,4 +395,9 @@ struct TranscriptStack: View {
             }
         }
     }
+}
+
+private func messageDate(_ stamp: String) -> Date? {
+    let formatter = ISO8601DateFormatter(); formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return formatter.date(from: stamp) ?? ISO8601DateFormatter().date(from: stamp)
 }

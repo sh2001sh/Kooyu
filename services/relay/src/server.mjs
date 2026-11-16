@@ -134,7 +134,7 @@ export function createRelay({
           return fail(res, 429, "RATE_LIMITED", "配对尝试过多，请稍后再试。");
         const host = hosts.get(hostId);
         if (!host)
-          return fail(res, 503, "HOST_OFFLINE", "电脑未连接。请确认电脑已联网并开启手机连接。");
+          return fail(res, 503, "HOST_OFFLINE", "设备未连接。请确认设备已联网并开启手机连接。");
         if (host.requests.size >= 128 || pending.size >= maxPending)
           return fail(res, 503, "RELAY_BUSY", "连接繁忙，请稍后再试。");
         if (Number(req.headers["content-length"] ?? 0) > MAX_BODY)
@@ -149,7 +149,7 @@ export function createRelay({
           }
           chunks.push(chunk);
         }
-        if (hosts.get(hostId) !== host) return fail(res, 503, "HOST_OFFLINE", "电脑连接已断开。");
+        if (hosts.get(hostId) !== host) return fail(res, 503, "HOST_OFFLINE", "设备连接已断开。");
         // Recheck after asynchronous body reads; simultaneous requests share the cap.
         if (host.requests.size >= 128 || pending.size >= maxPending)
           return fail(res, 503, "RELAY_BUSY", "连接繁忙，请稍后再试。");
@@ -177,7 +177,7 @@ export function createRelay({
           })
         ) {
           release(id);
-          return fail(res, 503, "HOST_OFFLINE", "电脑连接不可用。");
+          return fail(res, 503, "HOST_OFFLINE", "设备连接不可用。");
         }
         return;
       }
@@ -204,7 +204,7 @@ export function createRelay({
       if (url.pathname === "/")
         return json(res, 200, {
           service: "kooyu-relay",
-          message: "请在电脑端打开「手机连接」，扫描二维码连接你的电脑。",
+          message: "请在桌面端打开「手机连接」，扫描二维码连接你的设备。",
         });
       if (!webRoot) return fail(res, 404, "NOT_FOUND", "页面不存在。");
       if (hostPage) {
@@ -324,7 +324,7 @@ export function createRelay({
                   p.hostId +
                   "=" +
                   cookie[1] +
-                  "; HttpOnly; SameSite=Strict; Secure; Path=/h/" +
+                  "; HttpOnly; SameSite=Lax; Secure; Path=/h/" +
                   p.hostId +
                   "/api; Max-Age=2592000",
               );
@@ -344,7 +344,7 @@ export function createRelay({
             p.res.end();
           } else if (m.type === "error") {
             release(m.id);
-            fail(p.res, 502, "HOST_REQUEST_FAILED", "电脑连接中断，请核对操作结果。");
+            fail(p.res, 502, "HOST_REQUEST_FAILED", "设备连接中断，请核对操作结果。");
           } else throw new Error("Invalid frame");
         } catch {
           ws.close(1008, "Invalid protocol");
@@ -358,7 +358,7 @@ export function createRelay({
           for (const id of [...host.requests]) {
             const p = pending.get(id);
             release(id);
-            if (p) fail(p.res, 503, "HOST_OFFLINE", "电脑连接已断开，请核对操作结果。");
+            if (p) fail(p.res, 503, "HOST_OFFLINE", "设备连接已断开，请核对操作结果。");
           }
       });
     });

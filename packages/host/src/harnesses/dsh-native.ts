@@ -6,6 +6,7 @@ import { parse, stringify } from "yaml";
 import type { HarnessModelOption } from "@kodo/protocol";
 import type { Wire } from "./adapter.js";
 import { nativeParameters } from "./model-metadata.js";
+import { declaredInput } from "./input-modalities.js";
 
 /**
  * DeepSeek Harness keeps user-configured providers in each profile's cordis.patch.yml.
@@ -91,6 +92,7 @@ export function dshNativeModelOptions(config: DshNativeConfig): HarnessModelOpti
         id: `${provider}/${m.id}`,
         name: `${m.name ?? m.id} · ${route.displayName ?? provider}`,
         source: "native-catalog",
+        input: declaredInput(m.input),
         ...(config.defaultModel?.provider === provider && config.defaultModel.model === m.id
           ? { isDefault: true }
           : {}),

@@ -1,3 +1,5 @@
+import { handleClientRoutes } from "./client-routes.js";
+import { sessionMetadataSchema } from "../clients/operations.js";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
 import { extname, isAbsolute, relative, resolve } from "node:path";
@@ -7,7 +9,6 @@ import {
   KodoError,
   HARNESS_IDS,
   PROTOCOL_VERSION,
-  permissionModeSchema,
   projectGrantSchema,
   type HarnessId,
 } from "@kodo/protocol";
@@ -31,6 +32,9 @@ import { appSettings, saveAppSettings } from "../configuration/preferences.js";
 import { onboardingState, saveOnboarding } from "../configuration/onboarding.js";
 import { readConfigFile, writeConfigFile } from "../configuration/config-files.js";
 import { HarnessSkills } from "../configuration/skills.js";
+import { handleWorkRoutes } from "./work-routes.js";
+
+import { handleSelfHostedRoutes } from "./self-hosted-routes.js";
 
 function json(response: ServerResponse, status: number, value: unknown): void {
   response.writeHead(status, {
@@ -97,6 +101,16 @@ export function createHostHandler(service: SessionService, options: HostHttpOpti
       const url = new URL(request.url ?? "/", `http://127.0.0.1:${options.port}`),
         host = request.headers.host ?? "",
         origin = request.headers.origin;
+      const workerMatch = /^[/]worker[/]([^/]+)[/](poll|result|file)$/.exec(url.pathname);
+      if (workerMatch) {
+        await service.executors.handle(request, response, workerMatch[1]!, workerMatch[2]!);
+        return;
+      }
+      const hookMatch = /^[/]hooks[/]([^/]+)$/.exec(url.pathname);
+      if (hookMatch) {
+        await service.webhooks.handle(request, response, hookMatch[1]!);
+        return;
+      }
       const localHost =
         host === `127.0.0.1:${options.port}` || host === `localhost:${options.port}`;
       const localPeer = ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(
@@ -139,10 +153,12 @@ export function createHostHandler(service: SessionService, options: HostHttpOpti
           z.string().max(64).parse(body.code),
           z.string().max(100).parse(body.name),
         );
+        // OAuth providers return by top-level GET; Lax preserves the paired device
+        // on that navigation. Cross-origin writes still fail the Origin/JSON gates.
         if (!nativePair)
           response.setHeader(
             "Set-Cookie",
-            `kodo_device=${result.token}; HttpOnly; SameSite=Strict; Path=/api; Max-Age=${DEVICE_TOKEN_TTL_MS / 1000}; Secure`,
+            `kodo_device=${result.token}; HttpOnly; SameSite=Lax; Path=/api; Max-Age=${DEVICE_TOKEN_TTL_MS / 1000}; Secure`,
           );
         json(response, 201, {
           device: result.device,
@@ -161,6 +177,27 @@ export function createHostHandler(service: SessionService, options: HostHttpOpti
       const authorized = local || pairing.authenticate(bearer ?? cookie ?? "");
       if (url.pathname.startsWith("/api/") && !authorized)
         throw new KodoError("UNAUTHORIZED", "请在桌面生成配对码后连接此设备。");
+      if (
+        url.pathname.startsWith("/api/") &&
+        (await handleClientRoutes(service, request, response, url, {
+          local,
+          deviceId: local ? "desktop" : pairing.deviceId(bearer ?? cookie ?? "")!,
+          stillAuthorized: () => local || pairing.authenticate(bearer ?? cookie ?? ""),
+          json,
+          readBody,
+        }))
+      )
+        return;
+      if (
+        await handleSelfHostedRoutes(service, request, response, url, {
+          local,
+          stillAuthorized: () => local || pairing.authenticate(bearer ?? cookie ?? ""),
+          json,
+          readBody,
+          deviceId: local ? "desktop" : pairing.deviceId(bearer ?? cookie ?? "")!,
+        })
+      )
+        return;
       if (url.pathname === "/api/remote") {
         if (!local) throw new KodoError("UNAUTHORIZED", "请在电脑端管理远程连接。");
         if (request.method === "DELETE") {
@@ -533,6 +570,8 @@ export function createHostHandler(service: SessionService, options: HostHttpOpti
       if (fileRoute && request.method === "GET") {
         const w = service.store.workspaces().find((item) => item.id === fileRoute[1]);
         if (!w) throw new KodoError("NOT_FOUND", "工作位置不存在。");
+        if (w.hostId !== service.store.hostId)
+          throw new KodoError("UNSUPPORTED", "该工作区位于远程节点，Host 不解释节点文件路径。");
         const path = url.searchParams.get("path") ?? "";
         if (fileRoute[2] === "changes") {
           if (fileRoute[3] && fileRoute[3] !== "diff")
@@ -572,6 +611,8 @@ export function createHostHandler(service: SessionService, options: HostHttpOpti
       if (workspace) {
         const w = service.store.workspaces().find((w) => w.id === workspace[1]);
         if (!w) throw new KodoError("NOT_FOUND", "工作位置不存在。");
+        if (w.hostId !== service.store.hostId)
+          throw new KodoError("UNSUPPORTED", "该工作区位于远程节点，Host 不解释节点文件路径。");
         if (request.method === "GET" && workspace[2] === "artifacts") {
           json(response, 200, await artifacts(w));
           return;
@@ -673,7 +714,7 @@ export function createHostHandler(service: SessionService, options: HostHttpOpti
         return;
       }
       const session =
-        /^\/api\/sessions\/([^/]+)(?:\/(open|send|stop|native|history|quota|handoff|grant|reconcile|attach|settings|permissions))?$/.exec(
+        /^\/api\/sessions\/([^/]+)(?:\/(open|send|stop|native|history|quota|handoff|branch|grant|reconcile|attach|settings|permissions))?$/.exec(
           url.pathname,
         );
       if (session) {
@@ -747,18 +788,7 @@ export function createHostHandler(service: SessionService, options: HostHttpOpti
           }
         }
         if (request.method === "PATCH" && !action) {
-          const input = z
-            .object({
-              title: z.string().min(1).max(200).optional(),
-              archived: z.boolean().optional(),
-              pinned: z.boolean().optional(),
-              unread: z.boolean().optional(),
-              projectId: z.string().uuid().nullable().optional(),
-              workspaceId: z.string().uuid().nullable().optional(),
-              permissionMode: permissionModeSchema.nullable().optional(),
-            })
-            .strict()
-            .parse(await readBody(request));
+          const input = sessionMetadataSchema.parse(await readBody(request));
           json(
             response,
             200,
@@ -770,6 +800,10 @@ export function createHostHandler(service: SessionService, options: HostHttpOpti
         }
         if (request.method === "POST") {
           const b = await readBody(request);
+          if (action === "branch") {
+            json(response, 201, service.branch(id, b));
+            return;
+          }
           if (action === "settings") {
             json(response, 200, await service.setModelSettings(id, b));
             return;
@@ -883,9 +917,21 @@ export function createHostHandler(service: SessionService, options: HostHttpOpti
       if (request.method === "DELETE" && device) {
         if (!local) throw new KodoError("UNAUTHORIZED", "设备撤销需在桌面操作。");
         pairing.revoke(device[1]!);
+        await service.delivery.revokeDevice(device[1]!);
         json(response, 200, { status: "revoked" });
         return;
       }
+      if (
+        url.pathname.startsWith("/api/") &&
+        (await handleWorkRoutes(service, request, response, url, {
+          local,
+          deviceId: local ? "desktop" : pairing.deviceId(bearer ?? cookie ?? "")!,
+          stillAuthorized: () => local || pairing.authenticate(bearer ?? cookie ?? ""),
+          json,
+          readBody,
+        }))
+      )
+        return;
       if (request.method === "POST" && url.pathname === "/api/budgets") {
         const b = z
           .object({

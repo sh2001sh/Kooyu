@@ -2,7 +2,7 @@ import { boundModelOption } from "../providers/model-option.js";
 import { randomUUID } from "node:crypto";
 import { claudeModelOptions, validateReasoning } from "./model-options.js";
 import { nativeParameters } from "./model-metadata.js";
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, extname, join } from "node:path";
 import { query, listSessions, type Query } from "@anthropic-ai/claude-agent-sdk";
 import {
@@ -19,6 +19,45 @@ import { inspectClaudeFiles } from "./session-presence.js";
 import { homedir } from "node:os";
 import { NativeSubagents } from "./subagents.js";
 import type { ClaudeHistory } from "./claude-history.js";
+import { resolveInput } from "./input-modalities.js";
+
+/**
+ * Claude Code's own models all take images, but a custom ANTHROPIC_BASE_URL (process
+ * env or native settings files) may point at a relay or another vendor whose image
+ * support is unknown. Unknown is treated as unsupported.
+ */
+export function claudeUsesCustomEndpoint(env: NodeJS.ProcessEnv, cwd: string | null): boolean {
+  return claudeEndpoint(env, cwd) !== null;
+}
+
+// Conflicting or unreadable settings cannot establish a safe route identity.
+function claudeEndpoint(env: NodeJS.ProcessEnv, cwd: string | null): string | null | undefined {
+  const endpoints = new Set<string>();
+  if (env.ANTHROPIC_BASE_URL) endpoints.add(env.ANTHROPIC_BASE_URL.replace(/\/+$/, ""));
+  const home = env.CLAUDE_CONFIG_DIR ?? join(env.USERPROFILE ?? env.HOME ?? homedir(), ".claude");
+  const files = [
+    join(home, "settings.json"),
+    ...(cwd
+      ? [join(cwd, ".claude", "settings.json"), join(cwd, ".claude", "settings.local.json")]
+      : []),
+  ];
+  for (const file of files) {
+    let raw: string;
+    try {
+      raw = readFileSync(file, "utf8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+      return undefined;
+    }
+    try {
+      const url = (JSON.parse(raw) as Wire)?.env?.ANTHROPIC_BASE_URL;
+      if (typeof url === "string" && url) endpoints.add(url.replace(/\/+$/, ""));
+    } catch {
+      return undefined;
+    }
+  }
+  return endpoints.size > 1 ? undefined : (endpoints.values().next().value ?? null);
+}
 
 /** SDK history APIs read process.env: isolate per-binding homes in a bounded child. */
 async function claudeHistory(ctx: AdapterContext, nativeId?: string): Promise<unknown> {
@@ -196,8 +235,28 @@ export function claudeAdapterWithQuery(runQuery: typeof query = query): HarnessA
           ctx.emit("state", { historyError: (error as Error).message });
         }
       }
+      const supportsImages = (selected?: string | null) => {
+        if (ctx.configuration?.binding?.route === "gateway") return false;
+        if (ctx.configuration?.binding || ctx.configuration?.baseUrl)
+          return Boolean(ctx.configuration.modelParameters?.input?.includes("image"));
+        const env = { ...ctx.env, ...ctx.launch.env };
+        const endpoint = claudeEndpoint(env, cwd);
+        if (endpoint === undefined) return false;
+        const model = selected ?? ctx.model ?? env.ANTHROPIC_MODEL;
+        if (!model) return endpoint === null;
+        return (
+          resolveInput(
+            ctx,
+            "anthropic",
+            model,
+            endpoint === null ? ["text", "image"] : undefined,
+            endpoint ? { baseUrl: endpoint, api: "anthropic-messages" } : undefined,
+          )?.includes("image") ?? false
+        );
+      };
       return {
         nativeSessionId: nativeId,
+        supportsImages,
         async models() {
           return (await discoverClaudeModels(ctx, runQuery)).map((model) => {
             const limits = reported.get(model.resolvedModel ?? model.id);
@@ -210,8 +269,10 @@ export function claudeAdapterWithQuery(runQuery: typeof query = query): HarnessA
               : model;
           });
         },
-        async send(text, commandId, mode, settings) {
+        async send(text, commandId, mode, settings, input) {
           if (mode === "steer") unsupported("此 SDK 接入尚未验证 steer。");
+          if (input?.images?.length && !supportsImages(settings?.model))
+            unsupported("Claude 当前模型或网关未声明图片输入，图片未发送。");
           const targetModel = settings?.model ?? ctx.model ?? ctx.configuration?.model;
           const effort = settings ? settings.reasoning : ctx.reasoning;
           if (effort)
@@ -290,7 +351,32 @@ export function claudeAdapterWithQuery(runQuery: typeof query = query): HarnessA
             options.pathToClaudeCodeExecutable = ctx.launch.command;
           let outcome = "unknown";
           try {
-            active = runQuery({ prompt: text, options });
+            const images = input?.images ?? [];
+            // Images go as Messages API image blocks in one streamed user message.
+            const prompt = images.length
+              ? (async function* () {
+                  yield {
+                    type: "user" as const,
+                    parent_tool_use_id: null,
+                    message: {
+                      role: "user" as const,
+                      content: [
+                        ...images.map((image) => ({
+                          type: "image" as const,
+                          source: {
+                            type: "base64" as const,
+                            media_type: image.mimeType as
+                              "image/png" | "image/jpeg" | "image/gif" | "image/webp",
+                            data: image.data,
+                          },
+                        })),
+                        ...(text ? [{ type: "text" as const, text }] : []),
+                      ],
+                    },
+                  };
+                })()
+              : text;
+            active = runQuery({ prompt, options });
             for await (const value of active) {
               const e = value as Wire;
               if (

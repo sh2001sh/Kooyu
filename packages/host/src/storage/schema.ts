@@ -90,3 +90,107 @@ ALTER TABLE search_trigram RENAME TO search_index;
 CREATE TABLE event_tombstones (session_id TEXT NOT NULL, id TEXT NOT NULL, PRIMARY KEY(session_id,id));
 PRAGMA user_version = 4;
 `;
+
+// Goals, verification facts, retrieved web sources and the notification feed.
+// Bodies stay in JSON; columns exist only for uniqueness, ordering and lookup.
+export const SCHEMA_V7 = `
+CREATE TABLE IF NOT EXISTS goals (
+  id TEXT PRIMARY KEY,
+  controller_session_id TEXT NOT NULL REFERENCES sessions(id),
+  status TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  updated_at TEXT NOT NULL,
+  data TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS goals_controller ON goals(controller_session_id, updated_at);
+CREATE TABLE IF NOT EXISTS goal_history (
+  goal_id TEXT NOT NULL REFERENCES goals(id),
+  revision INTEGER NOT NULL,
+  data TEXT NOT NULL,
+  PRIMARY KEY(goal_id, revision)
+);
+CREATE TABLE IF NOT EXISTS verifications (
+  id TEXT PRIMARY KEY,
+  goal_id TEXT NOT NULL REFERENCES goals(id),
+  created_at TEXT NOT NULL,
+  data TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS verifications_goal ON verifications(goal_id, created_at);
+CREATE TABLE IF NOT EXISTS web_sources (
+  id TEXT PRIMARY KEY,
+  session_id TEXT,
+  goal_id TEXT,
+  accessed_at TEXT NOT NULL,
+  data TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS web_sources_goal ON web_sources(goal_id, accessed_at);
+CREATE INDEX IF NOT EXISTS web_sources_session ON web_sources(session_id, accessed_at);
+CREATE TABLE IF NOT EXISTS notification_items (
+  sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+  id TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL,
+  read_at TEXT,
+  data TEXT NOT NULL
+);
+PRAGMA user_version = 7;
+`;
+
+// Managed uploads and immutable delivered artifacts. File bodies live in a
+// content-addressed object directory; the database holds metadata only.
+export const SCHEMA_V8 = `
+CREATE TABLE IF NOT EXISTS managed_files (
+  id TEXT PRIMARY KEY,
+  sha256 TEXT NOT NULL,
+  state TEXT NOT NULL,
+  session_id TEXT,
+  goal_id TEXT,
+  created_at TEXT NOT NULL,
+  data TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS managed_files_sha ON managed_files(sha256);
+CREATE INDEX IF NOT EXISTS managed_files_goal ON managed_files(goal_id, created_at);
+CREATE INDEX IF NOT EXISTS managed_files_session ON managed_files(session_id, created_at);
+CREATE TABLE IF NOT EXISTS uploads (
+  id TEXT PRIMARY KEY,
+  state TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  data TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS artifacts (
+  id TEXT PRIMARY KEY,
+  file_id TEXT NOT NULL REFERENCES managed_files(id),
+  goal_id TEXT,
+  session_id TEXT,
+  version_key TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  data TEXT NOT NULL,
+  UNIQUE(version_key, version)
+);
+CREATE INDEX IF NOT EXISTS artifacts_goal ON artifacts(goal_id, created_at);
+CREATE INDEX IF NOT EXISTS artifacts_session ON artifacts(session_id, created_at);
+PRAGMA user_version = 8;
+`;
+
+// Self-hosted execution, plans, grants, delivery and editable project memory.
+export const SCHEMA_V9 = `
+CREATE TABLE IF NOT EXISTS tool_action_receipts(id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id), status TEXT NOT NULL, data TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS automations(id TEXT PRIMARY KEY, data TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS activations(id TEXT PRIMARY KEY, data TEXT NOT NULL);
+CREATE UNIQUE INDEX IF NOT EXISTS activations_occurrence ON activations(json_extract(data,'$.automationId'),json_extract(data,'$.logicalOccurrenceKey'));
+CREATE TABLE IF NOT EXISTS webhook_connections(id TEXT PRIMARY KEY, data TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS webhook_events(id TEXT PRIMARY KEY, data TEXT NOT NULL);
+CREATE UNIQUE INDEX IF NOT EXISTS webhook_delivery ON webhook_events(json_extract(data,'$.connectionId'),json_extract(data,'$.externalEventId'));
+CREATE TABLE IF NOT EXISTS authorization_grants(id TEXT PRIMARY KEY, data TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS memory_entries(id TEXT PRIMARY KEY, data TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS memory_revisions(entry_id TEXT NOT NULL REFERENCES memory_entries(id),revision INTEGER NOT NULL,data TEXT NOT NULL,PRIMARY KEY(entry_id,revision));
+CREATE TABLE IF NOT EXISTS application_versions(id TEXT PRIMARY KEY, data TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS app_connections(id TEXT PRIMARY KEY, data TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS notification_channels(id TEXT PRIMARY KEY, data TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS notification_deliveries(id TEXT PRIMARY KEY, data TEXT NOT NULL);
+CREATE UNIQUE INDEX IF NOT EXISTS delivery_identity ON notification_deliveries(json_extract(data,'$.notificationId'),json_extract(data,'$.deviceId'),json_extract(data,'$.channel'));
+CREATE TABLE IF NOT EXISTS outbound_messages(id TEXT PRIMARY KEY, data TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS executors(id TEXT PRIMARY KEY, data TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS control_leases(id TEXT PRIMARY KEY, data TEXT NOT NULL);
+PRAGMA user_version = 9;
+`;

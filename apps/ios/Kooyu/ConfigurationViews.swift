@@ -56,7 +56,7 @@ struct ModelConfigurationView: View {
         }.navigationTitle("模型来源与绑定")
             .task(id: "\(model.connection?.hostId ?? "")-\(reload)") { loading = true; config = await model.read("/provider-configuration"); loading = false }
             .sheet(isPresented: $editing) { ConfigurationEditorView(model: model, kind: section, original: original, config: config ?? .null) { editing = false; reload += 1 } }
-            .confirmationDialog("删除此配置？正在使用的配置以电脑检查结果为准。", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
+            .confirmationDialog("删除此配置？正在使用的配置以设备检查结果为准。", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
                 if let row = deleting { Button("删除", role: .destructive) { Task { let path = section == "providers" ? "/providers/" : "/provider-models/"; if await model.execute(path + row["id"].string, method: "DELETE") != nil { deleting = nil; reload += 1 } } } }
             }
     }
@@ -117,7 +117,6 @@ struct ConfigurationEditorView: View {
                 if endpoints.count > 1 { Button("移除此端点", role: .destructive) { endpoints.removeAll { $0.id == entry.id } } }
             } }
             Button("添加端点") { endpoints.append(EndpointDraft()) }.disabled(endpoints.count >= 12)
-            Text("密钥仅经 HTTPS 提交给当前电脑，保存后不显示原值。").font(.footnote)
         }
     }
     private var modelFields: some View {
@@ -128,6 +127,7 @@ struct ConfigurationEditorView: View {
             TextField("上下文 Token（留空自动）", text: $context).keyboardType(.numberPad)
             TextField("最大输出 Token（留空自动）", text: $maxOutput).keyboardType(.numberPad)
             Picker("输入能力", selection: $inputKind) { Text("跟随目录 / 端点").tag("auto"); Text("文本").tag("text"); Text("文本与图像").tag("image") }
+            Text("自动从 models.dev 或端点补齐；手动配置优先，选择自动可恢复。").font(.footnote).foregroundStyle(.secondary)
             Picker("思考能力", selection: $thinking) { Text("跟随目录 / 端点").tag("auto"); Text("支持思考").tag("true"); Text("不支持思考").tag("false") }
             TextField("输入 USD / 百万 Token（可选）", text: $inputPrice).keyboardType(.decimalPad)
             TextField("输出 USD / 百万 Token（可选）", text: $outputPrice).keyboardType(.decimalPad)
@@ -140,7 +140,7 @@ struct ConfigurationEditorView: View {
             Picker("选择方式", selection: $selection) { Text("固定模型").tag("fixed"); Text("此来源下选择模型").tag("provider") }
             Picker("接入路由", selection: $route) { Text("自动").tag("auto"); Text("直连").tag("direct"); Text("网关").tag("gateway") }
             TextField("思考强度（可选）", text: $reasoning)
-            Toggle("设为此电脑引擎的默认绑定", isOn: $asDefault)
+            Toggle("设为此设备引擎的默认绑定", isOn: $asDefault)
             Button("检查兼容性") { Task { preview = await model.execute("/harness-bindings/preview", values: bindingBody(), refreshAfter: false) } }.disabled(!model.canWrite || !valid)
             if let preview {
                 Text(preview["supported"].boolean ? "兼容 · " + preview["route"].string : "此配置尚不能使用")
@@ -199,9 +199,9 @@ struct BindingDefaultsView: View {
     private var projectRaw: HostProject? { model.snapshot?.projects.first { $0.id == project } }
     var body: some View {
         Group {
-            Picker("默认值范围", selection: $project) { Text("当前电脑").tag(""); ForEach(model.snapshot?.projects ?? []) { Text($0.name).tag($0.id) } }
+            Picker("默认值范围", selection: $project) { Text("当前设备").tag(""); ForEach(model.snapshot?.projects ?? []) { Text($0.name).tag($0.id) } }
             ForEach(model.snapshot?.harnesses ?? []) { engine in Picker(engine.name, selection: Binding(get: { mapping[engine.id] ?? "" }, set: { mapping[engine.id] = $0 })) {
-                Text(project.isEmpty ? "引擎原生默认" : "继承电脑默认").tag("")
+                Text(project.isEmpty ? "引擎原生默认" : "继承设备默认").tag("")
                 ForEach(Array((model.snapshot?.bindings?.filter { $0["harnessId"].string == engine.id } ?? []).enumerated()), id: \.offset) { _, row in Text(row["name"].string).tag(row["id"].string) }
             } }
             Button("保存默认绑定") { Task { await save() } }.disabled(!model.canWrite)
@@ -240,7 +240,6 @@ struct EngineDefaultsView: View {
                 if let result = await model.execute("/app-settings", method: "PATCH", values: fields) { originalSettings = result }
             } }.disabled(!model.canWrite || originalSettings == nil || chosen.count > 200 || reasoning.count > 100)
             Button("重新读取默认值") { Task { originalSettings = await model.read("/app-settings"); loadValues() } }.disabled(model.busy)
-            Text("与桌面共用默认值，用于新对话。").font(.footnote)
             if !model.error.isEmpty { Text(model.error).foregroundStyle(.red) }
         }.navigationTitle(engine.name + " 默认值").onAppear {
             originalSettings = model.appSettings; loadValues()

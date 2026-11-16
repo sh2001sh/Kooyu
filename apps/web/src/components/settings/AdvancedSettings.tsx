@@ -38,13 +38,9 @@ export function AdvancedSettings({
     );
   };
   return (
-    <SettingsPage
-      title="高级"
-      description="大多数情况下不需要修改这里。引擎的默认模型来源在「引擎」页设置。"
-    >
+    <SettingsPage title="高级">
       <SettingsSection
         title="按项目覆盖模型来源"
-        description="让某个项目里的新对话改用另一个模型来源。未设置时沿用「引擎」页的选择。"
         actions={
           snapshot.projects.length > 0 ? (
             <SxSelect
@@ -84,10 +80,7 @@ export function AdvancedSettings({
         )}
       </SettingsSection>
 
-      <SettingsSection
-        title="固定模型映射"
-        description="把引擎固定到某个来源的某一个模型（含协议转换）。只在需要锁定模型身份时使用。"
-      >
+      <SettingsSection title="固定模型映射">
         <div className="sx-legacy">
           <ProviderConfigurationPanel
             snapshot={snapshot}

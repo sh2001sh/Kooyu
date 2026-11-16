@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Moon, PanelLeft, Plus, Settings2, SquarePen, Sun, X } from "lucide-react";
+import { Layers, Moon, PanelLeft, Plus, Settings2, SquarePen, Sun, X } from "lucide-react";
 import type { HarnessId, InboxItem } from "@kodo/protocol";
 import { KodoMark } from "./KodoBrand";
 import { KooyuWordmark } from "./KooyuWordmark";
@@ -26,7 +26,6 @@ export interface SidebarProps {
   children: ReactNode;
 }
 
-// Usage and devices are sections of Settings now; one entry point opens them all.
 const TOOL_SCOPES = [{ id: "health", key: "settings.title", Icon: Settings2 }] as const;
 
 /**
@@ -140,6 +139,18 @@ export function Sidebar({
         )}
       </div>
 
+      {!settingsMode && (
+        <button
+          type="button"
+          className="nav-row"
+          aria-label="工作记录与成果"
+          onClick={() => onNavigate("workbench")}
+          aria-current={scope === "workbench" ? "page" : undefined}
+        >
+          <Layers size={15} />
+          {!collapsed && <span>工作记录与成果</span>}
+        </button>
+      )}
       <div className="sidebar__list">{children}</div>
 
       <div className="sidebar__bottom">
@@ -147,7 +158,7 @@ export function Sidebar({
           {TOOL_SCOPES.map(({ id, key, Icon }) => {
             const label = t(key);
             const short = label;
-            const active = ["health", "usage", "devices"].includes(scope);
+            const active = ["health", "usage", "devices", "work"].includes(scope);
             return (
               <button
                 type="button"

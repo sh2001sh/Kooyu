@@ -144,10 +144,6 @@ export function SetupEngines({
       <button className="setup-text-button" onClick={() => setAll(!all)}>
         {all ? "收起其他引擎" : "查看全部 10 种引擎"}
       </button>
-      <p className="setup-help setup-disclosure">
-        安装会下载对应原生程序。引擎使用自己的账号和权限；需要复用 API 时，可在「设置 →
-        引擎」单独绑定。
-      </p>
     </section>
   );
 }

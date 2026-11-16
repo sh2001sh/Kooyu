@@ -7,10 +7,14 @@ import Observation
     var snapshot: Snapshot?
     var page: SessionPage?
     var selected: String?
+    var selectedTab = "sessions"
+    var readingAnchors: [String: String] = [:]
+    let push = PushNotifications.shared
     var usage: UsageReport?
     var appSettings: JSONValue?
     var usageError = ""
     var composerDraft = ""
+    var composerAttachments: [ManagedAttachment] = []
     var usageLoading = false
     var loadingHistory = false
     var addingDevice = false
@@ -29,6 +33,7 @@ import Observation
         epoch += 1; book = next; snapshot = nil; page = nil; selected = nil; usage = nil; appSettings = nil
         settingsRefreshedAt = .distantPast
         online = false; busy = false; error = ""; notice = ""; usageError = ""; composerDraft = ""
+        composerAttachments = []
         usageLoading = false; loadingHistory = false; addingDevice = false
     }
     func switchDevice(_ id: String) {
@@ -48,7 +53,7 @@ import Observation
         do {
             var c = try await HostAPI.pair(url: url, code: code, name: "Kooyu iOS")
             let previous = book.devices.first { $0.hostId == c.hostId }
-            c.name = name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? previous?.displayName ?? "电脑 \(book.devices.count + 1)" : String(name.prefix(60))
+            c.name = name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? previous?.displayName ?? "设备 \(book.devices.count + 1)" : String(name.prefix(60))
             c.pending = previous?.pending
             var next = book; next.put(c, activate: true); try commit(next); reset(next); busy = true
             await refresh()
@@ -60,9 +65,11 @@ import Observation
         do {
             let api = HostAPI(connection: c)
             let next: Snapshot = try await api.get("/native/snapshot")
-            guard next.hostId == c.hostId, next.protocolVersion == HostAPI.protocolVersion else { throw APIError(message: "电脑身份或版本发生变化，请重新连接。", status: 409) }
+            guard next.hostId == c.hostId, next.protocolVersion == HostAPI.protocolVersion else { throw APIError(message: "设备身份或版本发生变化，请重新连接。", status: 409) }
             guard current(c, generation) else { return }
+            let reconnecting = !online && snapshot != nil
             snapshot = next; if !online { error = "" }; online = true
+            if reconnecting { notice = "连接已恢复 · \(next.inbox.filter { !$0.resolved }.count) 项待处理，可在收件箱查看。" }
             if appSettings == nil || Date().timeIntervalSince(settingsRefreshedAt) > 10 {
                 let settings: JSONValue = try await api.get("/app-settings")
                 guard current(c, generation) else { return }; appSettings = settings; settingsRefreshedAt = Date()
@@ -76,8 +83,8 @@ import Observation
                 }
             }
             if let op = c.pending {
-                let path: String? = op.path.hasSuffix("/send") || op.path.hasSuffix("/stop") ? "/commands/\(op.id)" : op.path.hasSuffix("/settings") || op.path.contains("/commands/") && op.method == "PATCH" ? op.path + "?requestId=\(op.id)" : nil
-                if let path, let _: JSONValue = try? await api.get(path), current(c, generation), connection?.pending?.id == op.id { try clearPending(); notice = "已从电脑核对操作回执。" }
+                let path: String? = op.management == true ? "/client/operations/\(op.id)" : op.path.hasSuffix("/send") || op.path.hasSuffix("/stop") ? "/commands/\(op.id)" : op.path.hasSuffix("/settings") || op.path.contains("/commands/") && op.method == "PATCH" ? op.path + "?requestId=\(op.id)" : nil
+                if let path, let receipt: JSONValue = try? await api.get(path), current(c, generation), connection?.pending?.id == op.id, op.management != true || ["confirmed", "failed"].contains(receipt["status"].string) { try clearPending(); notice = receipt["status"].string == "failed" ? receipt["error"]["message"].string : "已从设备核对操作回执。" }
             }
         } catch is CancellationError { }
         catch {
@@ -106,7 +113,7 @@ import Observation
             if current(c, generation), selected == id, let present = page { page = SessionPage(session: present.session, events: mergedEvents(present.events, older.events), olderCursor: older.olderCursor, commands: present.commands) }
         } catch { if current(c, generation) { self.error = error.localizedDescription } }
     }
-    func select(_ id: String) async { if selected != id || page?.session.id != id { selected = id; page = nil; composerDraft = "" }; await refresh() }
+    func select(_ id: String) async { if selected != id || page?.session.id != id { selected = id; page = nil; composerDraft = ""; composerAttachments = [] }; await refresh() }
     func openSearchHit(_ sessionID: String, eventID: String) async -> Bool {
         guard let c = connection else { return false }; let generation = epoch
         do {
@@ -115,10 +122,20 @@ import Observation
             guard current(c, generation) else { return false }; selected = sessionID; page = detail; return true
         } catch { if current(c, generation) { self.error = error.localizedDescription }; return false }
     }
-    func send(_ text: String, mode: String = "queue") async -> Bool {
-        guard let id = selected, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, text.count <= 200000 else { return false }
-        return await execute("/sessions/\(id)/send", values: ["text": .string(text), "mode": .string(mode)]) != nil
+    func send(_ text: String, mode: String? = nil, attachmentIds: [String] = []) async -> Bool {
+        guard let id = selected, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachmentIds.isEmpty, text.count <= 200000 else { return false }
+        let sent = await execute("/sessions/\(id)/send", values: ["text": .string(text), "mode": .string(mode ?? composerSendMode(snapshot?.sessions.first { $0.id == id }?.runState ?? "unknown")), "attachmentIds": .array(attachmentIds.map { .string($0) })]) != nil
+        if sent && selected == id { composerDraft = ""; composerAttachments = [] }
+        return sent
     }
+    func branch(_ row: TranscriptRow, edit: Bool) async -> Bool {
+        guard let owner = selected, let event = row.eventIds.first else { return false }
+        guard let result = await execute("/sessions/\(owner)/branch", values: ["eventId": .string(event), "edit": .bool(edit)], refreshAfter: false) else { return false }
+        await select(result["id"].string)
+        if edit { composerDraft = row.text }
+        return true
+    }
+    func cancelTurn() async { if let id = selected { _ = await execute("/sessions/\(id)/stop", values: ["pause": .bool(false)]) } }
     func stop() async { if let id = selected { _ = await execute("/sessions/\(id)/stop", values: ["pause": .bool(true)]) } }
     func answer(_ item: InboxItem, action: NativeAction) async {
         let id = item.id.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? item.id
@@ -128,14 +145,23 @@ import Observation
         guard var c = connection, canWrite else { return nil }; let generation = epoch
         busy = true; defer { if current(c, generation) { busy = false } }
         let id = UUID().uuidString.lowercased(); var fields = values
-        if path.hasSuffix("/send") || path.hasSuffix("/stop") || path.hasSuffix("/settings") || path.contains("/commands/") && method == "PATCH" { fields["requestId"] = .string(id) }
+        let management = path.hasPrefix("/automations") && path != "/automations/preview" || path.hasPrefix("/memory") || path.hasPrefix("/goals/") && path.hasSuffix("/review")
+        if path.hasSuffix("/send") || path.hasSuffix("/stop") || path.hasSuffix("/settings") || path.hasSuffix("/branch") || path.hasPrefix("/interactions/") || path.contains("/commands/") && method == "PATCH" { fields["requestId"] = .string(id) }
         let body = JSONValue.object(fields)
-        c.pending = PendingOperation(id: id, path: path, body: body, method: method)
+        c.pending = PendingOperation(id: id, path: path, body: body, method: method, management: management)
         do {
             var next = book; next.put(c); try commit(next)
-            let result: JSONValue = try await HostAPI(connection: c).perform(path, method: method, body: method == "DELETE" ? nil : body)
+            var result: JSONValue = try await HostAPI(connection: c).perform(management ? "/client/operations" : path, method: management ? "POST" : method, body: management ? .object(["requestId": .string(id), "path": .string("/api" + path), "method": .string(method), "body": body]) : method == "DELETE" ? nil : body)
             guard current(c, generation) else { return nil }
-            try clearPending(); notice = "电脑已保存操作。"
+            if management {
+                if result["status"].string != "confirmed" {
+                    if result["status"].string == "failed" { try clearPending() }
+                    self.error = result["error"]["message"].string.isEmpty ? "操作结果待核对，不会自动重发。" : result["error"]["message"].string
+                    return nil
+                }
+                result = result["result"]
+            }
+            try clearPending(); notice = "设备已保存操作。"
             if path == "/app-settings" && method == "PATCH" { appSettings = result }
             if refreshAfter { await refresh() }; return result
         } catch {
@@ -145,16 +171,20 @@ import Observation
         }
     }
     func clearPending() throws { guard var c = connection else { return }; c.pending = nil; var next = book; next.put(c); try commit(next) }
-    func createSession(_ draft: SessionDraft) async -> Bool {
+    func createSession(_ draft: SessionDraft, attachments: [ManagedAttachment] = []) async -> Bool {
         let generation = epoch
         var effective = draft
         if snapshot?.harnesses?.first(where: { $0.id == draft.harnessId })?.modelSupport == "native-only" { effective.choice = "native" }
+        if !draft.customPath.isEmpty {
+            guard let workspace = await execute("/workspaces", values: ["projectId": draft.projectId.isEmpty ? .null : .string(draft.projectId), "rootPath": .string(draft.customPath)]) else { return false }
+            effective.workspaceId = workspace["id"].string
+        }
         guard let c = connection, let result = await execute("/sessions", values: effective.body.object, refreshAfter: false), current(c, generation) else { return false }
         let id = result["id"].string; guard !id.isEmpty else { return false }
         selected = id; page = nil; await refresh()
-        if !draft.firstMessage.isEmpty {
-            let sent = await send(draft.firstMessage, mode: "new")
-            if !sent { composerDraft = draft.firstMessage }
+        if !draft.firstMessage.isEmpty || !attachments.isEmpty {
+            let sent = await send(draft.firstMessage, mode: "new", attachmentIds: attachments.map(\.id))
+            if !sent { composerDraft = draft.firstMessage; composerAttachments = attachments }
         }
         return true
     }
@@ -164,6 +194,41 @@ import Observation
         if await execute("/sessions/\(id)", method: "DELETE", refreshAfter: false) != nil { if selected == id { selected = nil; page = nil }; await refresh() }
     }
     func disconnect() { if let c = connection { removeDevice(c.hostId) } }
+    func notificationIsVisible(_ target: NotificationTarget) async -> Bool {
+        guard let c = connection, c.hostId == target.hostId else { return false }
+        let generation = epoch
+        do {
+            let api = HostAPI(connection: c)
+            let item: JSONValue = try await api.perform(target.path, timeout: 2)
+            guard current(c, generation), item["id"].string == target.notificationId, item["link"]["hostId"].string == c.hostId,
+                  selectedTab == "sessions", !item["sessionId"].string.isEmpty, item["sessionId"].string == selected else { return false }
+            let _: JSONValue = try await api.perform(target.path + "/ack", method: "POST", body: .object(["sessionId": item["sessionId"]]), timeout: 2)
+            return current(c, generation) && selectedTab == "sessions" && selected == item["sessionId"].string
+        } catch { return false }
+    }
+    func openNotification(_ target: NotificationTarget) async -> Bool {
+        guard !busy, let c = book.devices.first(where: { $0.hostId == target.hostId }) else {
+            notice = "此通知的 Host 未配对，或当前操作尚未完成。"; return false
+        }
+        let generation = epoch
+        do {
+            let api = HostAPI(connection: c)
+            let item: JSONValue = try await api.get(target.path)
+            let state: Snapshot = try await api.get("/native/snapshot")
+            guard !busy, epoch == generation, book.devices.contains(where: { $0.hostId == c.hostId && $0.token == c.token }),
+                  state.hostId == c.hostId, state.protocolVersion == HostAPI.protocolVersion, item["id"].string == target.notificationId,
+                  item["link"]["hostId"].string == c.hostId else { return false }
+            switchDevice(c.hostId)
+            snapshot = state
+            let sessionId = item["sessionId"].string
+            if !sessionId.isEmpty, state.sessions.contains(where: { $0.id == sessionId }) {
+                selectedTab = "sessions"; await select(sessionId)
+            } else { selectedTab = "sessions"; notice = item["title"].string }
+            guard connection?.hostId == c.hostId, connection?.token == c.token else { return false }
+            let _: JSONValue = try await api.perform(target.path + "/read", method: "POST", body: .object([:]))
+            return true
+        } catch { if epoch == generation { self.error = "无法打开此通知，请检查 Host 连接或事项是否已过期。" }; return false }
+    }
 }
 func mergedEvents(_ current: [RuntimeEvent], _ incoming: [RuntimeEvent]) -> [RuntimeEvent] {
     var events: [String: RuntimeEvent] = [:]; for event in current + incoming { events[event.id] = event }; return events.values.sorted { $0.sequence < $1.sequence }

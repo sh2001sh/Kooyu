@@ -28,6 +28,14 @@ xcodebuild -project Kooyu.xcodeproj -scheme Kooyu \
 
 前台每 2 秒拉取快照/当前会话，用量每 10 秒读取，后台停止刷新。切换电脑后丢弃旧快照、会话、用量与未完成的异步结果。每台电脑独立保存未知操作标记；请求失败不自动重发，先核对回执/会话。
 
-引擎安装/升级/登录、首次设置、系统入口修改与完整授权撤销在电脑本机执行。推送通知、图片/PDF 文件预览及完整块级 Markdown 样式仍未覆盖；消息支持行内 Markdown 与文本选择。完整功能及验证边界见 ../../docs/mobile-feature-parity.md。
+引擎安装/升级/登录、首次设置、系统入口修改与完整授权撤销在电脑本机执行。图片/PDF 文件预览及完整块级 Markdown 样式仍未覆盖；消息支持行内 Markdown 与文本选择。完整功能及验证边界见 ../../docs/mobile-feature-parity.md。
+
+## APNs 后台事项提醒
+
+源码已接入 UIApplicationDelegate / UNUserNotificationCenterDelegate、逐 Host 主动开关、OS token 更新、修订检查、离线撤销重试与点击定位。设置中主动开启后请求系统权限。token 只在 App 内存和 Host Vault，不写入 UserDefaults。默认隐藏正文；前台只有实际查看同一会话时确认并抑制。点击只读取已保存 Host 的当前事实，不批准事项或执行 payload 中的 URL。
+
+Xcode 中选择自己的开发团队，为 Bundle ID 启用 Push Notifications。Kooyu.entitlements 引用 APNS_ENVIRONMENT；Debug 为 development/sandbox，Release 为 production。Host 本机工作中心配置对应 Team ID、Key ID、.p8、Bundle ID 与环境。更换 Host 配置或关闭通道后需在手机明确重新启用。移除本机连接不等于 Host 撤销；先关闭提醒，或在 Host 撤销设备。
+
+Windows 仅验证 Swift 语法。Apple 签名、Xcode 严格并发编译、XCTest、OS token、真机锁屏/点击/切网仍需 macOS 和设备验收。单测源码覆盖 payload 忽略外部动作、Host 身份和路径编码，不证明 Apple 已投递。
 
 本机 Windows 无 Xcode，不能把源码检查或 Host 协议测试当作 iOS 编译/真机证据。已配置 macOS CI 构建与 XCTest，实际结果以运行记录为准。

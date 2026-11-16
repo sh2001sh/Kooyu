@@ -7,7 +7,7 @@ struct PairingInvitation: Equatable, Sendable {
 
     static func parse(_ raw: String) throws -> PairingInvitation {
         let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        let message = "这不是有效的 Kooyu 配对二维码，请在桌面「设置 → 手机连接」重新生成。"
+        let message = "配对二维码无效。请在桌面「设置 → 手机连接」重新生成。"
         guard raw.utf8.count <= 2048,
               let components = URLComponents(string: text),
               components.scheme?.lowercased() == "https",

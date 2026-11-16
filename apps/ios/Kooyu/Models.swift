@@ -53,12 +53,27 @@ struct HostSession: Codable, Identifiable, Hashable, Sendable {
     var model: String?
     var reasoning: String?
     var permissionMode: String?
+    var bindingId: String?
+    var bindingUnavailable: Bool?
     var settingsRevision: Int?
     var pinned: Bool?
     var kind: String?
+    var phase: String?
+    var connectionState: String?
     var nativeCapabilities: [String: String]?
+    var nativeSessionId: String?
     var stateLabel: String {
-        switch runState { case "running": "运行中"; case "idle": "空闲"; case "waiting-input": "等待输入"; default: "待核对" }
+        if runState == "waiting-input" { return "等待输入" }
+        if kind == "supervisor" { return projectId == nil ? "全局主对话" : "项目主对话" }
+        if phase == "draft" { return "尚未启动" }
+        if connectionState == "offline" { return "原生未连接" }
+        if connectionState == "reconnecting" { return "原生重连中" }
+        switch runState {
+        case "running": return "正在运行"
+        case "idle": return "空闲"
+        case "waiting-input": return "等待输入"
+        default: return "待核对"
+        }
     }
 }
 struct HostProject: Codable, Identifiable, Sendable { let id, name: String; var bindingDefaults: JSONValue?; var configRevision: Int? }
@@ -69,6 +84,16 @@ struct InboxItem: Codable, Identifiable, Sendable {
     let resolved: Bool
     let actions: [NativeAction]?
 }
+struct HostGoal: Codable, Identifiable, Sendable {
+    let id: String
+    let title: String
+    let status: String
+    let controllerSessionId: String?
+    let sessionIds: [String]?
+    let verificationStatus: String?
+}
+struct GoalIdentifiable: Identifiable { let id: String }
+
 struct Snapshot: Decodable, Sendable {
     let protocolVersion: Int
     let hostId: String
@@ -80,11 +105,13 @@ struct Snapshot: Decodable, Sendable {
     let bindings: [JSONValue]?
     let bindingDefaults: JSONValue?
     let supervisions: [JSONValue]?
+    let goals: [HostGoal]?
 }
 struct RuntimeEvent: Codable, Identifiable, Sendable {
     let id, type: String
     let sequence: Int
     let payload: JSONValue
+    var createdAt: String? = nil
     var text: String {
         if type == "text-delta" { return payload["delta"].string.isEmpty ? payload["text"].string : payload["delta"].string }
         return payload.text
@@ -117,13 +144,19 @@ struct PendingOperation: Codable, Sendable {
     let id, path: String
     let body: JSONValue
     var method: String? = nil
+    var management: Bool? = nil
 }
 struct Connection: Codable, Identifiable, Sendable {
     let url, hostId, deviceId, token, expiresAt: String
     var pending: PendingOperation?
     var name: String? = nil
     var id: String { hostId }
-    var displayName: String { name?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? name! : "我的电脑" }
+    var displayName: String {
+        let value = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if value.isEmpty || value == "我的电脑" { return "我的设备" }
+        if value.range(of: #"^电脑\s*\d+$"#, options: .regularExpression) != nil { return value.replacingOccurrences(of: "电脑", with: "设备") }
+        return value
+    }
 }
 struct PairResult: Decodable, Sendable {
     struct Device: Decodable, Sendable { let id, expiresAt: String }

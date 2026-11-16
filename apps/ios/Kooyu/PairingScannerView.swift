@@ -17,8 +17,6 @@ struct PairingScannerView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 16) {
-                Text("对准桌面「设置 → 手机连接」的二维码，识别后确认连接这台电脑。")
-                    .padding(.horizontal)
                 if ready {
                     CameraScanner(onCode: { text in
                         ready = false

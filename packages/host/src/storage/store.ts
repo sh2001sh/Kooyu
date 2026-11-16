@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync } from "node:fs";
+import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import {
@@ -12,7 +12,15 @@ import {
   type Supervision,
   type HarnessBinding,
 } from "@kodo/protocol";
-import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4 } from "./schema.js";
+import {
+  SCHEMA_V1,
+  SCHEMA_V2,
+  SCHEMA_V3,
+  SCHEMA_V4,
+  SCHEMA_V7,
+  SCHEMA_V8,
+  SCHEMA_V9,
+} from "./schema.js";
 
 export class Store {
   readonly db: DatabaseSync;
@@ -27,8 +35,16 @@ export class Store {
         "PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;",
       );
       const version = this.db.prepare("PRAGMA user_version").get()?.user_version;
-      if (typeof version !== "number" || version > 6)
+      if (typeof version !== "number" || version > 9)
         throw new Error("Unsupported database schema version.");
+      if (path !== ":memory:" && version > 0 && version < 9) {
+        // A consistent SQLite snapshot includes committed WAL data. Never migrate without it.
+        const backupPath =
+          path + ".pre-v" + version + "-" + Date.now() + "-" + randomUUID() + ".sqlite";
+        writeFileSync(backupPath, "", { flag: "wx", mode: 0o600 });
+        this.db.prepare("VACUUM INTO ?").run(backupPath);
+        chmodSync(backupPath, 0o600);
+      }
       // SQLite requires foreign_keys to be disabled outside the transaction
       // when rebuilding a referenced table. Validate again before committing.
       if (version < 3) this.db.exec("PRAGMA foreign_keys = OFF");
@@ -40,6 +56,9 @@ export class Store {
         if (version < 4) this.db.exec(SCHEMA_V4);
         if (version < 5) this.migrateBindings();
         if (version < 6) this.migrateKernelNames();
+        if (version < 7) this.db.exec(SCHEMA_V7);
+        if (version < 8) this.db.exec(SCHEMA_V8);
+        if (version < 9) this.db.exec(SCHEMA_V9);
         if (this.db.prepare("PRAGMA foreign_key_check").all().length)
           throw new Error("Database migration failed foreign key validation.");
         this.db
@@ -191,8 +210,7 @@ export class Store {
     })) as unknown as Session[];
   }
   addProject(project: Project, workspace?: Workspace): void {
-    this.db.exec("BEGIN IMMEDIATE");
-    try {
+    this.transaction(() => {
       this.db
         .prepare("INSERT INTO projects VALUES (?, ?, ?)")
         .run(project.id, project.name, project.createdAt);
@@ -200,11 +218,7 @@ export class Store {
         this.db
           .prepare("INSERT INTO workspaces VALUES (?, ?, ?, ?)")
           .run(workspace.id, workspace.projectId, workspace.hostId, workspace.rootPath);
-      this.db.exec("COMMIT");
-    } catch (error) {
-      this.db.exec("ROLLBACK");
-      throw error;
-    }
+    });
   }
   addSession(session: Session): void {
     this.db

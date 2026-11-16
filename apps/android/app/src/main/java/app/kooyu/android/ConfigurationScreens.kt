@@ -1,13 +1,23 @@
 package app.kooyu.android
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
@@ -21,42 +31,69 @@ fun editableEndpoint(value: JSONObject): JSONObject = JSONObject().apply {
     listOf("id", "name", "protocol", "baseUrl", "modelsUrl").forEach { key -> if (!value.isNull(key)) put(key, value.get(key)) }
 }
 
-@Composable fun ModelConfigurationScreen(state: WorkbenchState, model: Workbench, close: () -> Unit) {
+@Composable fun ModelConfigurationScreen(state: WorkbenchState, model: Workbench, embedded: Boolean = false, close: () -> Unit) {
     var section by remember { mutableStateOf("providers") }; var data by remember { mutableStateOf<JSONObject?>(null) }
     var revision by remember { mutableIntStateOf(0) }; var loading by remember { mutableStateOf(true) }
     var editor by remember { mutableStateOf<String?>(null) }; var original by remember { mutableStateOf<JSONObject?>(null) }
     var deleting by remember { mutableStateOf<Pair<String, JSONObject>?>(null) }
     val scope = rememberCoroutineScope()
     LaunchedEffect(state.connection?.hostId, revision) { loading = true; data = model.read("/provider-configuration"); loading = false }
-    FullScreenPage("模型来源与绑定", close) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    val content: @Composable (PaddingValues) -> Unit = { padding ->
+        val c = Kooyu.colors
+        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             ChoiceField("管理内容", section, listOf("providers" to "模型来源", "models" to "模型", "bindings" to "引擎绑定", "defaults" to "默认配置")) { section = it }
-            if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-            if (state.error.isNotBlank()) Text(state.error, color = MaterialTheme.colorScheme.error)
-            if (!loading && data == null) TextButton(onClick = { revision++ }) { Text("读取失败，重试") }
+            if (loading) LinearProgressIndicator(Modifier.fillMaxWidth(), color = c.accent)
+            if (state.error.isNotBlank()) Text(state.error, color = c.destructive)
+            if (!loading && data == null) TextButton(onClick = { revision++ }) { Text("读取失败，重试", color = c.destructive) }
             if (data != null && section != "defaults") {
-                Button(onClick = { original = null; editor = section }, enabled = state.canWrite) { Text("添加" + when (section) { "providers" -> "模型来源"; "models" -> "模型"; else -> "绑定" }) }
+                Button(
+                    onClick = { original = null; editor = section },
+                    enabled = state.canWrite,
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = c.accent, contentColor = c.onAccent)
+                ) {
+                    Icon(Icons.Outlined.Add, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("添加" + when (section) { "providers" -> "模型来源"; "models" -> "模型"; else -> "绑定" }, fontWeight = FontWeight.SemiBold)
+                }
                 val rows = data!!.optJSONArray(section)?.objects() ?: emptyList()
-                if (rows.isEmpty()) Text("暂无配置。")
+                if (rows.isEmpty()) Text("暂无配置。", color = c.textSecondary, modifier = Modifier.padding(vertical = 12.dp))
                 rows.forEach { row ->
-                    Text(row.optString("name", row.optString("model")), style = MaterialTheme.typography.titleMedium)
-                    Text(if (section == "providers") (row.optJSONArray("endpoints")?.length() ?: 0).toString() + " 个 API 端点" else row.optString("harnessId") + " · " + row.optString("model"), style = MaterialTheme.typography.bodySmall)
-                    Row {
-                        TextButton(onClick = { original = row; editor = section }, enabled = state.canWrite) { Text("编辑") }
-                        if (section != "bindings") TextButton(onClick = { deleting = section to row }, enabled = state.canWrite) { Text("删除") }
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = c.raised,
+                        border = BorderStroke(0.5.dp, c.borderSubtle),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                    ) {
+                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(row.optString("name", row.optString("model")), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = c.text)
+                                    Text(if (section == "providers") "${row.optJSONArray("endpoints")?.length() ?: 0} 个 API 端点" else "${row.optString("harnessId")} · ${row.optString("model")}", fontSize = 12.sp, color = c.textSecondary, fontFamily = FontFamily.Monospace)
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    TextButton(onClick = { original = row; editor = section }, enabled = state.canWrite) { Text("编辑", color = c.text) }
+                                    if (section != "bindings") TextButton(onClick = { deleting = section to row }, enabled = state.canWrite) { Text("删除", color = c.destructive) }
+                                }
+                            }
+                            if (section == "providers") row.optJSONArray("endpoints")?.objects()?.forEach { endpoint ->
+                                Surface(shape = RoundedCornerShape(8.dp), color = c.sunken, border = BorderStroke(0.5.dp, c.borderSubtle), modifier = Modifier.fillMaxWidth()) {
+                                    Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Text(endpoint.optString("name"), fontSize = 12.sp, color = c.textSecondary, modifier = Modifier.weight(1f))
+                                        TextButton(onClick = { scope.launch { if (model.execute("/providers/" + row.getString("id") + "/endpoints/" + endpoint.getString("id") + "/models/refresh") != null) revision++ } }, enabled = state.canWrite) { Text("发现模型", fontSize = 11.5.sp, color = c.text) }
+                                    }
+                                }
+                            }
+                        }
                     }
-                    if (section == "providers") row.optJSONArray("endpoints")?.objects()?.forEach { endpoint -> Row {
-                        Text(endpoint.optString("name"), Modifier.weight(1f))
-                        TextButton(onClick = { scope.launch { if (model.execute("/providers/" + row.getString("id") + "/endpoints/" + endpoint.getString("id") + "/models/refresh") != null) revision++ } }, enabled = state.canWrite) { Text("发现模型") }
-                    } }
-                    HorizontalDivider()
                 }
             }
             if (section == "defaults") BindingDefaultsEditor(state, model)
         }
     }
+    if (embedded) content(PaddingValues()) else FullScreenPage("模型来源与绑定", close, content = content)
     editor?.let { kind -> ConfigurationEditor(kind, original, data ?: JSONObject(), state, model, { editor = null }) { editor = null; revision++ } }
-    deleting?.let { (kind, row) -> ConfirmDialog("删除此配置？", row.optString("name", row.optString("model")) + "，正在使用的配置以电脑检查结果为准。", "删除", { deleting = null }) { scope.launch {
+    deleting?.let { (kind, row) -> ConfirmDialog("删除此配置？", row.optString("name", row.optString("model")) + "，正在使用的配置以设备检查结果为准。", "删除", { deleting = null }) { scope.launch {
         val path = if (kind == "providers") "/providers/" else "/provider-models/"
         if (model.execute(path + row.getString("id"), "DELETE", null) != null) { deleting = null; revision++ }
     } } }
@@ -130,7 +167,6 @@ fun editableEndpoint(value: JSONObject): JSONObject = JSONObject().apply {
                         HorizontalDivider()
                     }
                     TextButton(onClick = { endpoints = endpoints + JSONObject().put("name", "API").put("protocol", "openai-completions").put("baseUrl", "") }, enabled = endpoints.size < 12) { Text("添加端点") }
-                    Text("密钥仅以 HTTPS 提交给当前电脑，保存后不显示原值。", style = MaterialTheme.typography.bodySmall)
                 }
                 "models" -> {
                     ChoiceField("模型来源", provider, providers.map { it.getString("id") to it.getString("name") }) { provider = it; endpoint = "" }
@@ -151,7 +187,7 @@ fun editableEndpoint(value: JSONObject): JSONObject = JSONObject().apply {
                     ChoiceField("选择方式", selection, listOf("fixed" to "固定模型", "provider" to "此来源下选择模型")) { selection = it }
                     ChoiceField("接入路由", route, listOf("auto" to "自动", "direct" to "直连", "gateway" to "网关")) { route = it; preview = null }
                     OutlinedTextField(reasoning, { reasoning = it }, label = { Text("思考强度（可选）") })
-                    Row { Checkbox(asDefault, { asDefault = it }); Text("设为此电脑的引擎默认绑定", Modifier.padding(top = 12.dp)) }
+                    Row { Checkbox(asDefault, { asDefault = it }); Text("设为此设备的引擎默认绑定", Modifier.padding(top = 12.dp)) }
                     TextButton(onClick = { scope.launch { preview = model.execute("/harness-bindings/preview", body = bindingBody(), refreshAfter = false) } }, enabled = state.canWrite && valid) { Text("检查兼容性") }
                     preview?.let { plan -> Text(if (plan.optBoolean("supported")) "兼容 · " + plan.optString("route") else "此配置尚不能使用"); plan.optJSONArray("issues")?.let { issues -> (0 until issues.length()).forEach { Text(issues.getString(it), color = MaterialTheme.colorScheme.error) } } }
                 }
@@ -172,13 +208,13 @@ fun editableEndpoint(value: JSONObject): JSONObject = JSONObject().apply {
         expectedRevision = if (project.isEmpty()) state.snapshot.optJSONObject("bindingDefaults")?.optInt("revision") ?: 0 else rawProject?.optInt("configRevision") ?: 0
     }
     LaunchedEffect(project) { loadDefaults() }
-    ChoiceField("默认值范围", project, listOf("" to "当前电脑") + state.projects) { project = it }
-    state.harnesses.forEach { h -> ChoiceField(h.name, mapping.nullableString(h.id) ?: "", listOf("" to if (project.isEmpty()) "引擎原生默认" else "继承电脑默认") + state.bindings.filter { it.optString("harnessId") == h.id }.map { it.getString("id") to it.getString("name") }) { value -> mapping = JSONObject(mapping.toString()).put(h.id, value.ifEmpty { null } ?: JSONObject.NULL) } }
+    ChoiceField("默认值范围", project, listOf("" to "当前设备") + state.projects) { project = it }
+    state.harnesses.forEach { h -> ChoiceField(h.name, mapping.nullableString(h.id) ?: "", listOf("" to if (project.isEmpty()) "引擎原生默认" else "继承设备默认") + state.bindings.filter { it.optString("harnessId") == h.id }.map { it.getString("id") to it.getString("name") }) { value -> mapping = JSONObject(mapping.toString()).put(h.id, value.ifEmpty { null } ?: JSONObject.NULL) } }
     Button(onClick = { scope.launch {
         val body = JSONObject().put("expectedRevision", expectedRevision).put(if (project.isEmpty()) "harnessBindingIds" else "bindingDefaults", mapping)
         model.execute(if (project.isEmpty()) "/binding-defaults" else "/projects/" + project + "/binding-defaults", "PATCH", body)?.let { result ->
             expectedRevision = result.optInt(if (project.isEmpty()) "revision" else "configRevision", expectedRevision)
         }
-    } }, enabled = state.canWrite) { Text("保存默认绑定") }
+    } }, enabled = state.canWrite, shape = RoundedCornerShape(10.dp), colors = ButtonDefaults.buttonColors(containerColor = Kooyu.colors.accent, contentColor = Kooyu.colors.onAccent)) { Text("保存默认绑定", fontWeight = FontWeight.SemiBold) }
     TextButton(onClick = { loadDefaults() }, enabled = !state.busy) { Text("重新读取默认值") }
 }

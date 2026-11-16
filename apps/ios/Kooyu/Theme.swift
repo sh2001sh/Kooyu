@@ -16,21 +16,23 @@ extension Color {
 /// Desktop design tokens (apps/web/src/styles/app.css `:root` / `.dark`): monochrome accent,
 /// paper/navigator/sunken surfaces and hairline borders, so the phone reads as the same product.
 enum KY {
-    static let paper = Color(light: 0xFFFFFF, dark: 0x18191D)
-    static let navigator = Color(light: 0xF7F7F9, dark: 0x121316)
-    static let raised = Color(light: 0xFFFFFF, dark: 0x1E2026)
-    static let sunken = Color(light: 0xF1F2F4, dark: 0x23252C)
-    static let bubble = Color(light: 0xF2F3F6, dark: 0x262932)
-    static let capsule = Color(light: 0xF8F8FA, dark: 0x1D1F24)
+    static let paper = Color(light: 0xFFFFFF, dark: 0x0C0E14)
+    static let navigator = Color(light: 0xF7F7F9, dark: 0x08090D)
+    static let raised = Color(light: 0xFFFFFF, dark: 0x12151F)
+    static let sunken = Color(light: 0xF1F2F4, dark: 0x06070A)
+    static let bubble = Color(light: 0xF2F3F6, dark: 0x1A1D26)
+    static let capsule = Color(light: 0xF8F8FA, dark: 0x161922)
     static let text = Color(light: 0x111317, dark: 0xF4F4F6)
     static let textSecondary = Color(light: 0x525866, dark: 0xB0B5C0)
     static let textTertiary = Color(light: 0x848B98, dark: 0x79808E)
-    static let borderSubtle = Color(light: 0x111317, dark: 0xFFFFFF, lightAlpha: 0.07, darkAlpha: 0.075)
-    static let border = Color(light: 0x111317, dark: 0xFFFFFF, lightAlpha: 0.11, darkAlpha: 0.12)
-    static let borderStrong = Color(light: 0x111317, dark: 0xFFFFFF, lightAlpha: 0.18, darkAlpha: 0.19)
+    static let borderSubtle = Color(light: 0x111317, dark: 0xFFFFFF, lightAlpha: 0.07, darkAlpha: 0.06)
+    static let border = Color(light: 0x111317, dark: 0xFFFFFF, lightAlpha: 0.11, darkAlpha: 0.11)
+    static let borderStrong = Color(light: 0x111317, dark: 0xFFFFFF, lightAlpha: 0.18, darkAlpha: 0.22)
     static let accent = Color(light: 0x18191D, dark: 0xF4F4F6)
     static let onAccent = Color(light: 0xFFFFFF, dark: 0x141518)
-    static let accentTint = Color(light: 0x111317, dark: 0xFFFFFF, lightAlpha: 0.055, darkAlpha: 0.08)
+    static let accentTint = Color(light: 0x18191D, dark: 0xFFFFFF, lightAlpha: 0.07, darkAlpha: 0.08)
+    static let brandCoral = Color(light: 0xF17561, dark: 0xF17561)
+    static let brandCoralTint = Color(light: 0xF17561, dark: 0xF17561, lightAlpha: 0.14, darkAlpha: 0.22)
     static let success = Color(light: 0x15803D, dark: 0x4ADE80)
     static let successTint = Color(light: 0x16A34A, dark: 0x4ADE80, lightAlpha: 0.1, darkAlpha: 0.12)
     static let doneText = Color(light: 0x218056, dark: 0x5FD39E)
@@ -70,20 +72,32 @@ func harnessVisual(_ id: String?) -> HarnessVisual {
     return visual(label, String(label.prefix(2)).uppercased(), tint: 0x5C5C66, tintA: 0.13, ink: 0x3E3E48, darkTint: 0xA8A8B8, darkTintA: 0.22, darkInk: 0xD6D6E2)
 }
 
-/// Desktop-style engine badge: tinted circle or squircle with the engine's monogram.
+/// Desktop-style engine badge: tinted circle or squircle with the engine's brand mark or monogram.
 struct EngineBadge: View {
     let harnessId: String?
     var size: CGFloat = 20
     var circle = true
     var body: some View {
         let v = harnessVisual(harnessId)
-        Text(v.monogram)
-            .font(.system(size: size * (v.monogram.count > 1 ? 0.36 : 0.5), weight: .bold))
-            .lineLimit(1)
-            .foregroundStyle(v.ink)
-            .frame(width: size, height: size)
-            .background(v.tint, in: circle ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: size * 0.3, style: .continuous)))
-            .accessibilityHidden(true)
+        let isKooyu = harnessId == nil || harnessId == "kodo" || harnessId == "kooyu"
+        let shape = circle ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: size * 0.28, style: .continuous))
+        ZStack {
+            if isKooyu {
+                Image("KooyuMark")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: size * 0.65, height: size * 0.65)
+            } else {
+                Text(v.monogram)
+                    .font(.system(size: size * (v.monogram.count > 1 ? 0.36 : 0.5), weight: .bold))
+                    .lineLimit(1)
+                    .foregroundStyle(v.ink)
+            }
+        }
+        .frame(width: size, height: size)
+        .background(v.tint, in: shape)
+        .overlay(shape.stroke(v.ink.opacity(0.14), lineWidth: 0.5))
+        .accessibilityHidden(true)
     }
 }
 

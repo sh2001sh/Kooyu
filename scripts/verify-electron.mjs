@@ -82,6 +82,14 @@ try {
   report.electronPid = await app.evaluate(() => process.pid);
   checkpoint("launched");
   const page = await app.firstWindow({ timeout: 15000 });
+  // A fresh, isolated Host opens onboarding before exposing the workbench.
+  // Exercise the visible skip control rather than assuming old saved settings.
+  const skipOnboarding = page.getByRole("button", { name: "跳过引导", exact: true });
+  await Promise.race([
+    skipOnboarding.waitFor({ timeout: 15000 }),
+    page.getByRole("button", { name: "新建会话", exact: true }).first().waitFor({ timeout: 15000 }),
+  ]);
+  if (await skipOnboarding.isVisible()) await skipOnboarding.click();
   await page
     .getByRole("button", { name: "新建会话", exact: true })
     .first()

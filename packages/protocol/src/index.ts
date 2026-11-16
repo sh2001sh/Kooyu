@@ -4,6 +4,10 @@ export * from "./settings.js";
 export * from "./onboarding.js";
 export * from "./skills.js";
 export * from "./workspace-files.js";
+export * from "./goals.js";
+export * from "./notifications.js";
+export * from "./web.js";
+export * from "./files.js";
 import type { HarnessBinding, ModelParameters } from "./providers.js";
 
 import { HARNESS_IDS } from "./client.js";
@@ -86,6 +90,8 @@ export interface HarnessModelOption {
   isCurrent?: boolean;
   /** Native values, not a universal low/medium/high scale. */
   reasoning?: string[];
+  /** Explicit input modalities from this exact configured route. */
+  input?: ("text" | "image")[];
   /** Token limits are independent. Absence means unreported, never a product default. */
   contextWindow?: number;
   maxInputTokens?: number;
@@ -194,6 +200,7 @@ export interface Session {
   scope: "global" | "project";
   projectId: string | null;
   workspaceId: string | null;
+  executorId?: string;
   hostId: string;
   nativeSessionId: string | null;
   phase: "draft" | "native";
@@ -228,9 +235,12 @@ export interface Supervision {
   generation: number;
   cursor: string | null;
   goal?: string;
+  /** Exact goal this relation works toward; wakes carry it so results never cross goals. */
+  goalId?: string | null;
   runId?: string | null;
   continuous?: boolean;
   trigger?: "turn-ended" | "settled";
+  /** Numeric limits use 0 (or omission) for unlimited. */
   limits?: { endAt?: string; maxContinuations?: number; maxFailures?: number; budgetUsd?: number };
   continuations?: number;
   failures?: number;
@@ -302,6 +312,7 @@ export const createSessionSchema = z
     kind: z.enum(["direct", "supervisor"]),
     projectId: z.string().uuid().nullable().optional(),
     workspaceId: z.string().uuid().nullable().optional(),
+    executorId: z.string().max(100).optional(),
     bindingId: z.string().uuid().nullable().optional(),
     model: z.string().trim().min(1).max(200).nullable().optional(),
     reasoning: z.string().trim().min(1).max(100).nullable().optional(),
@@ -339,7 +350,7 @@ export interface Command {
   id: string;
   sessionId: string;
   kind: "open" | "send" | "stop" | "interaction";
-  origin: "user" | "supervisor" | "wake";
+  origin: "user" | "supervisor" | "wake" | "automation";
   controllerId: string | null;
   generation: number;
   bindingRevision: number | null;
@@ -374,13 +385,19 @@ export interface Usage {
   model: string | null;
   createdAt: string;
 }
+export const MAX_MESSAGE_ATTACHMENTS = 10;
 export const sendSchema = z
   .object({
     requestId: z.string().uuid(),
-    text: z.string().min(1).max(200000),
+    text: z.string().max(200000),
     mode: z.enum(["new", "queue", "steer"]).default("queue"),
+    /** Managed files uploaded beforehand; resolved per harness capability at dispatch. */
+    attachmentIds: z.array(z.string().uuid()).max(MAX_MESSAGE_ATTACHMENTS).optional(),
   })
-  .strict();
+  .strict()
+  .refine((v) => v.text.trim().length > 0 || Boolean(v.attachmentIds?.length), {
+    message: "消息需要正文或附件。",
+  });
 export const pendingMessageSchema = z
   .object({
     requestId: z.string().uuid(),
@@ -398,6 +415,7 @@ export const watchSchema = z
     targetSessionId: z.string().uuid(),
     mode: z.enum(["observe", "notify", "continue"]),
     goal: z.string().max(10000).default(""),
+    goalId: z.string().uuid().nullable().optional(),
     cursor: z.number().int().min(0).default(0),
     runId: z.string().nullable().optional(),
     continuous: z.boolean().default(false),
@@ -405,9 +423,9 @@ export const watchSchema = z
     limits: z
       .object({
         endAt: z.iso.datetime().optional(),
-        maxContinuations: z.number().int().positive().optional(),
-        maxFailures: z.number().int().positive().optional(),
-        budgetUsd: z.number().positive().optional(),
+        maxContinuations: z.number().int().nonnegative().optional(),
+        maxFailures: z.number().int().nonnegative().optional(),
+        budgetUsd: z.number().nonnegative().optional(),
       })
       .default({}),
   })
@@ -457,3 +475,7 @@ export class KodoError extends Error {
     this.name = "KodoError";
   }
 }
+
+export * from "./self-hosted.js";
+export * from "./automation-schedule.js";
+export * from "./clients.js";

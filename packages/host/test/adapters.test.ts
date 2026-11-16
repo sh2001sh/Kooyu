@@ -251,7 +251,18 @@ test("Kimi opens new sessions through the native Server API", async () => {
       return Response.json({
         code: 0,
         msg: "success",
-        data: { items: [{ provider: "test", model: "model-a", max_context_size: 4096 }] },
+        data: {
+          items: [
+            {
+              provider: "test",
+              model: "model-a",
+              max_context_size: 4096,
+              capabilities: ["tool_use", "image_in"],
+              support_efforts: ["low", "high", "max"],
+              default_effort: "high",
+            },
+          ],
+        },
       });
     if (url.endsWith("/api/v1/sessions") && method === "POST")
       return Response.json({ code: 0, msg: "success", data: { id: nativeSessionId } });
@@ -333,6 +344,69 @@ test("Kimi opens new sessions through the native Server API", async () => {
       assert.deepEqual(requests.find((entry) => entry.url.endsWith("/prompts::steer"))?.body, {
         prompt_ids: ["prompt_mock"],
       });
+      assert.equal(await runtime.supportsImages!("test/model-a"), true);
+      assert.equal(await runtime.supportsImages!("test/unknown"), false);
+      await runtime.send(
+        "",
+        "image-command",
+        "new",
+        { model: "test/model-a", reasoning: "max", revision: 1 },
+        {
+          images: [
+            {
+              type: "image",
+              data: "aW1hZ2U=",
+              mimeType: "image/png",
+              path: join(tmpdir(), "image.png"),
+            },
+          ],
+        },
+      );
+      assert.deepEqual(requests.find((entry) => entry.body?.prompt_id === "image-command")?.body, {
+        content: [
+          { type: "image", source: { kind: "base64", media_type: "image/png", data: "aW1hZ2U=" } },
+        ],
+        prompt_id: "image-command",
+        model: "test/model-a",
+        thinking: "max",
+        permission_mode: "manual",
+      });
+      await runtime.send("default", "default-thinking", "new", {
+        model: "test/model-a",
+        reasoning: null,
+        revision: 2,
+      });
+      assert.equal(
+        requests.find((entry) => entry.body?.prompt_id === "default-thinking")?.body.thinking,
+        "high",
+      );
+      await assert.rejects(
+        runtime.send("bad", "bad-thinking", "new", {
+          model: "test/model-a",
+          reasoning: "ultra",
+          revision: 3,
+        }),
+        /未声明这个思考档位/,
+      );
+      await assert.rejects(
+        runtime.send(
+          "x",
+          "bad-image",
+          "new",
+          { model: "test/unknown", reasoning: null, revision: 2 },
+          {
+            images: [
+              {
+                type: "image",
+                data: "aW1hZ2U=",
+                mimeType: "image/png",
+                path: join(tmpdir(), "image.png"),
+              },
+            ],
+          },
+        ),
+        /未声明图片输入/,
+      );
       MockWebSocket.latest!.push({
         type: "interaction",
         session_id: nativeSessionId,

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { AsyncEntry } from "@napi-rs/keyring";
+import { kodoSecrets } from "../credentials/vault.js";
 import {
   KodoError,
   providerSchema,
@@ -44,13 +44,8 @@ export interface ProviderVault {
   set(ref: string, value: string): Promise<void>;
   delete(ref: string): Promise<void>;
 }
-const systemVault: ProviderVault = {
-  get: (ref) => new AsyncEntry("Kodo", ref).getPassword(),
-  set: (ref, value) => new AsyncEntry("Kodo", ref).setPassword(value),
-  delete: async (ref) => {
-    await new AsyncEntry("Kodo", ref).deletePassword();
-  },
-};
+/** Configured Host vault (OS keyring on desktop, encrypted file on servers). */
+export const systemVault: ProviderVault = kodoSecrets;
 export class ProviderService {
   private readonly vault: ProviderVault;
   private readonly fetcher: typeof fetch;
@@ -943,6 +938,7 @@ export class ProviderService {
       name: model.name,
       provider: `kodo-${binding.providerId}`,
       source: "discovered" as const,
+      input: model.effective.input,
       contextWindow: model.effective.contextWindow,
       maxInputTokens: model.effective.maxInputTokens,
       maxOutputTokens: model.effective.maxOutputTokens,
@@ -1056,6 +1052,30 @@ export class ProviderService {
    * Fill unreported limits and prices from the public catalog. Native values always win;
    * reasoning levels are only added when the harness accepts catalog effort values.
    */
+  nativeModelInput(model: {
+    provider: string;
+    id: string;
+    baseUrl: string;
+    api: string;
+    declaredInput?: ("text" | "image")[];
+  }): ("text" | "image")[] | undefined {
+    const normalize = (url: string) => url.replace(/\/+$/, "");
+    const candidates = this.store.records<CatalogModel>("provider-model").filter((m) => {
+      if (!model.baseUrl || !model.api || m.model !== model.id) return false;
+      const provider = this.store.record<Provider>("provider", m.providerId);
+      const endpoint = provider?.endpoints.find((e) => e.id === m.endpointId);
+      return (
+        endpoint?.protocol === model.api && normalize(endpoint.baseUrl) === normalize(model.baseUrl)
+      );
+    });
+    if (candidates.length === 1 && candidates[0]!.overrides.input)
+      return candidates[0]!.overrides.input;
+    if (model.declaredInput) return model.declaredInput;
+    if (candidates.length === 1 && candidates[0]!.effective.input)
+      return candidates[0]!.effective.input;
+    const catalog = this.store.record<PublicCatalog>("model-catalog", "current");
+    return this.catalogMatch(model.id, catalog, [model.provider])?.parameters.input;
+  }
   enrichModelOptions(harnessId: HarnessId, models: HarnessModelOption[]): HarnessModelOption[] {
     const catalog = this.store.record<PublicCatalog>("model-catalog", "current");
     if (!catalog) return models;
@@ -1065,7 +1085,8 @@ export class ProviderService {
         option.contextWindow &&
         option.maxOutputTokens &&
         option.pricing &&
-        option.reasoning !== undefined
+        option.reasoning !== undefined &&
+        option.input !== undefined
       )
         return option;
       const names = [option.resolvedModel, option.id, option.name].filter(
@@ -1088,6 +1109,7 @@ export class ProviderService {
         ...option,
         parameterSources: { ...option.parameterSources },
       };
+      if (next.input === undefined && entry.parameters.input) next.input = entry.parameters.input;
       for (const field of ["contextWindow", "maxInputTokens", "maxOutputTokens"] as const)
         if (next[field] === undefined && entry.parameters[field] !== undefined) {
           next[field] = entry.parameters[field];

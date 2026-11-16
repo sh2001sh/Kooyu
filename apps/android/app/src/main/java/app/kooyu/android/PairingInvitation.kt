@@ -7,7 +7,7 @@ import java.util.Locale
 data class PairingInvitation(val address: String, val code: String) {
     companion object {
         fun parse(raw: String): PairingInvitation {
-            val message = "这不是有效的 Kooyu 配对二维码，请在桌面「设置 → 手机连接」重新生成。"
+            val message = "配对二维码无效。请在桌面「设置 → 手机连接」重新生成。"
             require(raw.length <= 2048) { message }
             val uri = try { URI(raw.trim()) } catch (_: Exception) { throw IllegalArgumentException(message) }
             require(uri.scheme.equals("https", ignoreCase = true) && !uri.host.isNullOrBlank() &&

@@ -174,8 +174,21 @@ test("Kodo alone receives management tools; standalone pi retains a separate ins
     await service.openNative(kodo.id);
     await service.openNative(pi.id);
     assert.deepEqual(
-      contexts.get(kodo.id)?.tools?.map((t) => t.name),
-      [...HARNESS_TOOL_NAMES],
+      contexts
+        .get(kodo.id)
+        ?.tools?.map((t) => t.name)
+        .sort(),
+      [
+        ...HARNESS_TOOL_NAMES,
+        "web_fetch",
+        "goal",
+        "files",
+        "automation",
+        "memory",
+        "applications",
+        "outbound",
+        ...(service.browser.status().available ? ["browser"] : []),
+      ].sort(),
     );
     assert.equal(contexts.get(pi.id)?.tools, undefined);
     assert.notEqual(kodo.instanceId, pi.instanceId);

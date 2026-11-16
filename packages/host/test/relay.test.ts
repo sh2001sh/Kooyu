@@ -101,7 +101,7 @@ test(
       const cookie = paired.headers.get("set-cookie")!;
       assert.match(cookie, /HttpOnly/);
       assert.match(cookie, /Secure/);
-      assert.match(cookie, /SameSite=Strict/);
+      assert.match(cookie, /SameSite=Lax/);
       assert.ok(cookie.includes("Path=" + new URL(base).pathname + "/api"));
       const headers = { cookie: cookie.split(";")[0]! };
       const snap = await fetch(base + "/api/snapshot", { headers });
@@ -174,6 +174,12 @@ test(
       // Force loss of the established transport. The same identity reconnects automatically.
       relay.hosts.values().next().value.ws.terminate();
       await until(() => connector.status().state !== "connected");
+      await until(() => connector.status().state === "connected");
+      // Invalid frames must close and reconnect, not throw from native WebSocket.close().
+      const malformedPeer = relay.hosts.values().next().value.ws;
+      const malformedClose = once(malformedPeer, "close");
+      malformedPeer.send(JSON.stringify({ type: "unexpected" }));
+      assert.equal((await malformedClose)[0], 4008);
       await until(() => connector.status().state === "connected");
       connector.disable();
       await until(() => relay.hosts.size === 0);

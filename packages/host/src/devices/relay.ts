@@ -9,7 +9,7 @@ import { existsSync, readFileSync, writeFileSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import { request, type ClientRequest } from "node:http";
 import { KodoError } from "@kodo/protocol";
-import { Entry } from "@napi-rs/keyring";
+import { secretVault } from "../credentials/vault.js";
 
 export const DEFAULT_RELAY_ORIGIN = "https://relay.kooyu.app";
 export type RemoteStatus = {
@@ -61,7 +61,14 @@ export class RelayConnector {
     this.origin = url.origin;
     this.file = join(dataDir, "relay-identity.json");
     this.vault =
-      vault ?? new Entry("Kooyu", "relay:" + createHash("sha256").update(this.file).digest("hex"));
+      vault ??
+      (() => {
+        const account = "relay:" + createHash("sha256").update(this.file).digest("hex");
+        return {
+          getPassword: () => secretVault().getSync("Kooyu", account),
+          setPassword: (value: string) => secretVault().setSync("Kooyu", account, value),
+        };
+      })();
     if (existsSync(this.file)) {
       const i = JSON.parse(readFileSync(this.file, "utf8")) as Identity;
       if (typeof i.publicKey !== "string" || typeof i.enabled !== "boolean")
@@ -210,7 +217,8 @@ export class RelayConnector {
         else if (this.connected && m.type === "request") this.forward(socket, m);
         else throw new Error("Unexpected frame");
       } catch {
-        socket.close(1008, "Invalid protocol");
+        // WHATWG WebSocket clients only accept 1000 or application codes 3000–4999.
+        socket.close(4008, "Invalid protocol");
       }
     });
   }
@@ -298,7 +306,7 @@ export class RelayConnector {
               })
             ) {
               upstream.destroy();
-              socket.close(1013, "Backpressure");
+              socket.close(4013, "Backpressure");
               break;
             }
         });

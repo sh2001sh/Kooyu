@@ -83,7 +83,6 @@ export function EngineSettings({
   return (
     <SettingsPage
       title="引擎"
-      description="每个引擎可以用自己的登录与配置，也可以改用你添加的模型来源。展开引擎设置新对话的默认模型、思考强度和权限。"
       actions={
         <button
           type="button"
@@ -259,10 +258,7 @@ function InstallBlock({
             </a>
           )}
         </SettingsRow>
-        <SettingsRow
-          label="自定义启动入口"
-          description="找不到程序、或想用另一个版本时填写；留空则自动检测。"
-        >
+        <SettingsRow label="自定义启动入口">
           {installation?.canRestore && (
             <button
               type="button"
@@ -296,16 +292,10 @@ function InstallBlock({
                 required
                 value={command}
                 onChange={(e) => setCommand(e.target.value)}
-                placeholder="例如 C:\\Tools\\codex.exe"
               />
             </SettingsRow>
-            <SettingsRow label="启动参数" description="用空格分隔。" htmlFor={`args-${h.id}`}>
-              <input
-                id={`args-${h.id}`}
-                value={args}
-                onChange={(e) => setArgs(e.target.value)}
-                placeholder="app-server"
-              />
+            <SettingsRow label="启动参数" htmlFor={`args-${h.id}`}>
+              <input id={`args-${h.id}`} value={args} onChange={(e) => setArgs(e.target.value)} />
             </SettingsRow>
             <div className="sx-form__actions">
               <button type="button" onClick={() => setEditing(false)}>

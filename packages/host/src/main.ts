@@ -17,6 +17,7 @@ import { SessionService } from "./session-service.js";
 import { createHostHandler, createHostServer } from "./http/server.js";
 import { Pairing } from "./devices/pairing.js";
 import { RelayConnector, DEFAULT_RELAY_ORIGIN } from "./devices/relay.js";
+import { configureVault } from "./credentials/vault.js";
 let fatalCleanup = () => {};
 let fatal = false;
 const onFatal = (error: unknown) => {
@@ -38,9 +39,15 @@ const onFatal = (error: unknown) => {
 process.on("uncaughtException", onFatal);
 process.on("unhandledRejection", onFatal);
 const dataDir = hostDataDirectory();
-mkdirSync(dataDir, { recursive: true });
+mkdirSync(dataDir, { recursive: true, mode: 0o700 });
 const port = Number(process.env.KODO_HOST_PORT ?? 4310),
   bind = process.env.KODO_BIND ?? "127.0.0.1";
+const adminPort = process.env.KODO_ADMIN_PORT ? Number(process.env.KODO_ADMIN_PORT) : null;
+if (
+  adminPort !== null &&
+  (!Number.isInteger(adminPort) || adminPort < 1 || adminPort > 65535 || adminPort === port)
+)
+  throw new Error("Invalid KODO_ADMIN_PORT (must differ from the public port).");
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("Invalid KODO_HOST_PORT.");
 const tls = Boolean(process.env.KODO_TLS_CERT && process.env.KODO_TLS_KEY);
 if (bind !== "127.0.0.1" && bind !== "::1" && !tls)
@@ -65,6 +72,11 @@ const cleanup = () => {
   } catch {}
 };
 process.once("exit", cleanup);
+const vault = configureVault(dataDir);
+if (!vault.status().available)
+  console.warn(
+    `Credential vault unavailable: ${vault.status().reason} Secret-backed features stay disabled.`,
+  );
 const store = new Store(join(dataDir, "kodo.sqlite"));
 store.recover();
 const service = new SessionService(store, { dataDir, onFatal });
@@ -77,6 +89,11 @@ const options = {
   pairing,
   relay,
 };
+// Optional plaintext administration is reachable only inside the Host's loopback namespace.
+const adminServer =
+  adminPort === null ? null : createHostServer(service, { ...options, port: adminPort });
+adminServer?.once("error", onFatal);
+adminServer?.listen(adminPort!, "127.0.0.1");
 // This ephemeral loopback listener never grants local privileges. Relay traffic
 // cannot be forwarded into the trusted desktop listener even with spoofed headers.
 const remoteServer = createHostServer(service, {
@@ -98,6 +115,8 @@ const server = tls
     )
   : createHostServer(service, options);
 fatalCleanup = () => {
+  adminServer?.closeAllConnections();
+  adminServer?.close();
   relay.stop();
   remoteServer.closeAllConnections();
   remoteServer.close();
@@ -122,6 +141,7 @@ server.listen(port, bind, () => {
       discoveryVersion: 1,
       protocolVersion: PROTOCOL_VERSION,
       url: `${tls ? "https" : "http"}://127.0.0.1:${port}`,
+      ...(adminPort ? { adminUrl: `http://127.0.0.1:${adminPort}` } : {}),
     }),
   );
   console.log(`Kooyu Host: ${tls ? "https" : "http"}://127.0.0.1:${port}`);
@@ -138,6 +158,8 @@ for (const signal of ["SIGINT", "SIGTERM"] as const)
   process.on(signal, () => {
     if (closing) return;
     closing = true;
+    adminServer?.closeAllConnections();
+    adminServer?.close();
     relay.stop();
     remoteServer.closeAllConnections();
     remoteServer.close();

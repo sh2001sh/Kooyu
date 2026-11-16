@@ -31,10 +31,16 @@ export async function send(
   text: string,
   mode = "queue",
   requestId = crypto.randomUUID(),
+  attachmentIds: string[] = [],
 ): Promise<Command> {
   if (!navigator.onLine) throw new Error("设备离线，消息未发送；恢复连接后请重新操作。");
   try {
-    return await api(`/sessions/${sessionId}/send`, "POST", { requestId, text, mode });
+    return await api(`/sessions/${sessionId}/send`, "POST", {
+      requestId,
+      text,
+      mode,
+      ...(attachmentIds.length ? { attachmentIds } : {}),
+    });
   } catch (error) {
     if (error instanceof HostError) throw error;
     try {

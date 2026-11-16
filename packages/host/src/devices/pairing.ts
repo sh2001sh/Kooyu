@@ -56,10 +56,18 @@ export class Pairing {
         );
       });
   }
+  deviceId(token: string): string | undefined {
+    if (!this.authenticate(token)) return undefined;
+    const digest = hash(token);
+    return this.store
+      .records<{ id: string; digest: string }>("device-secret")
+      .find((d) => d.digest === digest)?.id;
+  }
   revoke(id: string): void {
     this.store.transaction(() => {
       this.store.remove("device-secret", id);
       this.store.remove("device-public", id);
+      this.store.remove("client-access", id);
     });
   }
 }

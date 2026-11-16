@@ -2,11 +2,14 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 @main struct KooyuApp: App {
+    @UIApplicationDelegateAdaptor(KooyuAppDelegate.self) private var appDelegate
     @State private var model = Workbench()
+    @AppStorage("kooyu.appearance") private var appearance = "system"
     var body: some Scene {
         WindowGroup {
             RootView(model: model)
                 .tint(Color("AccentColor"))
+                .preferredColorScheme(appearance == "dark" ? .dark : appearance == "light" ? .light : nil)
         }
     }
 }
@@ -19,40 +22,22 @@ struct RootView: View {
             if model.connection == nil {
                 PairView(model: model)
             } else {
-                TabView {
+                TabView(selection: $model.selectedTab) {
                     SessionListView(model: model)
-                        .tabItem { Label("会话", systemImage: "bubble.left.and.bubble.right.fill") }
-
-                    NavigationStack { ProjectsView(model: model) }
-                        .tabItem { Label("项目", systemImage: "folder.fill") }
-
-                    NavigationStack {
-                        List {
-                            if pending.isEmpty {
-                                ContentUnavailableView(
-                                    "暂无待处理事项",
-                                    systemImage: "checkmark.circle.fill",
-                                    description: Text("所有任务运行良好，无需人工审批或交互。")
-                                )
-                            }
-                            ForEach(pending) { item in
-                                Section(model.snapshot?.sessions.first { $0.id == item.sessionId }?.title ?? "会话") {
-                                    InteractionView(item: item, model: model)
-                                }
-                            }
-                        }
-                        .listStyle(.insetGrouped)
-                        .navigationTitle("待处理")
-                        .refreshable { await model.refresh() }
-                    }
-                    .tabItem { Label("待处理", systemImage: "tray.fill") }
-                    .badge(pending.count)
+                        .tabItem { Label("对话", systemImage: "bubble.left.and.bubble.right.fill") }
+                        .tag("sessions")
 
                     NavigationStack { UsageView(model: model) }
                         .tabItem { Label("用量", systemImage: "chart.bar.xaxis") }
+                        .tag("usage")
+
+                    NavigationStack { ModelConfigurationView(model: model) }
+                        .tabItem { Label("模型来源", systemImage: "cpu") }
+                        .tag("models")
 
                     NavigationStack { NativeSettingsView(model: model) }
                         .tabItem { Label("设置", systemImage: "gearshape.fill") }
+                        .tag("settings")
                 }
                 .id(model.connection?.hostId)
                 .safeAreaInset(edge: .top, spacing: 0) { StatusView(model: model) }
@@ -60,6 +45,15 @@ struct RootView: View {
         }
         .sheet(isPresented: $model.addingDevice) {
             PairView(model: model).interactiveDismissDisabled(model.busy)
+        }
+        .task(id: "\(model.push.pending?.hostId ?? "")/\(model.push.pending?.notificationId ?? "")/\(model.busy)") {
+            guard !model.busy, let target = model.push.pending else { return }
+            if await model.openNotification(target), model.push.pending == target { model.push.pending = nil }
+        }
+        .task(id: "\(phase == .active)-\(model.book.devices.map { $0.hostId + $0.deviceId }.joined())") {
+            guard phase == .active else { return }
+            model.push.isVisible = { [weak model] target in await model?.notificationIsVisible(target) ?? false }
+            await model.push.sync(model.book.devices)
         }
         .task(id: "\(phase == .active)-\(model.connection?.token ?? "")") {
             guard phase == .active, model.connection != nil else { model.online = false; return }
@@ -90,19 +84,15 @@ struct PairView: View {
                             .font(.system(size: 48))
                             .foregroundStyle(Color.accentColor)
                             .padding(.top, 8)
-                        Text("连接你的工作台")
+                        Text("连接工作台")
                             .font(.title2.weight(.bold))
-                        Text("在桌面 Kooyu「设置 → 手机连接」生成二维码，通过手机相机扫码即可快速配对。")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
                     }
                     .frame(maxWidth: .infinity)
                     .listRowBackground(Color.clear)
                 }
 
                 Section {
-                    TextField("电脑名称（例如：MacBook Pro、工作站）", text: $name)
+                    TextField("设备名称", text: $name)
 
                     Button {
                         invitation = nil
@@ -128,15 +118,12 @@ struct PairView: View {
                             Label("已识别桌面二维码", systemImage: "checkmark.circle.fill")
                                 .font(.headline)
                                 .foregroundStyle(.green)
-                            Text("配对码两分钟内有效，点击连接完成受信任配对。")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
                             Button {
                                 Task { await model.pair(url: invitation.address, code: invitation.code, name: name) }
                             } label: {
                                 HStack {
                                     Spacer()
-                                    Text("连接此电脑").fontWeight(.semibold)
+                                    Text("连接此设备").fontWeight(.semibold)
                                     if model.busy { Spacer(); ProgressView() }
                                     Spacer()
                                 }
@@ -185,7 +172,7 @@ struct PairView: View {
                     }
                 }
             }
-            .navigationTitle("连接电脑")
+            .navigationTitle("连接设备")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 if model.connection != nil {
@@ -219,18 +206,21 @@ struct StatusView: View {
                 if !model.online {
                     HStack(spacing: 6) {
                         Image(systemName: "wifi.slash").foregroundStyle(.red)
-                        Text("连接已断开，新的操作已暂停").font(.caption.weight(.medium))
+                        Text("设备已离线，正在重新连接").font(.footnote)
                     }
                 }
                 if !model.error.isEmpty {
-                    Text(model.error).font(.caption).foregroundStyle(.red).textSelection(.enabled)
+                    Text(model.error).font(.footnote).foregroundStyle(KY.destructive).textSelection(.enabled)
                 }
                 if model.connection?.pending != nil {
                     HStack {
                         Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                        Text("上次操作结果待核对，已暂停新写入").font(.caption)
+                        Text("有一项操作等待核对").font(.footnote)
                         Spacer()
-                        Button("我已核对") { clearing = true }
+                        Button("查询回执") { Task { await model.refresh() } }
+                            .font(.footnote)
+                            .disabled(model.busy)
+                        Button("核对") { clearing = true }
                             .font(.caption.bold())
                             .buttonStyle(.bordered)
                             .controlSize(.mini)
@@ -243,9 +233,9 @@ struct StatusView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.regularMaterial)
+            .background(KY.sunken)
             .overlay(Divider(), alignment: .bottom)
-            .confirmationDialog("仅清除本机待核对标记；不会撤销或重发原操作。", isPresented: $clearing, titleVisibility: .visible) {
+            .confirmationDialog("清除本机待核对标记", isPresented: $clearing, titleVisibility: .visible) {
                 Button("已核对，清除标记") {
                     do { try model.clearPending() } catch { model.error = error.localizedDescription }
                 }
@@ -259,20 +249,23 @@ struct SessionListView: View {
     @State private var creating = false
     @State private var search = ""
     @State private var project = ""
+    @State private var compactColumn: NavigationSplitViewColumn = .sidebar
+    @State private var projectsOpen = false
+    @State private var inboxOpen = false
     @State private var archived = false
     @State private var renaming: HostSession?
     @State private var deleting: HostSession?
     @State private var newTitle = ""
+    @State private var workOpen = false
+    @State private var workProject = ""
+    @State private var workTab = "工作记录"
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(preferredCompactColumn: $compactColumn) {
             List(selection: $model.selected) {
                 Section {
-                    Picker("项目范围", selection: $project) {
-                        Text("全部项目").tag("")
-                        Text("全局会话").tag("global")
-                        ForEach(model.snapshot?.projects ?? []) { Text($0.name).tag($0.id) }
-                    }
+                    Button("工作记录与成果", systemImage: "square.stack.3d.up") { workProject = ""; workTab = "工作记录"; workOpen = true }
+                    Button("管理项目", systemImage: "folder.badge.plus") { projectsOpen = true }
                     Picker("会话状态", selection: $archived) {
                         Text("进行中").tag(false)
                         Text("已归档").tag(true)
@@ -283,12 +276,13 @@ struct SessionListView: View {
                 if sessions.isEmpty {
                     ContentUnavailableView(
                         "暂无会话",
-                        systemImage: "bubble.left.and.exclamationmark",
-                        description: Text("创建新对话，或在桌面端发起任务。")
+                        systemImage: "bubble.left.and.exclamationmark"
                     )
                 }
 
-                ForEach(sessions) { session in
+                ForEach(groups, id: \.id) { group in
+                    Section {
+                ForEach(sessions.filter { ($0.projectId ?? "") == group.id }) { session in
                     NavigationLink(value: session.id) {
                         HStack(spacing: 12) {
                             EngineBadge(harnessId: session.harnessId, size: 34, circle: false)
@@ -358,35 +352,50 @@ struct SessionListView: View {
                     }
                     .disabled(model.busy)
                 }
+                    } header: {
+                        HStack {
+                            Text(group.name)
+                            Spacer()
+                            Button { workProject = group.id; workTab = "项目概览"; workOpen = true } label: { Image(systemName: "list.bullet.rectangle").frame(minWidth: 44, minHeight: 44) }.accessibilityLabel("\(group.name)项目概览")
+                            Button { project = group.id; creating = true } label: { Image(systemName: "plus").frame(minWidth: 44, minHeight: 44) }.accessibilityLabel("在\(group.name)中新建对话").disabled(!model.canWrite)
+                        }
+                    }
+                }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle("会话")
+            .navigationTitle("对话")
             .searchable(text: $search, prompt: "搜索会话标题")
             .refreshable { await model.refresh() }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { DeviceMenu(model: model) }
                 ToolbarItem(placement: .primaryAction) {
+                    Button { inboxOpen = true } label: { Image(systemName: "tray").overlay(alignment: .topTrailing) { if (model.snapshot?.inbox.filter { !$0.resolved }.count ?? 0) > 0 { Circle().fill(KY.destructive).frame(width: 7, height: 7) } } }.accessibilityLabel("收件箱")
+                }
+                ToolbarItem(placement: .primaryAction) {
                     Button {
-                        creating = true
+                        project = ""; creating = true
                     } label: {
                         Image(systemName: "square.and.pencil")
                     }
                     .disabled(!model.canWrite)
                 }
             }
-            .sheet(isPresented: $creating) { NewSessionView(model: model) }
+            .sheet(isPresented: $creating) { SessionComposerView(model: model, initialProject: project) }
+            .sheet(isPresented: $projectsOpen) { NavigationStack { ProjectsView(model: model).toolbar { Button("完成") { projectsOpen = false } } } }
+            .sheet(isPresented: $inboxOpen) { InboxView(model: model) }
+            .sheet(isPresented: $workOpen) { WorkHubView(model: model, initialProject: workProject, initialTab: workTab) }
         } detail: {
             if let session = model.snapshot?.sessions.first(where: { $0.id == model.selected }) {
-                ConversationView(model: model, session: session)
+                ConversationView(model: model, session: session).id(session.id)
             } else {
                 ContentUnavailableView(
                     "选择会话",
-                    systemImage: "bubble.left.and.bubble.right",
-                    description: Text("从侧边栏列表中选择一个会话，或新建对话。")
+                    systemImage: "bubble.left.and.bubble.right"
                 )
             }
         }
         .navigationSplitViewStyle(.balanced)
+        .onChange(of: model.selected) { _, selected in if selected != nil { compactColumn = .detail } }
         .alert("重命名对话", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("标题", text: $newTitle)
             Button("保存") {
@@ -396,7 +405,7 @@ struct SessionListView: View {
             }
             Button("取消", role: .cancel) { renaming = nil }
         }
-        .confirmationDialog("删除此电脑上的会话记录？此操作不能撤销。", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
+        .confirmationDialog("删除会话记录？此操作不可撤回。", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
             if let session = deleting {
                 Button("删除会话", role: .destructive) {
                     Task { await model.deleteSession(session.id); deleting = nil }
@@ -405,11 +414,14 @@ struct SessionListView: View {
         }
     }
 
+    private var groups: [HostProject] {
+        [HostProject(id: "", name: "全局对话")] + (model.snapshot?.projects ?? [])
+    }
+
     private var sessions: [HostSession] {
         model.snapshot?.sessions.filter {
             $0.archived == archived &&
-            (search.isEmpty || $0.title.localizedCaseInsensitiveContains(search)) &&
-            (project.isEmpty || (project == "global" ? $0.projectId == nil : $0.projectId == project))
+            (search.isEmpty || $0.title.localizedCaseInsensitiveContains(search))
         }.sorted { $0.pinned == true && $1.pinned != true } ?? []
     }
 
@@ -450,15 +462,18 @@ struct ConversationView: View {
     @Bindable var model: Workbench
     let session: HostSession
     @State private var draft = ""
-    @State private var mode = "queue"
     @State private var attachmentError = ""
     @State private var stopping = false
     @State private var details = false
     @State private var usage = false
+    @State private var workOpen = false
+    @State private var goalDetailId: String? = nil
     @State private var importing = false
-    @State private var attachments: [MobileTextAttachment] = []
+    @State private var attachments: [ManagedAttachment] = []
+    @State private var uploading = false
     @State private var atBottom = true
     @State private var scrollToken = 0
+    @State private var visibleBlock: String?
     @FocusState private var composerFocused: Bool
 
     private var live: HostSession { model.snapshot?.sessions.first { $0.id == session.id } ?? session }
@@ -488,20 +503,15 @@ struct ConversationView: View {
                         .disabled(model.loadingHistory)
                     }
 
-                    if blocks.isEmpty && !running {
-                        VStack(spacing: 10) {
-                            EngineBadge(harnessId: session.harnessId, size: 44, circle: false)
-                            Text(session.harnessId == "kodo" ? "让 Kooyu 接下来做什么？" : "交给 \(harnessName) 什么任务？")
-                                .font(.system(size: 18, weight: .semibold)).foregroundStyle(KY.text)
-                            Text("消息会发送到当前电脑执行，过程与结果实时同步。").font(.system(size: 13)).foregroundStyle(KY.textSecondary)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 64)
+                    if blocks.isEmpty && !running && inbox.isEmpty {
+                        ComposerWelcome(title: "今天想做些什么？").frame(minHeight: 300)
                     }
 
                     ForEach(Array(blocks.enumerated()), id: \.element.id) { index, block in
                         TranscriptBlockView(block: block, harnessId: session.harnessId,
-                                            live: running && t.thinkingPending && index == blocks.count - 1, continuation: cont[index])
+                                            live: running && t.thinkingPending && index == blocks.count - 1, continuation: cont[index],
+                                            onEdit: model.canWrite ? { row in Task { _ = await model.branch(row, edit: true) } } : nil,
+                                            onBranch: model.canWrite ? { row in Task { _ = await model.branch(row, edit: false) } } : nil)
                     }
 
                     if running {
@@ -514,11 +524,14 @@ struct ConversationView: View {
                         .onAppear { atBottom = true }
                         .onDisappear { atBottom = false }
                 }
+                .scrollTargetLayout()
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
                 .padding(.bottom, 16)
             }
             .defaultScrollAnchor(.bottom)
+            .scrollPosition(id: $visibleBlock)
+            .onChange(of: visibleBlock) { _, id in if let id { model.readingAnchors[(model.connection?.hostId ?? "") + ":" + session.id] = id } }
             .scrollDismissesKeyboard(.interactively)
             .background(KY.paper)
             .onChange(of: "\(blocks.count):\(t.rows.last?.text.count ?? 0):\(inbox.count):\(running)") { _, _ in
@@ -555,15 +568,39 @@ struct ConversationView: View {
                 }
             }
             ToolbarItemGroup(placement: .primaryAction) {
+                Button { workOpen = true } label: { Image(systemName: "square.stack.3d.up") }.accessibilityLabel("项目工作与成果")
+                if let goal = model.snapshot?.goals?.first(where: { $0.controllerSessionId == session.id || $0.sessionIds?.contains(session.id) == true }) {
+                    Button { goalDetailId = goal.id } label: {
+                        HStack(spacing: 3) {
+                            Image(systemName: "target")
+                            Text(goal.title).lineLimit(1)
+                        }
+                        .font(.system(size: 11, weight: .medium))
+                        .padding(.horizontal, 6).padding(.vertical, 3)
+                        .background(KY.sunken, in: Capsule())
+                    }
+                }
                 Button { usage = true } label: { Image(systemName: "chart.bar") }.accessibilityLabel("当前会话用量")
                 Button { details = true } label: { Image(systemName: "slider.horizontal.3") }.accessibilityLabel("会话配置与工具记录")
             }
         }
         .tint(KY.text)
         .refreshable { await model.refresh() }
-        .task(id: session.id) { await model.select(session.id) }
+        .task(id: session.id) {
+            await model.select(session.id)
+            visibleBlock = model.readingAnchors[(model.connection?.hostId ?? "") + ":" + session.id]
+            draft = LocalDrafts.read(model.connection?.hostId ?? "", session.id)
+            if !model.composerDraft.isEmpty { draft = model.composerDraft }
+            if !model.composerAttachments.isEmpty { attachments = model.composerAttachments }
+        }
         .onChange(of: model.composerDraft) { _, text in if !text.isEmpty { draft = text } }
+        .onChange(of: draft) { _, text in do { try LocalDrafts.save(model.connection?.hostId ?? "", session.id, text) } catch { model.error = "无法保存此对话的本机草稿。" } }
+        .onChange(of: model.composerAttachments.map(\.id)) { _, ids in if !ids.isEmpty { attachments = model.composerAttachments } }
         .sheet(isPresented: $details) { NativeSessionDetails(model: model, session: session) }
+        .sheet(isPresented: $workOpen) { WorkHubView(model: model, initialProject: session.projectId ?? "", initialTab: "成果") }
+        .sheet(item: Binding(get: { goalDetailId.map { GoalIdentifiable(id: $0) } }, set: { goalDetailId = $0?.id })) { item in
+            GoalDetailView(model: model, goalId: item.id)
+        }
         .sheet(isPresented: $usage) {
             NavigationStack {
                 UsageView(model: model, sessionId: session.id)
@@ -575,29 +612,29 @@ struct ConversationView: View {
         }
         .fileImporter(
             isPresented: $importing,
-            allowedContentTypes: [.plainText, .json, .xml, .sourceCode, .commaSeparatedText],
+            allowedContentTypes: [.item],
             allowsMultipleSelection: true
         ) { result in
-            do {
-                let urls = try result.get()
-                var next = attachments
-                for url in urls {
-                    guard next.count < 4 else { throw APIError(message: "一次最多附加 4 个文本文件。", status: 0) }
-                    let access = url.startAccessingSecurityScopedResource()
-                    defer { if access { url.stopAccessingSecurityScopedResource() } }
-                    let data = try Data(contentsOf: url, options: .mappedIfSafe)
-                    guard data.count <= 65536, next.reduce(0, { $0 + $1.bytes }) + data.count <= 163840 else {
-                        throw APIError(message: "单个文件最多 64 KiB，附件合计最多 160 KiB。", status: 0)
+            Task { @MainActor in
+                uploading = true
+                defer { uploading = false }
+                do {
+                    guard let connection = model.connection, model.canWrite else { throw APIError(message: "请先连接设备。", status: 0) }
+                    let owner = session.id
+                    for url in try result.get() {
+                        guard attachments.count < 10 else { throw APIError(message: "一次最多附加 10 个文件。", status: 0) }
+                        let access = url.startAccessingSecurityScopedResource()
+                        defer { if access { url.stopAccessingSecurityScopedResource() } }
+                        let values = try url.resourceValues(forKeys: [.fileSizeKey, .contentTypeKey])
+                        guard let size = values.fileSize, size <= 32 * 1024 * 1024 else { throw APIError(message: "单个附件最多 32 MiB。", status: 0) }
+                        let data = try await Task.detached { try Data(contentsOf: url, options: .mappedIfSafe) }.value
+                        let file = try await HostAPI(connection: connection).upload(name: url.lastPathComponent,
+                            mediaType: values.contentType?.preferredMIMEType ?? "application/octet-stream", data: data, sessionId: owner)
+                        guard model.selected == owner, model.connection?.token == connection.token else { return }
+                        attachments.append(ManagedAttachment(id: file["id"].string, name: url.lastPathComponent))
                     }
-                    guard let text = String(data: data, encoding: .utf8), !text.contains("\0") else {
-                        throw APIError(message: "仅支持 UTF-8 文本附件。", status: 0)
-                    }
-                    next.append(MobileTextAttachment(id: UUID().uuidString, name: url.lastPathComponent, content: text, bytes: data.count))
-                }
-                attachments = next
-                attachmentError = ""
-            } catch {
-                attachmentError = error.localizedDescription
+                    attachmentError = ""
+                } catch { attachmentError = error.localizedDescription }
             }
         }
     }
@@ -608,97 +645,28 @@ struct ConversationView: View {
 
     private var steerSupported: Bool { live.nativeCapabilities?["steer"] == "supported" }
 
-    /// Desktop `.composer`: raised card with a hairline ring, input on top, controls beneath.
     @ViewBuilder private var composer: some View {
-        let message = attachedMessage(draft, attachments)
-        let canSend = !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && model.canWrite && message.count <= 200000
-        VStack(alignment: .leading, spacing: 6) {
-            if !attachmentError.isEmpty {
-                Text(attachmentError).font(.system(size: 12)).foregroundStyle(KY.destructive).padding(.horizontal, 10)
-            }
-            if !attachments.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(attachments) { file in
-                            HStack(spacing: 4) {
-                                Image(systemName: "doc.text").font(.system(size: 11)).foregroundStyle(KY.textSecondary)
-                                Text(file.name).font(.system(size: 12)).foregroundStyle(KY.text).lineLimit(1)
-                                Button { attachments.removeAll { $0.id == file.id } } label: {
-                                    Image(systemName: "xmark").font(.system(size: 9, weight: .bold)).foregroundStyle(KY.textTertiary).frame(width: 20, height: 20)
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel("移除 \(file.name)")
-                            }
-                            .padding(.leading, 8).padding(.vertical, 2)
-                            .background(KY.sunken, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        VStack(spacing: 0) {
+            PendingComposerMessages(model: model, session: live)
+            NativeComposerControls(model: model, session: live, text: $draft,
+                attachments: attachments, uploading: uploading, error: attachmentError,
+                attach: { importing = true },
+                remove: { id in attachments.removeAll { $0.id == id }; attachmentError = "" },
+                submit: {
+                    let text = draft
+                    let files = attachments
+                    Task {
+                        if await model.send(text, attachmentIds: files.map(\.id)), draft == text {
+                            draft = ""; attachments = []; scrollToken += 1
                         }
                     }
-                    .padding(.horizontal, 8)
-                }
-            }
-            TextField(running ? "补充说明或排队下一条…" : "输入消息…", text: $draft, axis: .vertical)
-                .font(.system(size: 16))
-                .lineLimit(1...6)
-                .focused($composerFocused)
-                .padding(.horizontal, 10).padding(.top, 6)
-            HStack(spacing: 4) {
-                Button { importing = true } label: {
-                    Image(systemName: "paperclip").font(.system(size: 16)).foregroundStyle(KY.textSecondary).frame(width: 34, height: 34)
-                }
-                .buttonStyle(.plain)
-                .disabled(attachments.count >= 4)
-                .accessibilityLabel("添加文本附件")
-                Menu {
-                    Button("排队发送") { mode = "queue" }
-                    Button("新回合") { mode = "new" }
-                    if steerSupported { Button("引导当前任务") { mode = "steer" } }
-                } label: {
-                    HStack(spacing: 3) {
-                        Text(mode == "new" ? "新回合" : mode == "steer" ? "引导" : "排队").font(.system(size: 12.5))
-                        Image(systemName: "chevron.up.chevron.down").font(.system(size: 9))
-                    }
-                    .foregroundStyle(KY.textSecondary)
-                    .padding(.horizontal, 8).padding(.vertical, 6)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                Spacer()
-                if running && draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && attachments.isEmpty {
-                    Button { stopping = true } label: {
-                        Image(systemName: "stop.fill").font(.system(size: 13, weight: .bold)).foregroundStyle(KY.onAccent)
-                            .frame(width: 34, height: 34).background(KY.accent, in: Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!model.canWrite)
-                    .accessibilityLabel("停止并暂停")
-                } else {
-                    Button {
-                        let text = draft
-                        let files = attachments
-                        Task {
-                            if await model.send(attachedMessage(text, files), mode: mode), draft == text {
-                                draft = ""
-                                attachments = []
-                                scrollToken += 1
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "arrow.up").font(.system(size: 14, weight: .bold)).foregroundStyle(canSend ? KY.onAccent : KY.textTertiary)
-                            .frame(width: 34, height: 34).background(canSend ? KY.accent : KY.sunken, in: Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!canSend)
-                    .accessibilityLabel("发送")
-                }
-            }
+                })
+
         }
-        .padding(6)
-        .background(KY.raised, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(KY.border))
-        .shadow(color: .black.opacity(0.05), radius: 10, y: 4)
         .padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 8)
         .background(KY.paper)
     }
+
 }
 
 struct InteractionView: View {
@@ -720,7 +688,9 @@ struct InteractionView: View {
             let cmd = params["command"].string.isEmpty ? params["cmd"].string : params["command"].string
             let path = params["path"].string.isEmpty ? params["file"].string : params["path"].string
 
-            if !cmd.isEmpty {
+            if item.payload["protocol"].string == "kodo" && !params["schedule"].string.isEmpty {
+                ScrollView { Text(params["text"].string).font(.subheadline).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }.frame(maxHeight: 240)
+            } else if !cmd.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("执行命令：").font(.caption).foregroundStyle(.secondary)
                     Text("$ \(cmd)")
@@ -746,11 +716,12 @@ struct InteractionView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 6))
             }
 
-            if item.actions?.isEmpty != false {
-                Text("此交互选项请在桌面端进行处理。").font(.footnote).foregroundStyle(.secondary)
+            if let form = nativeQuestionForm(item.payload) {
+                NativeQuestionFields(model: model, item: item, form: form)
+            } else if item.actions?.isEmpty != false {
+                StructuredInteractionReply(model: model, item: item)
             } else {
-                HStack(spacing: 10) {
-                    Spacer()
+                VStack(spacing: 10) {
                     ForEach(Array((item.actions ?? []).enumerated()), id: \.offset) { index, action in
                         Button(action.label, role: action.destructive == true ? .destructive : nil) {
                             selectedAction = index

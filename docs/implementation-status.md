@@ -1,5 +1,17 @@
 # 实现与验收状态
 
+2026-11-15 跨端工作台优化：保留 Kooyu 珊瑚品牌和四个移动底栏，新增按项目组织的工作、成果、计划、概览、约定、执行能力与内置模板；补只读聚合 API、管理回执、原生验收修正、文件预览及本机草稿恢复。相关 Host **54/54**、Web **15/15**、Android **54/54**，构建及 Android Lint 通过；桌面 **16** 张、BlueStacks **25** 张截图已保存。iOS **24** 个文件仅语法检查，未做 Xcode 构建。范围与未验收项见 [本轮实施报告](kooyu-workbench-implementation-2026-11-15.md)。以下为历次记录，不应将其中的旧计数当成本轮全量回归结果。
+
+2026-11-15 自部署扩展：实现 cron/once/Activation、GitHub Webhook、应用/精确 grant/OAuth/远程 MCP、业务 Outbox、项目记忆、生命周期/动作回执/容量、Bark/Web/APNs 通知、受管 Chromium、HTTPS Worker、加密备份恢复及 Docker/systemd 定义；Web 新增工作中心和节点选择。iOS 源码接入 APNs 注册/撤销/点击定位，Android 接入可选前台服务/SSE、持久游标、系统通知与点击定位。Host **387/387**（含自部署 **25** 与 APNs **10** 项）、全量 UI **92/92**、Android **48/48** 及开发包构建、typecheck/build/lint/format 通过。iOS **22** 个 Swift 文件仅语法检查，未运行 Xcode；Android 未做真机后台/切网验收。此前 Relay **2/2**、TLS 管理入口与 HTTPS Worker 独立进程验收保留。Worker 原生程序为 fixture；桌面流、代码应用沙箱、媒体生成/转录、原生新增目标/文件工作中心及正式平台发布未完成，Docker/Linux/真机和真实厂商接入未验收。详见 [本轮报告](test-results-2026-11-15-self-hosted.md) 和 [部署操作](self-hosted-operations.md)。不代表 A–D 已全部生产完成。
+
+2026-11-14 第四批：图片按原生协议发送——Codex `localImage`、Claude Code 图片块、ACP `image` 块（需代理声明）、OpenCode 文件部件、Kooyu/pi SDK 图片；仅在本回合模型声明图片输入时使用，Claude Code 配置了自定义端点时按未知处理。Host **352/352**（协议 fixture，未做真实模型联调）。
+
+2026-11-14 第三批：对话附件改为上传到 Host 后按 ID 发送；Host 按能力内联文本、向声明图片输入的模型发送图片、其余提供只读文件路径；Web 输入框支持任意文件、分块上传与进度。Host **348/348**，Playwright 84/85（唯一失败用例单独重跑通过）。
+
+2026-11-14 第二批：受管上传与不可变成果、`files` 工具、统一凭据库（服务器加密文件后端）、Host 自检，以及 Web 主对话“当前目标”与目标检查器；SQLite v8，Host **347/347**、UI 专项 12/12 通过。
+
+2026-11-14 自部署方案 A 阶段首批：Host 新增 Goal / Verification（Host 执行检查、Git 基线归因、用户验收）、受限网页读取与检索来源记录、持久通知 feed（单调游标与保留窗口重置）及对应 API 与 Kooyu 工具；SQLite 升至 v7。Host **343/343**、typecheck、lint、format 通过。界面、手机端、推送通道与真实模型联调未完成，详见 [A 阶段首批实现记录](test-results-2026-11-14-self-hosted-phase-a.md)。
+
 2026-11-13 Grok Read / 子代理增补：已通过官方源码与原生 stderr 定位 Windows TEMP 私有目录创建失败，修复专用临时目录与旧 leader 环境复用；Grok 1.0.80、用户目录 1.0.77 均通过真实原生“子代理 → Read → 输出”链路（模型端为本地合成服务器）。新增各 Harness 子代理事件隔离、展开查看与复制，Host **294/294**、浏览器专项 **11/11** 通过。详见 [Grok 与子代理验收](test-results-2026-11-13-subagents-grok.md)。下文“Grok Read 仍失败”为此前历史记录，现由本批次替代；Gemini/pi 等子代理能力边界和未实测项见新报告。
 
 2026-11-13 生命周期增补：共享 ACP 发送准备互斥与取消隔离；OpenCode 待处理交互恢复、快照/实时去重和外部答复失效；Kimi 交互去重、原生回答校验及确认退出；Host 单项收件箱撤销。当前工作区 Host 256 项、交互 UI 9 项、原生只读 11 项、类型检查、lint、构建通过。详见 [生命周期与交互恢复记录](test-results-2026-11-13-harness-lifecycle.md)，原生能力边界继续保留。

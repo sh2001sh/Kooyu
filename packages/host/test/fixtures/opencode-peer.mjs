@@ -44,14 +44,18 @@ createServer(async (req, res) => {
         {
           id: "provider",
           models: {
-            "model-a": { variants: { "native-deep": {} } },
-            "model-b": { variants: { "native-deep": {} } },
+            "model-a": {
+              variants: { "native-deep": {} },
+              capabilities: { input: { text: true, image: true } },
+            },
+            "model-b": { variants: { "native-deep": {} }, modalities: { input: ["text"] } },
           },
         },
       ],
       connected: ["provider"],
     });
   if (path === "/global/health") return json({ healthy: true, version: "isolated-test" });
+  if (path === "/config") return json({ model: "provider/model-a" });
   if (path === "/permission" || path === "/question") {
     if (!process.env.SYNTHETIC_OPENCODE_RECOVER) return json([]);
     const item = path === "/permission" ? recoveredPermission : recoveredQuestion;
@@ -73,7 +77,8 @@ createServer(async (req, res) => {
     return;
   }
   if (path === `/session/${sessionID}/prompt_async` && method === "POST") {
-    if (data.parts?.[0]?.type !== "text") throw new Error("V1 prompt parts required");
+    if (!["text", "file"].includes(data.parts?.[0]?.type))
+      throw new Error("V1 prompt parts required");
     res.writeHead(204);
     res.end();
     if (process.env.SYNTHETIC_SUBAGENTS) {

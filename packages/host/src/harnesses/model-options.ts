@@ -1,6 +1,7 @@
 import { KodoError, type HarnessModelOption } from "@kodo/protocol";
 import type { Wire } from "./adapter.js";
 import { nativeParameters } from "./model-metadata.js";
+import { declaredInput, type ModelInput } from "./input-modalities.js";
 
 export function providerModel(value: string): { provider: string; model: string } {
   const slash = value.indexOf("/");
@@ -52,6 +53,7 @@ export function codexModelOptions(data: Wire[]): HarnessModelOption[] {
       id: m.model,
       name: m.displayName,
       source: "discovered",
+      input: declaredInput(m.inputModalities),
       ...(m.isDefault === true ? { isDefault: true } : {}),
       ...nativeParameters(
         {
@@ -100,6 +102,7 @@ export function openCodeModelOptions(catalog: Wire): HarnessModelOption[] {
           id: `${p.id}/${id}`,
           name: m.name,
           source: "discovered" as const,
+          input: openCodeDeclaredInput(m),
           ...nativeParameters(
             {
               contextWindow: m.limit?.context,
@@ -119,14 +122,39 @@ export function openCodeModelOptions(catalog: Wire): HarnessModelOption[] {
     );
 }
 
+/**
+ * Whether OpenCode's effective /provider entry for this model declares image input.
+ * Newer servers report capabilities.input.image; older ones modalities.input.
+ * Anything else, including an unconnected provider, counts as no.
+ */
+export function openCodeModelAcceptsImages(
+  catalog: Wire,
+  target: { provider: string; model: string },
+): boolean {
+  const connected = new Set(catalog.connected ?? (catalog.all ?? []).map((p: Wire) => p.id));
+  if (!connected.has(target.provider)) return false;
+  const provider = (catalog.all ?? []).find((p: Wire) => p.id === target.provider);
+  const model = provider?.models?.[target.model] as Wire | undefined;
+  return openCodeDeclaredInput(model)?.includes("image") ?? false;
+}
+
+export function openCodeDeclaredInput(model?: Wire): ModelInput | undefined {
+  const image = model?.capabilities?.input?.image;
+  if (typeof image === "boolean") return image ? ["text", "image"] : ["text"];
+  return declaredInput(model?.modalities?.input);
+}
+
 function zcodeBuiltinParameters(builtin: Wire | undefined, modelId: string, user?: Wire) {
   const rules = builtin?.config?.modelConfigRules?.modelRules;
   const values: { contextWindow?: unknown; maxOutputTokens?: unknown; reasoning?: unknown } = {};
+  let input: ModelInput | undefined;
   if (Array.isArray(rules))
     for (const rule of rules) {
       if (typeof rule?.modelMatch !== "string") continue;
       try {
         if (!new RegExp(rule.modelMatch, "i").test(modelId)) continue;
+        if (typeof rule.config?.properties?.inputFormat?.supportsImage === "boolean")
+          input = rule.config.properties.inputFormat.supportsImage ? ["text", "image"] : ["text"];
         if (rule.config?.properties?.contextWindow !== undefined)
           values.contextWindow = rule.config.properties.contextWindow;
         if (rule.config?.optionSpecs?.maxOutputTokens?.max !== undefined)
@@ -144,10 +172,15 @@ function zcodeBuiltinParameters(builtin: Wire | undefined, modelId: string, user
     values.maxOutputTokens = user.config.optionSpecs.maxOutputTokens.max;
   if (Array.isArray(user?.config?.optionSpecs?.reasoningLevel?.values))
     values.reasoning = user.config.optionSpecs.reasoningLevel.values;
-  return nativeParameters(values, {
-    kind: "native-catalog",
-    label: user ? "ZCode 个人模型配置" : "ZCode 内置规则（可被个人配置覆盖）",
-  });
+  if (typeof user?.config?.properties?.inputFormat?.supportsImage === "boolean")
+    input = user.config.properties.inputFormat.supportsImage ? ["text", "image"] : ["text"];
+  return {
+    input,
+    ...nativeParameters(values, {
+      kind: "native-catalog",
+      label: user ? "ZCode 个人模型配置" : "ZCode 内置规则（可被个人配置覆盖）",
+    }),
+  };
 }
 
 export function zcodeModelOptions(config?: Wire, builtin?: Wire): HarnessModelOption[] {

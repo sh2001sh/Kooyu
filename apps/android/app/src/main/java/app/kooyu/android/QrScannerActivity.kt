@@ -96,10 +96,8 @@ class QrScannerActivity : ComponentActivity() {
             })
         }) { padding ->
             Column(Modifier.fillMaxSize().padding(padding)) {
-                Text("对准桌面「设置 → 手机连接」的二维码，识别后确认连接这台电脑。", Modifier.padding(16.dp))
                 if (error.isEmpty()) AndroidView(factory = { preview }, modifier = Modifier.weight(1f).fillMaxWidth())
                 else Box(Modifier.weight(1f).fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { Text(error) }
-                Text("图像仅在本机识别，不会上传", Modifier.padding(16.dp), style = MaterialTheme.typography.bodySmall)
             }
         }
     }

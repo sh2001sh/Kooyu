@@ -12,6 +12,7 @@ export function boundModelOption(value: BindingRuntime | HarnessBinding): Harnes
     provider: `kodo-${binding.providerId}`,
     source: "discovered",
     reasoning,
+    input: p.input,
     contextWindow: p.contextWindow,
     maxInputTokens: p.maxInputTokens,
     maxOutputTokens: p.maxOutputTokens,

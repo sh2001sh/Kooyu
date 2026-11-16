@@ -10,12 +10,7 @@ import type {
 } from "@kodo/protocol";
 import { answerInteraction, changePendingMessage, stopSession } from "../lib/host-client";
 import { HARNESS_NAMES } from "../lib/harnesses";
-import {
-  messageWithTextAttachments,
-  TextAttachmentButton,
-  TextAttachmentList,
-  useTextAttachments,
-} from "./TextAttachments";
+import { AttachmentButton, AttachmentList, useAttachments } from "./Attachments";
 import { HarnessBadge } from "./KodoBrand";
 import { ModelControls } from "./ModelControls";
 import { PermissionControls } from "./PermissionControls";
@@ -91,15 +86,13 @@ export function InteractionCard({ item, act }: { item: InboxItem; act: Action })
           )}
           {request.mode && <p>{modeNames[request.mode] ?? request.mode}</p>}
           {request.goal && <p>目标：{request.goal}</p>}
-          {request.limits?.maxContinuations !== undefined && (
+          {(request.limits?.maxContinuations ?? 0) > 0 && (
             <p>最多自动续聊 {request.limits.maxContinuations} 次</p>
           )}
-          {request.limits?.maxFailures !== undefined && (
+          {(request.limits?.maxFailures ?? 0) > 0 && (
             <p>连续失败 {request.limits.maxFailures} 次后暂停</p>
           )}
-          {request.limits?.budgetUsd !== undefined && (
-            <p>托管预算 ${request.limits.budgetUsd} USD</p>
-          )}
+          {(request.limits?.budgetUsd ?? 0) > 0 && <p>托管预算 ${request.limits.budgetUsd} USD</p>}
           {request.limits?.endAt && (
             <p>结束时间：{new Date(request.limits.endAt).toLocaleString()}</p>
           )}
@@ -247,7 +240,7 @@ interface ComposerProps {
   showScrollToBottom: boolean;
   onScrollToBottom: () => void;
   onComposeChange: (val: string) => void;
-  onSubmit: (message: string) => Promise<boolean>;
+  onSubmit: (message: string, attachmentIds: string[]) => Promise<boolean>;
   onInspectNative: () => void;
   onError: (msg: string) => void;
   act: Action;
@@ -275,7 +268,7 @@ export function Composer({
 }: ComposerProps) {
   const { settings: preferences } = useAppPreferences();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const attachments = useTextAttachments();
+  const attachments = useAttachments(session.id, session.id);
   const [stopping, setStopping] = useState(false);
 
   useEffect(() => {
@@ -289,13 +282,13 @@ export function Composer({
     (session.nativeCapabilities?.steer ?? harnessDesc?.capabilities.steer) === "supported";
   const canSend = connected && !session.bindingUnavailable;
   const submitMessage = () => {
-    const message = messageWithTextAttachments(compose, attachments.attachments);
-    if (!message.trim() || !canSend || busy || attachments.loading) return;
-    if (message.length > 200000) {
-      attachments.setError("消息与文本附件合计不能超过 200,000 字符。");
+    const ids = attachments.readyIds;
+    if ((!compose.trim() && !ids.length) || !canSend || busy || attachments.uploading) return;
+    if (attachments.failed) {
+      attachments.setError("有附件上传失败，请移除后再发送。");
       return;
     }
-    void onSubmit(message).then((accepted) => {
+    void onSubmit(compose, ids).then((accepted) => {
       if (accepted) attachments.clear();
     });
   };
@@ -370,7 +363,7 @@ export function Composer({
           e.currentTarget.style.setProperty("--my", `${e.clientY - r.top}px`);
         }}
       >
-        <TextAttachmentList
+        <AttachmentList
           attachments={attachments.attachments}
           error={attachments.error}
           disabled={busy || !canSend}
@@ -382,12 +375,10 @@ export function Composer({
           aria-label="消息"
           placeholder={
             session.bindingUnavailable
-              ? "旧会话配置不可恢复，请新建会话"
+              ? "会话不可用"
               : connected
-                ? session.harnessId === "kodo"
-                  ? "告诉 Kooyu 目标，例如托管会话、交接任务或查看原生历史…"
-                  : `发送消息给 ${HARNESS_NAMES[session.harnessId]}…`
-                : "Host 未连接，暂时无法发送"
+                ? HARNESS_NAMES[session.harnessId] || "Kooyu"
+                : "Host 未连接"
           }
           value={compose}
           onChange={(e) => onComposeChange(e.target.value)}
@@ -401,8 +392,8 @@ export function Composer({
         />
         <div className="composer-toolbar">
           <div className="composer-pickers">
-            <TextAttachmentButton
-              loading={attachments.loading}
+            <AttachmentButton
+              loading={false}
               disabled={busy || !canSend}
               onAdd={(files) => void attachments.add(files)}
             />
@@ -468,10 +459,10 @@ export function Composer({
                 className="send-button"
                 aria-label="发送消息"
                 disabled={
-                  (!compose.trim() && !attachments.attachments.length) ||
+                  (!compose.trim() && !attachments.readyIds.length) ||
                   !canSend ||
                   busy ||
-                  attachments.loading
+                  attachments.uploading
                 }
                 onClick={submitMessage}
               >

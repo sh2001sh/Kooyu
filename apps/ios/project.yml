@@ -19,8 +19,16 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.kooyu.ios
         INFOPLIST_FILE: Kooyu/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Kooyu/Kooyu.entitlements
         TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+      configs:
+        Debug:
+          APNS_ENVIRONMENT: development
+          KOOYU_APNS_ENVIRONMENT: sandbox
+        Release:
+          APNS_ENVIRONMENT: production
+          KOOYU_APNS_ENVIRONMENT: production
     scheme:
       testTargets: [KooyuTests]
   KooyuTests:

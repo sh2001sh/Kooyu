@@ -31,8 +31,8 @@ data class ConnectionBook(val devices: List<Connection> = emptyList(), val activ
     }
 }
 
-data class HostWorkspace(val id: String, val projectId: String?, val path: String) {
-    companion object { fun parse(o: JSONObject) = HostWorkspace(o.getString("id"), o.nullableString("projectId"), o.getString("rootPath")) }
+data class HostWorkspace(val id: String, val projectId: String?, val path: String, val hostId: String? = null) {
+    companion object { fun parse(o: JSONObject) = HostWorkspace(o.getString("id"), o.nullableString("projectId"), o.getString("rootPath"), o.nullableString("hostId")) }
 }
 data class HostHarness(val id: String, val name: String, val modelSupport: String, val raw: JSONObject) {
     companion object { fun parse(o: JSONObject) = HostHarness(o.getString("id"), o.optString("name", o.getString("id")), o.optString("modelSupport", "native-only"), o) }
@@ -64,7 +64,8 @@ fun filterUsage(records: List<UsageRecord>, filter: UsageFilter, today: LocalDat
 
 data class SessionDraft(val title: String = "", val harnessId: String = "kodo", val kind: String = "supervisor",
     val projectId: String? = null, val workspaceId: String? = null, val choice: String = "inherit", val model: String = "",
-    val reasoning: String = "", val permission: String = "", val firstMessage: String = "") {
+    val reasoning: String = "", val permission: String = "", val firstMessage: String = "",
+    val executorId: String = "local", val customPath: String = "") {
     fun body(): JSONObject {
         val body = JSONObject().put("title", title.trim().ifEmpty { firstMessage.lineSequence().firstOrNull()?.take(48)?.ifBlank { null } ?: "新对话" })
             .put("harnessId", harnessId).put("kind", if (harnessId == "kodo") kind else "direct")
@@ -76,6 +77,7 @@ data class SessionDraft(val title: String = "", val harnessId: String = "kodo", 
         }
         if (reasoning.isNotBlank()) body.put("reasoning", reasoning)
         if (permission.isNotBlank()) body.put("permissionMode", permission)
+        if (executorId != "local") body.put("executorId", executorId).put("bindingId", JSONObject.NULL).put("model", JSONObject.NULL)
         return body
     }
     fun validation(harness: HostHarness?, workspaces: List<HostWorkspace>, hasInheritedBinding: Boolean): String? = when {
@@ -83,10 +85,28 @@ data class SessionDraft(val title: String = "", val harnessId: String = "kodo", 
         firstMessage.length > 200000 -> "首条消息不能超过 200,000 字符。"
         title.trim().length > 200 -> "标题不能超过 200 字符。"
         workspaceId != null && workspaces.none { it.id == workspaceId && (projectId == null || it.projectId == projectId) } -> "请选择当前项目的工作位置。"
-        (harnessId !in listOf("kodo", "pi") || projectId != null) && workspaceId == null -> "此对话需要选择工作位置。"
-        harness.modelSupport == "binding-required" && (choice == "native" || choice == "model" || (choice == "inherit" && !hasInheritedBinding)) -> "此引擎需要选择可用的模型绑定。"
+        executorId != "local" && customPath.isNotBlank() -> "远程会话请选择节点已登记的目录。"
+        (harnessId !in listOf("kodo", "pi") || projectId != null) && workspaceId == null && customPath.isBlank() -> "此对话需要选择工作位置。"
+        executorId == "local" && harness.modelSupport == "binding-required" && (choice == "native" || choice == "model" || (choice == "inherit" && !hasInheritedBinding)) -> "此引擎需要选择可用的模型绑定。"
         choice == "model" && model.isBlank() -> "请选择或输入模型。"
         else -> null
+    }
+}
+
+/** Mirrors protocol/client bindingReasoningLevels; never invent effort levels. */
+fun providerReasoningLevels(parameters: JSONObject, harness: String): List<String> {
+    val sdk = harness in listOf("kodo", "pi", "deepseek-harness")
+    if (parameters.opt("reasoning") == false) return if (sdk) listOf("off") else emptyList()
+    val mapping = parameters.optJSONObject("thinkingLevelMap")
+    if (sdk && mapping != null) return mapping.keys().asSequence().filter { !mapping.isNull(it) }.toList()
+    val declared = parameters.optJSONArray("reasoningOptions")?.objects().orEmpty().filter { it.optString("type") == "effort" }
+        .flatMap { o -> o.optJSONArray("values")?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty() }.distinct()
+    return when {
+        harness == "gemini" -> declared.filter { it in listOf("minimal", "low", "medium", "high") }
+        harness == "grok-build" -> declared.filter { it in listOf("none", "minimal", "low", "medium", "high", "xhigh", "max") }
+        sdk -> declared.map { if (it == "none") "off" else it }.distinct().filter { it in listOf("off", "minimal", "low", "medium", "high", "xhigh", "max") }
+        harness == "zcode" -> declared.map { if (it in listOf("none", "off")) "disabled" else it }.distinct()
+        else -> declared
     }
 }
 
@@ -94,3 +114,28 @@ fun modelOptionId(harnessId: String, model: JSONObject): String {
     val provider = model.nullableString("provider")
     return if (harnessId in listOf("kodo", "pi", "opencode", "zcode") && provider != null && !provider.startsWith("kodo-")) provider + "/" + model.getString("id") else model.getString("id")
 }
+
+/** Match catalog aliases before choosing a metadata-rich row; recent rows may lack capabilities. */
+fun selectComposerModel(models: List<JSONObject>, current: String?, inherited: Boolean): JSONObject? {
+    val matches = models.filter { composerModelMatches(it, current) }
+    val matched = matches.firstOrNull { it.has("reasoning") } ?: matches.firstOrNull()
+    if (matched != null || !inherited) return matched
+    val fallback = models.firstOrNull { it.optBoolean("isCurrent") } ?: models.firstOrNull { it.optBoolean("isDefault") }
+    return fallback?.let { candidate ->
+        val aliases = models.filter { composerModelMatches(it, candidate.optString("id")) && it.optString("provider") == candidate.optString("provider") }
+        aliases.firstOrNull { it.has("reasoning") } ?: candidate
+    }
+}
+fun composerModelMatches(model: JSONObject, current: String?): Boolean = !current.isNullOrBlank() &&
+    (model.optString("id") == current || model.nullableString("resolvedModel") == current ||
+        model.nullableString("provider")?.let { "$it/${model.optString("id")}" } == current)
+fun composerDefaultModel(value: JSONObject?): String? = value?.nullableString("model")?.let { id ->
+    value.nullableString("provider")?.let { "$it/$id" } ?: id
+}
+fun reasoningModelTarget(current: String?, selected: JSONObject?, harness: String, bound: Boolean): String? =
+    if (selected == null || composerModelMatches(selected, current)) current?.takeIf { it.isNotBlank() }
+    else if (bound) selected.getString("id") else modelOptionId(harness, selected)
+fun composerReasoningLevels(selected: JSONObject?, binding: JSONObject?, current: String?, harness: String): List<String> =
+    selected?.optJSONArray("reasoning")?.let { a -> (0 until a.length()).map { a.getString(it) } }
+        ?: binding?.takeIf { current.isNullOrBlank() || current == it.nullableString("model") }
+            ?.optJSONObject("parameters")?.let { providerReasoningLevels(it, harness) }.orEmpty()

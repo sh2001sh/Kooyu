@@ -1209,3 +1209,46 @@ test("refreshing a model list drops models the endpoint no longer lists, keeping
     await f.close();
   }
 });
+
+test("native modality resolution uses models.dev for omitted input and exact route manual overrides take precedence", async () => {
+  const f = fixture(async () =>
+    response({
+      models: {},
+      providers: {
+        vendor: { models: { "vision-example": { modalities: { input: ["text", "image"] } } } },
+      },
+    }),
+  );
+  try {
+    await f.providers.refreshCatalog();
+    const p = await f.providers.saveProvider({
+      name: "Modality fixture",
+      endpoints: [
+        { name: "Responses", protocol: "openai-responses", baseUrl: "https://example.invalid/v1" },
+      ],
+    });
+    const m = await f.providers.saveModel({
+      providerId: p.id,
+      endpointId: p.endpoints[0]!.id,
+      model: "vision-example",
+    });
+    assert.deepEqual(m.effective.input, ["text", "image"]);
+    const route = {
+      provider: "native-vendor",
+      id: m.model,
+      baseUrl: "https://example.invalid/v1/",
+      api: "openai-responses",
+    };
+    assert.deepEqual(f.providers.nativeModelInput(route), ["text", "image"]);
+    assert.deepEqual(f.providers.nativeModelInput({ ...route, declaredInput: ["text"] }), ["text"]);
+    const edited = await f.providers.saveModel({ ...identity(m), overrides: { input: ["text"] } });
+    assert.deepEqual(f.providers.nativeModelInput({ ...route, declaredInput: ["text", "image"] }), [
+      "text",
+    ]);
+    await f.providers.saveModel({ ...identity(edited), overrides: {} });
+    assert.deepEqual(f.providers.nativeModelInput(route), ["text", "image"]);
+    assert.equal(f.providers.nativeModelInput({ ...route, id: "unlisted-model" }), undefined);
+  } finally {
+    await f.close();
+  }
+});

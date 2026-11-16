@@ -1,6 +1,6 @@
 # 原生移动工作台 0.2.0
 
-更新日期：2026-11-13。Android 使用 Kotlin Compose，iOS 使用 SwiftUI；桌面继续使用 Electron。移动端与桌面连接同一个 Host，读取真实数据和配置，不嵌入桌面网页，不创建演示会话或模拟用量。
+更新日期：2026-11-15。Android 使用 Kotlin Compose，iOS 使用 SwiftUI；桌面继续使用 Electron。移动端与桌面连接同一个 Host，读取真实数据和配置，不嵌入桌面网页，不创建演示会话或模拟用量。
 
 ## 功能矩阵
 
@@ -18,7 +18,7 @@
 | 全文历史搜索及消息定位、历史分页、增量刷新 | 已实现 | 已实现 |
 | 发送、排队、新回合、引擎声明的 steer、停止/暂停 | 已实现 | 已实现 |
 | 待发消息编辑、立即发送、撤回及版本冲突检查 | 已实现 | 已实现 |
-| 文本附件：4 个 / 单个 64 KiB / 合计 160 KiB | 已实现 | 已实现 |
+| 托管附件：10 个 / 单个 32 MiB，图片原生输入及其他文件引用 | 已实现 | 已实现 |
 | 现有协议的审批及 Claude/Codex/OpenCode/Kimi 原生问答 | 已实现 | 已实现 |
 | Token/缓存、费用、时间/项目/引擎/口径/会话筛选、预算 | 已实现 | 已实现 |
 | 项目/目录管理、文本预览、Git 变更/diff | 已实现 | 已实现 |
@@ -28,7 +28,8 @@
 | Markdown：标题、列表、任务列表、引用、表格、删除线、链接、代码块（横向滚动/复制） | 已实现（Markwon + 原生代码块） | 已实现（原生块解析 + AttributedString） |
 | 对话中间过程：思考（运行中自动展开）、工具调用卡片与连续调用分组、子代理嵌套输出、本轮失败原因、运行指示 | 已实现 | 已实现 |
 | 对话外观与桌面一致：单色强调、纸面/凹陷层级、引擎配色徽标、用户气泡与无气泡回答、底部输入卡片 | 已实现 | 已实现 |
-| 推送通知、图片/PDF 原生预览 | 未实现 | 未实现 |
+| 后台事项提醒、逐 Host 开关、点击定位 | 可选 remoteMessaging 前台服务 + HTTPS SSE，源码/单测/构建通过，真机待验收 | APNs 注册/撤销/点击源码接入，Host 自动化通过，Xcode/签名/真机待验收 |
+| 图片/PDF 原生预览、原生新增 Goal/文件/工作中心 | 未实现 | 未实现 |
 
 ## 对话渲染与桌面对齐
 
@@ -46,7 +47,7 @@
 
 Android 的整本设备数据使用 Keystore AES-GCM；iOS 使用 ThisDeviceOnly Keychain。两端保留 HTTPS、系统证书校验、禁止跨地址重定向等约束。未知结果不自动重发；发送、停止、模型设置、待发编辑通过各自回执查询核对，其余非幂等操作由用户核对后清除本机标记。
 
-会话轮询为前台 2 秒，用量为前台 10 秒；退入后台取消读取。应用内未实现所有电脑同时常驻轮询或推送。
+会话轮询为前台 2 秒，用量为前台 10 秒；退入后台取消这些读取。Android 可主动为所选电脑启用独立前台服务/SSE 和设备待发箱读取，系统通知保留停止入口；iOS 通过 APNs 提醒，后台不维持 SSE/轮询。两端默认隐藏正文，点击只读取已配对 Host 的当前通知并定位，不批准或重发任务。实际查看同一会话时短期确认；Host 关闭通道后不静默重新授权。离线撤销在下次前台重试。具体配置见 [部署操作](self-hosted-operations.md)。
 
 ## 与桌面共享的计算及写入规则
 
@@ -55,7 +56,7 @@ Android 的整本设备数据使用 Keystore AES-GCM；iOS 使用 ThisDeviceOnly
 - 使用 Host 的严格创建 schema，创建会话不传发送用的 requestId；继承绑定与显式原生 null 区分。
 - 会话权限单独 PATCH，模型设置使用 expectedRevision；编辑来源/模型/绑定及默认配置保留修订检查，避免覆盖桌面并发修改。
 - 创建成功但首条消息失败后打开已创建会话并保留草稿，不再次创建会话。
-- 文本附件与桌面使用相同文件标记，检查 UTF-8、文件数和字节限制。
+- 新附件与桌面共用 Host 托管文件协议，512 KiB 分块上传，消息传递文件 ID；由 Host 根据引擎能力提供文本、图片或文件引用，兼容既有文本附件历史。
 - 原生问答保留各协议的 question ID、选项 ID、多选/其他/跳过含义；不把未知问题当成普通批准请求。
 
 ## 保留在电脑本机的操作
@@ -63,6 +64,10 @@ Android 的整本设备数据使用 Keystore AES-GCM；iOS 使用 ThisDeviceOnly
 Host 明确限制的首次引导、引擎安装/升级/登录、系统入口修改和设备授权撤销仍在运行 Host 的电脑操作。移动端不绕过这些限制；因此本版不宣称所有桌面操作均能远程完成。
 
 ## 验证
+
+输入框、消息操作、models.dev 输入模态自动识别及手工覆盖的最新范围与验收限制见 [2026-11-15 输入框与模态验收](test-results-2026-11-15-composer-modalities.md)。
+
+2026-11-15 自部署通知补充：Host 全量 387/387、Web UI 92/92；Android 全量 48/48（新增 8 项涵盖 SSE/Relay/鉴权撤销/取消/大小限制/重定向/深链），lint 和 assembleDebug 通过。iOS 22 个 Swift 文件语法检查通过，新增推送目标 XCTest 源码但没有执行 Xcode。Android 未连接设备；不能把 JVM 网络 fixture 当作前台服务、通知权限、系统回收、锁屏和切网实机证据。以下 0.2.0 数字与 APK 为历史记录，最新构建产物为 apps/android/app/build/outputs/apk/debug/app-debug.apk，尚未作为正式发布包分发。
 
 - Android：testDebugUnitTest 共 32 项通过，0 失败、0 跳过；lintDebug 通过，0 错误、18 条警告（依赖更新、图标资源建议及 KTX 等）；assembleDebug 通过。日志为 .local/mobile-parity-android.log，单测报告位于 apps/android/app/build/test-results/testDebugUnitTest/。
 - Host：native-client、history-pagination、model-settings、binding-defaults、providers、conversational-management、native-interactions、session-workspace、sidebar-actions 共 65 项测试通过，Host 源码与测试 TypeScript 检查通过。新增远程 bearer 集成检查覆盖创建/修改会话、权限路由、历史、用量、预算及设置。

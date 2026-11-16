@@ -1,6 +1,15 @@
 import { useEffect, useId, useState } from "react";
 import { FolderPlus, X } from "lucide-react";
-import type { Command, RuntimeEvent, Session, Snapshot, Usage, Workspace } from "@kodo/protocol";
+import type {
+  Command,
+  Goal,
+  RuntimeEvent,
+  Session,
+  Snapshot,
+  Usage,
+  Workspace,
+} from "@kodo/protocol";
+import { GoalPanel } from "./GoalPanel";
 import { SessionOverview } from "./SessionInsights";
 import { api } from "../lib/host-client";
 import { HarnessBadge } from "./KodoBrand";
@@ -17,7 +26,9 @@ interface SessionDetailProps {
   commands: Command[];
   usage: Usage[];
   act: Action;
-  onSelectDetail?: (next: "files" | "changes" | "timeline" | "manage") => void;
+  onSelectDetail?: (next: "files" | "changes" | "timeline" | "manage" | "goals") => void;
+  goals?: Goal[];
+  reloadGoals?: () => Promise<void>;
   onClose: () => void;
   onDeleted: () => void;
   requestedPath?: string;
@@ -37,9 +48,18 @@ export function SessionDetail({
   requestedPath,
   requestKey,
   onOpenFile,
+  goals = [],
+  reloadGoals = async () => {},
 }: SessionDetailProps) {
   const tab = detail === "manage" ? "timeline" : detail;
-  const native = !["files", "changes", "timeline", "manage"].includes(detail);
+  const native = !["files", "changes", "timeline", "manage", "goals"].includes(detail);
+  const tabs = [
+    ...(session.kind === "supervisor" ? ([["goals", "目标"]] as const) : []),
+    ["files", "文件"],
+    ["changes", "改动"],
+    ["timeline", "运行"],
+  ] as const;
+  const keys = tabs.map(([key]) => key);
   const workspace = snapshot.workspaces.find((w) => w.id === session.workspaceId);
   useEffect(() => {
     const escape = (event: KeyboardEvent) => {
@@ -60,13 +80,7 @@ export function SessionDetail({
           <HarnessBadge harnessId={session.harnessId} size="xs" tone="tinted" />
           {!native ? (
             <div className="detail-pane__tabs" role="tablist" aria-label="检查器视图">
-              {(
-                [
-                  ["files", "文件"],
-                  ["changes", "改动"],
-                  ["timeline", "运行"],
-                ] as const
-              ).map(([key, label]) => (
+              {tabs.map(([key, label]) => (
                 <button
                   key={key}
                   id={"inspector-tab-" + key}
@@ -76,17 +90,16 @@ export function SessionDetail({
                   aria-selected={tab === key}
                   tabIndex={tab === key ? 0 : -1}
                   onKeyDown={(event) => {
-                    const keys = ["files", "changes", "timeline"] as const;
                     const index = keys.indexOf(key);
                     const next =
                       event.key === "ArrowRight"
-                        ? keys[(index + 1) % 3]
+                        ? keys[(index + 1) % keys.length]
                         : event.key === "ArrowLeft"
-                          ? keys[(index + 2) % 3]
+                          ? keys[(index + keys.length - 1) % keys.length]
                           : event.key === "Home"
                             ? keys[0]
                             : event.key === "End"
-                              ? keys[2]
+                              ? keys[keys.length - 1]
                               : undefined;
                     if (next) {
                       event.preventDefault();
@@ -115,7 +128,15 @@ export function SessionDetail({
         role={native ? undefined : "tabpanel"}
         aria-labelledby={native ? undefined : "inspector-tab-" + tab}
       >
-        {tab === "files" || tab === "changes" ? (
+        {tab === "goals" ? (
+          <GoalPanel
+            session={session}
+            snapshot={snapshot}
+            goals={goals}
+            reload={reloadGoals}
+            act={act}
+          />
+        ) : tab === "files" || tab === "changes" ? (
           <WorkspacePanel
             key={session.id}
             workspace={workspace}

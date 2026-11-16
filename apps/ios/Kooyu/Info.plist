@@ -4,7 +4,8 @@
 <key>CFBundleDisplayName</key><string>Kooyu</string>
 <key>CFBundleShortVersionString</key><string>0.1.0</string>
 <key>CFBundleVersion</key><string>1</string>
-<key>NSCameraUsageDescription</key><string>扫描桌面 Kooyu 的配对二维码，连接你的电脑。图像仅在设备上识别，不会上传。</string>
+<key>KooyuAPNSEnvironment</key><string>$(KOOYU_APNS_ENVIRONMENT)</string>
+<key>NSCameraUsageDescription</key><string>扫描桌面 Kooyu 的配对二维码，连接你的设备。图像仅在设备上识别，不会上传。</string>
 <key>UILaunchScreen</key><dict/>
 <key>UIApplicationSceneManifest</key><dict><key>UIApplicationSupportsMultipleScenes</key><false/></dict>
 <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>

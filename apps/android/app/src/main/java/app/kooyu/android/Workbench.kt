@@ -2,6 +2,8 @@ package app.kooyu.android
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,7 +22,7 @@ data class WorkbenchState(
     val transcript: Transcript = Transcript(emptyList(), false), val events: List<JSONObject> = emptyList(), val commands: List<JSONObject> = emptyList(),
     val selected: String? = null, val olderCursor: Int? = null, val loadingHistory: Boolean = false,
     val usage: UsageReport? = null, val usageLoading: Boolean = false, val usageError: String = "",
-    val addingDevice: Boolean = false, val composerDraft: String = "", val online: Boolean = false,
+    val addingDevice: Boolean = false, val composerDraft: String = "", val composerAttachments: List<ManagedAttachment> = emptyList(), val online: Boolean = false,
     val busy: Boolean = false, val error: String = "", val notice: String = "",
 ) {
     val connection: Connection? get() = book.active
@@ -29,10 +31,13 @@ data class WorkbenchState(
     val canWrite: Boolean get() = online && !busy && connection?.pending == null
 }
 class Workbench(app: Application) : AndroidViewModel(app) {
+    val readingPositions = mutableMapOf<String, Pair<Int, Int>>()
     private val vault = ConnectionVault(app)
     private val mutable = MutableStateFlow(WorkbenchState())
     val state = mutable.asStateFlow()
     private val refreshing = Mutex()
+    fun savedDraft(host: String?, session: String?): String = if (host == null || session == null) "" else runCatching { vault.draft(host, session) }.getOrElse { mutable.update { state -> state.copy(error = "无法恢复此对话的本机草稿。") }; "" }
+    fun saveDraft(host: String?, session: String?, text: String) { if (host != null && session != null) runCatching { vault.saveDraft(host, session, text) }.onFailure { mutable.update { state -> state.copy(error = "无法保存此对话的本机草稿。") } } }
     private var epoch = 0
     private var settingsRefreshedAt = 0L
     init {
@@ -45,7 +50,7 @@ class Workbench(app: Application) : AndroidViewModel(app) {
     fun addDevice(show: Boolean) { if (!mutable.value.busy) mutable.update { it.copy(addingDevice = show, error = "") } }
     fun switchDevice(id: String) {
         if (mutable.value.busy || mutable.value.book.activeHostId == id) return
-        runCatching { val next = mutable.value.book.select(id); commit(next); reset(next) }.onFailure { e -> mutable.update { it.copy(error = e.message ?: "无法切换电脑。") } }
+        runCatching { val next = mutable.value.book.select(id); commit(next); reset(next) }.onFailure { e -> mutable.update { it.copy(error = e.message ?: "无法切换设备。") } }
     }
     fun renameDevice(id: String, name: String) {
         if (mutable.value.busy || name.trim().isEmpty()) return
@@ -54,20 +59,22 @@ class Workbench(app: Application) : AndroidViewModel(app) {
     }
     fun removeDevice(id: String) {
         if (mutable.value.busy) return
+        mutable.value.connections.firstOrNull { it.hostId == id }?.let { BackgroundReminders.stopHost(getApplication(), it, "连接已移除，后台提醒已停止。") }
         runCatching { val active = mutable.value.book.activeHostId == id; val next = mutable.value.book.remove(id); commit(next); if (active) reset(next) }
             .onFailure { e -> mutable.update { it.copy(error = e.message ?: "无法移除本机连接。") } }
     }
     fun clearDamagedConnections() {
         if (mutable.value.busy) return
+        BackgroundReminders.updateSet(getApplication(), "enabled") { emptySet() }
         runCatching { vault.clear(); reset(ConnectionBook()) }.onFailure { e -> mutable.update { it.copy(error = e.message ?: "无法清除凭据。") } }
     }
-    suspend fun pair(address: String, code: String, name: String = "我的电脑") {
+    suspend fun pair(address: String, code: String, name: String = "我的设备") {
         if (mutable.value.busy) return
         mutable.update { it.copy(busy = true) }
         try {
             val paired = HostAPI.pair(address, code)
             val old = mutable.value.connections.firstOrNull { it.hostId == paired.hostId }
-            val c = paired.copy(name = name.trim().ifEmpty { old?.name ?: "电脑 " + (mutable.value.connections.size + 1) }.take(60), pending = old?.pending)
+            val c = paired.copy(name = name.trim().ifEmpty { old?.name ?: "设备 " + (mutable.value.connections.size + 1) }.take(60), pending = old?.pending)
             val next = mutable.value.book.put(c, activate = true); commit(next); reset(next)
             mutable.update { it.copy(busy = true) }; refresh()
         } catch (e: CancellationException) { throw e }
@@ -81,8 +88,9 @@ class Workbench(app: Application) : AndroidViewModel(app) {
         try {
             val api = HostAPI(c)
             val snapshot = api.get("/native/snapshot")
-            if (snapshot.optInt("protocolVersion") != HostAPI.PROTOCOL_VERSION || snapshot.optString("hostId") != c.hostId) throw HostError(409, "电脑身份或版本发生变化，请重新连接。")
+            if (snapshot.optInt("protocolVersion") != HostAPI.PROTOCOL_VERSION || snapshot.optString("hostId") != c.hostId) throw HostError(409, "设备身份或版本发生变化，请重新连接。")
             if (!current(c, generation)) return
+            val reconnecting = !mutable.value.online && mutable.value.snapshot.has("hostId")
             mutable.update { it.copy(snapshot = snapshot,
                 sessions = snapshot.getJSONArray("sessions").objects().map(HostSession::parse),
                 projects = snapshot.getJSONArray("projects").objects().map { p -> p.getString("id") to p.getString("name") },
@@ -90,6 +98,7 @@ class Workbench(app: Application) : AndroidViewModel(app) {
                 harnesses = snapshot.optJSONArray("harnesses")?.objects()?.map(HostHarness::parse) ?: emptyList(),
                 bindings = snapshot.optJSONArray("bindings")?.objects() ?: emptyList(),
                 inbox = snapshot.getJSONArray("inbox").objects().filter { p -> !p.optBoolean("resolved") }.map(InboxItem::parse), online = true, error = if (it.online) it.error else "") }
+            if (reconnecting) mutable.update { it.copy(notice = "连接已恢复 · ${it.inbox.size} 项待处理，可在收件箱查看。") }
             if (mutable.value.appSettings == null || System.nanoTime() - settingsRefreshedAt > 10_000_000_000L) {
                 val settings = api.get("/app-settings")
                 if (!current(c, generation)) return
@@ -109,6 +118,7 @@ class Workbench(app: Application) : AndroidViewModel(app) {
             c.pending?.let { op ->
                 val path = op.getString("path")
                 val receiptPath = when {
+                    op.optBoolean("management") -> "/client/operations/" + op.getString("id")
                     path.endsWith("/send") || path.endsWith("/stop") -> "/commands/" + op.getString("id")
                     path.endsWith("/settings") -> path + "?requestId=" + op.getString("id")
                     path.contains("/commands/") && op.optString("method") == "PATCH" -> path + "?requestId=" + op.getString("id")
@@ -117,15 +127,17 @@ class Workbench(app: Application) : AndroidViewModel(app) {
                 if (receiptPath != null) {
                     val receipt = try { api.get(receiptPath) } catch (e: CancellationException) { throw e } catch (_: Exception) { null }
                     if (receipt != null && current(c, generation) && mutable.value.connection?.pending?.optString("id") == op.getString("id")) {
-                        clearPending(); mutable.update { it.copy(notice = "已从电脑核对操作回执。") }
+                        if (!op.optBoolean("management") || receipt.optString("status") in listOf("confirmed", "failed")) {
+                            clearPending(); mutable.update { it.copy(notice = if (receipt.optString("status") == "failed") receipt.optJSONObject("error")?.optString("message") ?: "操作未完成。" else "已从设备核对操作回执。") }
+                        }
                     }
                 }
             }
         } catch (e: CancellationException) { throw e }
         catch (e: Exception) {
             if (current(c, generation)) mutable.update {
-                if (e is HostError && e.status == 401) WorkbenchState(book = it.book, error = "此电脑授权已失效，请重新扫码连接。")
-                else it.copy(online = false, error = e.message ?: "连接中断，请检查电脑是否在线。")
+                if (e is HostError && e.status == 401) WorkbenchState(book = it.book, error = "此设备授权已失效，请重新扫码连接。")
+                else it.copy(online = false, error = e.message ?: "连接中断，请检查设备是否在线。")
             }
         } finally { refreshing.unlock() }
     }
@@ -163,7 +175,14 @@ class Workbench(app: Application) : AndroidViewModel(app) {
         catch (e: CancellationException) { throw e }
         catch (e: Exception) { if (current(c, generation)) mutable.update { it.copy(error = e.message ?: "读取失败，请重试。") }; null }
     }
-    fun select(id: String?) { mutable.update { it.copy(selected = id, transcript = Transcript(emptyList(), false), events = emptyList(), commands = emptyList(), olderCursor = null, composerDraft = "") } }
+    suspend fun readArray(path: String): List<JSONObject> {
+        val c = mutable.value.connection ?: return emptyList()
+        val generation = epoch
+        return try { val value = HostAPI(c).array(path); if (current(c, generation)) value else emptyList() }
+        catch (e: CancellationException) { throw e }
+        catch (e: Exception) { if (current(c, generation)) mutable.update { it.copy(error = e.message ?: "读取失败") }; emptyList() }
+    }
+    fun select(id: String?) { mutable.update { it.copy(selected = id, transcript = Transcript(emptyList(), false), events = emptyList(), commands = emptyList(), olderCursor = null, composerDraft = "", composerAttachments = emptyList()) } }
     suspend fun openSearchHit(sessionId: String, eventId: String): Boolean {
         val c = mutable.value.connection ?: return false; val generation = epoch
         val page = read("/sessions/" + encoded(sessionId) + "?event=" + encoded(eventId)) ?: return false
@@ -173,11 +192,23 @@ class Workbench(app: Application) : AndroidViewModel(app) {
         return true
     }
     fun suspended(token: String? = mutable.value.connection?.token) { if (mutable.value.connection?.token == token) mutable.update { it.copy(online = false) } }
-    suspend fun send(text: String, mode: String = "queue"): Boolean {
+    suspend fun send(text: String, mode: String? = null, attachmentIds: List<String> = emptyList()): Boolean {
         val id = mutable.value.selected ?: return false
-        if (text.isBlank() || text.length > 200000) return false
-        return execute("/sessions/" + id + "/send", body = JSONObject().put("text", text).put("mode", mode)) != null
+        if ((text.isBlank() && attachmentIds.isEmpty()) || text.length > 200000) return false
+        val runState = mutable.value.sessions.firstOrNull { it.id == id }?.runState ?: "unknown"
+        val sent = execute("/sessions/" + id + "/send", body = JSONObject().put("text", text).put("mode", mode ?: composerSendMode(runState)).put("attachmentIds", org.json.JSONArray(attachmentIds))) != null
+        if (sent && mutable.value.selected == id) mutable.update { it.copy(composerDraft = "", composerAttachments = emptyList()) }
+        return sent
     }
+    suspend fun branch(row: TranscriptRow, edit: Boolean): Boolean {
+        val owner = mutable.value.selected ?: return false
+        val event = row.eventIds.firstOrNull() ?: return false
+        val result = execute("/sessions/$owner/branch", body = JSONObject().put("eventId", event).put("edit", edit), refreshAfter = false) ?: return false
+        select(result.getString("id")); refresh()
+        if (edit) mutable.update { it.copy(composerDraft = row.text) }
+        return true
+    }
+    suspend fun cancelTurn() { mutable.value.selected?.let { execute("/sessions/$it/stop", body = JSONObject().put("pause", false)) } }
     suspend fun stop() { mutable.value.selected?.let { execute("/sessions/" + it + "/stop", body = JSONObject().put("pause", true)) } }
     suspend fun answer(item: InboxItem, action: NativeAction) { execute("/interactions/" + encoded(item.id), body = JSONObject().put("answer", action.answer)) }
     suspend fun execute(path: String, method: String = "POST", body: JSONObject? = JSONObject(), refreshAfter: Boolean = true): JSONObject? {
@@ -187,15 +218,26 @@ class Workbench(app: Application) : AndroidViewModel(app) {
         if (!state.canWrite) return null
         mutable.update { it.copy(busy = true, error = "") }
         val id = UUID.randomUUID().toString()
-        if (path.endsWith("/send") || path.endsWith("/stop") || path.endsWith("/settings") || path.contains("/commands/") && method == "PATCH") body?.put("requestId", id)
+        val management = path.startsWith("/automations") && path != "/automations/preview" || path.startsWith("/memory") || Regex("/goals/[^/]+/review").matches(path)
+        if (path.endsWith("/send") || path.endsWith("/stop") || path.endsWith("/settings") || path.endsWith("/branch") || path.startsWith("/interactions/") || path.contains("/commands/") && method == "PATCH") body?.put("requestId", id)
         try {
-            val pending = JSONObject().put("id", id).put("path", path).put("method", method).put("body", body)
+            val pending = JSONObject().put("id", id).put("path", path).put("method", method).put("body", body).put("management", management)
             commit(mutable.value.book.put(c.copy(pending = pending)))
-            val result = HostAPI(c).perform(path, method, if (method == "DELETE") null else body)
+            var result = if (management) HostAPI(c).post("/client/operations", JSONObject().put("requestId", id).put("path", "/api$path").put("method", method).put("body", body ?: JSONObject()))
+                else HostAPI(c).perform(path, method, if (method == "DELETE") null else body)
             if (!current(c, generation)) return null
+            if (management) {
+                val status = result.optString("status")
+                if (status != "confirmed") {
+                    if (status == "failed") clearPending()
+                    mutable.update { it.copy(error = result.optJSONObject("error")?.optString("message") ?: "操作结果待核对，不会自动重发。") }
+                    return null
+                }
+                result = result.optJSONObject("result") ?: JSONObject()
+            }
             clearPending()
             if (path == "/app-settings" && method == "PATCH") mutable.update { it.copy(appSettings = result) }
-            mutable.update { it.copy(notice = if (result.has("cancel")) "停止回执：" + result.optString("cancel") else "电脑已保存操作。") }
+            mutable.update { it.copy(notice = if (result.has("cancel")) "停止回执：" + result.optString("cancel") else "设备已保存操作。") }
             if (refreshAfter) refresh()
             return result
         } catch (e: CancellationException) { throw e }
@@ -210,13 +252,19 @@ class Workbench(app: Application) : AndroidViewModel(app) {
     fun clearPending() { val c = mutable.value.connection ?: return; commit(mutable.value.book.put(c.copy(pending = null))) }
     fun dismissNotice(value: String) { mutable.update { if (it.notice == value) it.copy(notice = "") else it } }
     fun dismissError() { mutable.update { it.copy(error = "") } }
-    suspend fun create(draft: SessionDraft): Boolean {
+    suspend fun create(draft: SessionDraft, attachments: List<ManagedAttachment> = emptyList()): Boolean {
         val c = mutable.value.connection ?: return false
-        val effective = if (mutable.value.harnesses.firstOrNull { it.id == draft.harnessId }?.modelSupport == "native-only") draft.copy(choice = "native") else draft
+        var effective = if (mutable.value.harnesses.firstOrNull { it.id == draft.harnessId }?.modelSupport == "native-only") draft.copy(choice = "native") else draft
+        if (draft.customPath.isNotBlank()) {
+            val workspace = execute("/workspaces", body = JSONObject().put("projectId", draft.projectId ?: JSONObject.NULL).put("rootPath", draft.customPath.trim())) ?: return false
+            if (mutable.value.connection?.token != c.token) return false
+            effective = effective.copy(workspaceId = workspace.getString("id"))
+        }
         val result = execute("/sessions", body = effective.body(), refreshAfter = false) ?: return false
         if (mutable.value.connection?.token != c.token) return false
         select(result.getString("id")); refresh()
-        if (draft.firstMessage.isNotBlank() && !send(draft.firstMessage, "new")) mutable.update { it.copy(composerDraft = draft.firstMessage) }
+        if ((draft.firstMessage.isNotBlank() || attachments.isNotEmpty()) && !send(draft.firstMessage, "new", attachments.map { it.id }))
+            mutable.update { it.copy(composerDraft = draft.firstMessage, composerAttachments = attachments) }
         return true
     }
     suspend fun create(title: String, projectId: String?) = create(SessionDraft(title = title, projectId = projectId))
@@ -231,6 +279,31 @@ class Workbench(app: Application) : AndroidViewModel(app) {
         val body = JSONObject().put("usd", usd).put("projectId", projectId)
         if (execute("/budgets", body = body) == null) return false
         refreshUsage(); return true
+    }
+    suspend fun openNotification(target: NotificationTarget): Int? {
+        if (mutable.value.busy) return null
+        val c = mutable.value.connections.firstOrNull { it.hostId == target.hostId } ?: run {
+            mutable.update { it.copy(error = "此通知的设备未保存，请重新配对。") }; return null
+        }
+        val generation = epoch
+        try {
+            val api = HostAPI(c)
+            val item = api.get(target.path)
+            val snapshot = api.get("/native/snapshot")
+            if (mutable.value.busy || epoch != generation || mutable.value.connections.none { it.hostId == c.hostId && it.deviceId == c.deviceId && it.token == c.token } || snapshot.optString("hostId") != c.hostId || snapshot.optInt("protocolVersion") != HostAPI.PROTOCOL_VERSION || item.optString("id") != target.notificationId || item.optJSONObject("link")?.optString("hostId") != c.hostId) return null
+            switchDevice(c.hostId)
+            if (mutable.value.connection?.token != c.token) return null
+            val sessionId = item.nullableString("sessionId")?.takeIf { id -> snapshot.getJSONArray("sessions").objects().any { it.optString("id") == id } }
+            select(sessionId); refresh()
+            if (mutable.value.connection?.token != c.token || mutable.value.connection?.hostId != c.hostId) return null
+            viewModelScope.launch {
+                try { api.post(target.path + "/read", JSONObject()) }
+                catch (e: CancellationException) { throw e }
+                catch (_: Exception) { /* Navigation succeeds even if the idempotent read receipt is offline. */ }
+            }
+            return if (sessionId == null) 4 else 0
+        } catch (e: CancellationException) { throw e }
+        catch (_: Exception) { if (epoch == generation) mutable.update { it.copy(error = "无法打开通知，请检查设备连接或事项是否已过期。") }; return null }
     }
     fun disconnect() { mutable.value.connection?.let { removeDevice(it.hostId) } }
 }

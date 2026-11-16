@@ -26,6 +26,8 @@ struct TranscriptRow: Identifiable, Sendable {
     var payload: JSONValue = .null
     var origin: String? = nil
     var child: ChildTranscript? = nil
+    var createdAt: String? = nil
+    var attachments: [JSONValue] = []
 }
 
 struct Transcript: Sendable {
@@ -163,7 +165,7 @@ func buildTranscript(_ events: [RuntimeEvent]) -> Transcript {
             }
         case "message":
             let text = p.text
-            if text.isEmpty { continue }
+            if text.isEmpty && p["attachments"].array.isEmpty { continue }
             if p["channel"].string == "thought" || p["type"].string == "reasoning" {
                 let item = p["id"].key
                 if !thought.isEmpty, item != thoughtItem { flushThought() }
@@ -177,7 +179,7 @@ func buildTranscript(_ events: [RuntimeEvent]) -> Transcript {
             if role == .user { flush() } else { stream = ""; streamIds = [] }
             let id = p["id"].key.map { "message:\($0)" } ?? e.id
             let origin: String? = switch p["origin"].string { case "supervisor": "由主对话发送"; case "wake": "持久事件唤醒"; default: nil }
-            let row = TranscriptRow(id: id, role: role, text: text, eventIds: [e.id], origin: origin)
+            let row = TranscriptRow(id: id, role: role, text: text, eventIds: [e.id], origin: origin, createdAt: e.createdAt, attachments: p["attachments"].array)
             upsert(row) { old in var next = row; next.eventIds = old.eventIds + [e.id]; return next }
         case "tool":
             if ["userMessage", "reasoning"].contains(p["type"].string) { continue }

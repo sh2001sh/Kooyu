@@ -22,7 +22,7 @@ data class ChildTranscript(val agentId: String, val name: String? = null, val pa
     val status: String? = null, val events: List<JSONObject> = emptyList())
 
 data class TranscriptRow(val id: String, val role: String, val text: String, val eventIds: List<String> = emptyList(),
-    val payload: JSONObject? = null, val origin: String? = null, val child: ChildTranscript? = null)
+    val payload: JSONObject? = null, val origin: String? = null, val child: ChildTranscript? = null, val createdAt: String? = null, val attachments: List<JSONObject> = emptyList())
 
 data class Transcript(val rows: List<TranscriptRow>, val thinkingPending: Boolean)
 
@@ -129,7 +129,7 @@ fun buildTranscript(events: List<JSONObject>): Transcript {
             }
             "message" -> {
                 val text = messageText(e.opt("payload"))
-                if (text.isEmpty()) continue
+                if (text.isEmpty() && (p.optJSONArray("attachments")?.length() ?: 0) == 0) continue
                 if (p.optString("channel") == "thought" || p.optString("type") == "reasoning") {
                     val item = p.key("id")
                     if (thought.isNotEmpty() && item != thoughtItem) flushThought()
@@ -143,7 +143,7 @@ fun buildTranscript(events: List<JSONObject>): Transcript {
                 if (role == RowRole.USER) flush() else { stream.clear(); streamIds.clear() }
                 val id = p.key("id")?.let { "message:$it" } ?: eventId
                 val origin = when (p.optString("origin")) { "supervisor" -> "由主对话发送"; "wake" -> "持久事件唤醒"; else -> null }
-                val row = TranscriptRow(id, role, text, listOf(eventId), origin = origin)
+                val row = TranscriptRow(id, role, text, listOf(eventId), origin = origin, createdAt = e.nullableString("createdAt"), attachments = p.optJSONArray("attachments")?.objects() ?: emptyList())
                 upsert(row) { old -> row.copy(eventIds = old.eventIds + eventId) }
             }
             "tool" -> {
