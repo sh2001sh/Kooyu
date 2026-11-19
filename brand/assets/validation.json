@@ -1,8 +1,0 @@
-{
-  "svg_files": 33,
-  "cubic_segments": 67,
-  "silhouette_iou": 0.996887,
-  "source_sha256": "6d3a95a7fe10ecfb29477354c36f44b40d356baa172bc315efefdcad60ecd42c",
-  "raster_embedded": false,
-  "gradient_note": "Silhouette fitted to approved source; editable surface gradients are a production interpretation, not pixel-identical raster tracing."
-}

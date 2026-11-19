@@ -1,6 +1,6 @@
 import type { SVGProps } from "react";
 
-/** Kooyu outlined wordmark. Generated from brand/assets/svg/kooyu-wordmark.svg. */
+/** Kooyu outlined wordmark. Generated from brand/logos/kooyu-wordmark.svg. */
 export function KooyuWordmark(props: SVGProps<SVGSVGElement>) {
   return (
     <svg

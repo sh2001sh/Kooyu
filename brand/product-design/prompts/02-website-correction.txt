@@ -1,7 +1,0 @@
-This is a precise correction to the supplied Kodo website design image. Preserve the entire existing layout, approved Kodo brand logo, coral palette, hero headline, desktop application preview, navigation, CTA placement, typography, spacing and lower section.
-
-Make only this identity correction: in the native-tool name strip beneath the main hero, the label "Codex" currently has the Kodo coral ribbon symbol beside it. That is wrong. Replace ONLY that small symbol beside "Codex" with a neutral simple outlined code-brackets icon </>, in muted coral. Keep the text "Codex". The Kodo ribbon is the Kodo product's brand, never the Codex product's brand. Claude Code and pi labels can stay as they are.
-
-Also replace the small supporting phrase "无缝跟进" near the bottom-left with "按需跟进", to keep the wording measured and accurate. Keep the main headline "让工作，接着向前。" and the footer "设计概念 · 功能以当前版本为准".
-
-Return the same polished website concept image, landscape 1536x1024, with no other structural or stylistic changes. This is a product design concept, not a real runtime screenshot.

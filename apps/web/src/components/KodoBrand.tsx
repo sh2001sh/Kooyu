@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import type { HarnessId } from "@kodo/protocol";
-import { KooyuMark } from "../../../../brand/assets/components/KooyuMark";
+import { KooyuMark } from "./KooyuMark";
 import { HARNESS_NAMES, HARNESS_VISUALS } from "../lib/harnesses";
 
 /** Use the approved ribbon asset at its original proportions. */

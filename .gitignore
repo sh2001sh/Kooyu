@@ -20,7 +20,7 @@ output/
 test-results/
 playwright-report/
 .playwright-cli/
-.impeccable/review/
+.impeccable/
 
 # Local credentials and runtime data
 .env
@@ -36,6 +36,6 @@ release-assets/
 .idea/
 .DS_Store
 Thumbs.db
-__pycache__/
+**/__pycache__/
 *.pyc
 /tmp_matches.txt
