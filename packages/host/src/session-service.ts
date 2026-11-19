@@ -217,6 +217,7 @@ export class SessionService {
   private nativeSyncJob?: Promise<NativeSyncResult>;
   private nativeSyncOffset = 0;
   private readonly implementations: HarnessAdapter[];
+  private readonly customAdapters: boolean;
   private installationHealth?: {
     key: string;
     at: number;
@@ -281,6 +282,7 @@ export class SessionService {
     this.workTimer.unref();
 
     this.implementations = options.adapters ?? adapters;
+    this.customAdapters = Boolean(options.adapters);
     this.onFatal = options.onFatal;
     mkdirSync(this.dataDir, { recursive: true });
     this.deadlineTimer = setInterval(() => {
@@ -2165,6 +2167,7 @@ export class SessionService {
       : this.implementations
           .filter((a) => {
             if (!a.standaloneList) return false;
+            if (this.customAdapters) return true;
             const desc = healthMap.find((h) => h.id === a.descriptor.id);
             return desc ? Boolean(desc.health?.launchable || desc.health?.installed) : true;
           })

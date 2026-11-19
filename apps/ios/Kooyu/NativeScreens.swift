@@ -1131,7 +1131,7 @@ struct GoalDetailView: View {
                             HStack(spacing: 12) {
                                 Button("接受成果") {
                                     Task {
-                                        var values: [String: JSONValue] = ["decision": .string("accept"), "expectedRevision": goal?["revision"] ?? .null]
+                                        var values: [String: JSONValue] = ["decision": .string("accept"), "expectedRevision": goal["revision"]]
                                         if !note.isEmpty { values["remainingUncertainty"] = .string(note) }
                                         if await model.execute("/goals/\(goalId)/review", values: values) != nil { dismiss() }
                                     }
@@ -1141,7 +1141,7 @@ struct GoalDetailView: View {
 
                                 Button("退回修改") {
                                     Task {
-                                        let values: [String: JSONValue] = ["decision": .string("request-changes"), "expectedRevision": goal?["revision"] ?? .null, "note": .string(note)]
+                                        let values: [String: JSONValue] = ["decision": .string("request-changes"), "expectedRevision": goal["revision"], "note": .string(note)]
                                         if await model.execute("/goals/\(goalId)/review", values: values) != nil { dismiss() }
                                     }
                                 }
