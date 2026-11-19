@@ -169,8 +169,17 @@ for (const width of [1440, 390]) {
         await expect(page.getByText("Host 已连接", { exact: true })).toHaveCount(1);
         await page.getByRole("button", { name: "新建会话", exact: true }).first().click();
         await page.getByRole("textbox", { name: "消息", exact: true }).fill(message);
+        const sendButton = page.getByRole("button", { name: "发送消息", exact: true });
+        await expect(sendButton).toBeEnabled();
+        // Settle the draft-view entrance transition so the stopwatch measures send-to-paint latency
+        // rather than Playwright's pre-click stability wait on slow CI software renderers.
+        await page.evaluate(() => {
+          for (const animation of document.getAnimations()) {
+            if (animation.effect?.getComputedTiming().iterations !== Infinity) animation.finish();
+          }
+        });
         const started = Date.now();
-        await page.getByRole("button", { name: "发送消息", exact: true }).click();
+        await sendButton.click();
         await page.locator(".user-turn").filter({ hasText: message }).waitFor();
         const messageMs = Date.now() - started;
         await page.locator(".run-indicator").first().waitFor();
