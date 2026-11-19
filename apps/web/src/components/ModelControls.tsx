@@ -176,7 +176,7 @@ export function ModelControls({
     });
   };
 
-  const itemDisabled = saving || loading || !options;
+  const itemDisabled = disabled || saving || loading || !options;
   const topItems = !trimmedQuery
     ? [
         {
@@ -258,11 +258,12 @@ export function ModelControls({
       reasoningLevels={levels}
       reasoningValue={reasoning}
       reasoningDefault={nativeDefaults?.reasoning ?? undefined}
-      reasoningDisabled={saving || loading || !options || !selected}
+      reasoningDisabled={disabled || saving || loading || !options || !selected}
       reasoningSliderLabel="会话思考强度"
       onReasoningChange={setReasoning}
       onReasoningCommit={(value) => {
-        if (value === (session.reasoning ?? "")) return;
+        const current = options?.session.reasoning ?? session.reasoning ?? "";
+        if (value === current) return;
         commit(
           session.model ?? options?.effectiveModel ?? (defaultModelId || null),
           value || null,

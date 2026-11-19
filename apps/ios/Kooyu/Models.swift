@@ -171,11 +171,11 @@ struct APIError: Error, LocalizedError {
 }
 
 func formatWorkspaceLabel(_ raw: String?) -> String {
-    let normalized = (raw ?? "")
-        .trimmingCharacters(in: .whitespacesAndNewlines)
+    let trimmed = (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return "" }
+    let normalized = trimmed
         .replacingOccurrences(of: "\\", with: "/")
         .replacingOccurrences(of: "/+$", with: "", options: .regularExpression)
-    guard !normalized.isEmpty else { return "" }
     var stripped = normalized.replacingOccurrences(of: "^[A-Za-z]:", with: "", options: .regularExpression)
     stripped = stripped.replacingOccurrences(of: "^/(?:Users|home)/[^/]+", with: "", options: [.regularExpression, .caseInsensitive])
     let segments = stripped.split(separator: "/").map(String.init)
