@@ -9,6 +9,11 @@ Verified release on 2026-11-13: `kooyu-relay:20261113-2`, source directory
 is retained. Public health and live Host reconnect with the same paired device
 were verified after replacement.
 
+On 2026-11-19 the Caddy site gained gzip for JSON responses only. SSE remains
+uncompressed; public authenticated JSON decoding and SSE heartbeat were verified.
+Keep this match restriction when editing the proxy. Performance findings and
+the pre-change backup path are recorded in `docs/mobile-connection-performance-2026-11-19.md`.
+
 ## Build a release
 
 1. From the repository root, run `npm ci`, `npm run build`, `npm test`, and `npm run test:relay`.

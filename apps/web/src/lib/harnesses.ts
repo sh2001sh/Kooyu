@@ -1,4 +1,23 @@
-import type { Capability, HarnessId, HarnessBinding, Session, Snapshot } from "@kodo/protocol";
+import type {
+  Capability,
+  HarnessId,
+  HarnessBinding,
+  HarnessModelOption,
+  Session,
+  Snapshot,
+} from "@kodo/protocol";
+
+/** Keep native provider routes intact in every model picker. Binding models stay bare. */
+export function modelOptionValue(
+  harnessId: HarnessId,
+  model: HarnessModelOption,
+  bound = false,
+): string {
+  if (bound || model.provider?.startsWith("kodo-")) return model.id;
+  if (["kodo", "pi", "opencode", "zcode", "deepseek-harness"].includes(harnessId) && model.provider)
+    return model.id.startsWith(model.provider + "/") ? model.id : `${model.provider}/${model.id}`;
+  return model.id;
+}
 
 export const HARNESS_NAMES: Record<HarnessId, string> = {
   kodo: "Kooyu",
@@ -115,10 +134,10 @@ export const HARNESS_VISUALS: Record<HarnessId, HarnessVisual> = {
 };
 
 export const RUN_STATE_LABELS: Record<Session["runState"], string> = {
-  idle: "空闲",
-  running: "正在运行",
-  "waiting-input": "等待输入",
-  unknown: "运行未知",
+  idle: "就绪",
+  running: "运行中",
+  "waiting-input": "需确认",
+  unknown: "异常",
 };
 
 export const CONNECTION_STATE_LABELS: Record<Session["connectionState"], string> = {
@@ -166,6 +185,41 @@ export function formatRelativeDate(value: string): string {
 export function shortModelLabel(model: string): string {
   const idx = model.lastIndexOf("/");
   return idx > 0 ? model.slice(idx + 1) : model;
+}
+
+export const WORK_QUICK_TEMPLATES: [string, string][] = [
+  ["检查项目", "请检查当前项目的结构和运行方式，指出需要优先处理的问题，并给出依据。"],
+  ["修复并验证", "请定位并修复以下问题，运行相关检查，并交付修改说明、验证结果和剩余限制：\n"],
+  ["整理成果", "请整理本项目当前工作的成果、实际验证记录和待处理事项，并关联来源对话。"],
+  [
+    "安排计划",
+    "请帮我创建一个自动计划。先与我确认工作内容、执行时间、时区、执行设备和次数或预算边界，再请求必要授权。",
+  ],
+];
+
+/**
+ * Collapse native filesystem paths (including Windows drive prefixes and home dirs)
+ * into a concise workspace label such as `parent/repo` for compact headers and lists.
+ * Full native paths remain available on hover or in dedicated inspector details.
+ */
+export function formatWorkspaceLabel(path?: string | null): string {
+  const trimmed = path?.trim();
+  if (!trimmed) return "";
+  const normalized = trimmed
+    .replace(/\\/g, "/")
+    .replace(/\/+$/, "")
+    .replace(/^[a-zA-Z]:/, "");
+  const isHomeDir = /^\/(?:Users|home)\/[^/]+$/i.test(normalized);
+  if (isHomeDir) return "~";
+  const cleaned = normalized.replace(/^\/(?:Users|home)\/[^/]+/i, "");
+  const parts = cleaned.split("/").filter(Boolean);
+  if (!parts.length) {
+    const driveMatch = /^([a-zA-Z]:)/.exec(trimmed);
+    if (driveMatch) return `${driveMatch[1]}/`;
+    return trimmed === "/" ? "/" : "";
+  }
+  if (parts.length === 1) return parts[0]!;
+  return `${parts[parts.length - 2]}/${parts[parts.length - 1]}`;
 }
 
 /** Provider part of a model route, if any. */

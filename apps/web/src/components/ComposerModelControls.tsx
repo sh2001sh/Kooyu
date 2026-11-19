@@ -165,7 +165,13 @@ export function ComposerModelControls({
               title={modelTitle || modelLabel}
             >
               <Cpu size={13} className="composer-model-button__icon" aria-hidden="true" />
-              <span className="composer-model-button__label">{modelLabel}</span>
+              <span className="composer-model-button__label">
+                {modelLabel}
+                <span className="composer-model-button__reasoning-mobile">
+                  {" · "}
+                  {reasoningValue || reasoningDefault || "默认思考"}
+                </span>
+              </span>
               <ChevronDown size={12} className="composer-pill-chevron" aria-hidden="true" />
             </button>
           )}
@@ -235,6 +241,19 @@ export function ComposerModelControls({
               )}
             </div>
 
+            <div className="mobile-only-block">
+              <div className="ios-menu__divider" />
+              <div className="ms-mobile-reasoning">
+                <ReasoningSlider
+                  levels={reasoningLevels}
+                  value={reasoningValue}
+                  disabled={reasoningDisabled}
+                  label={reasoningSliderLabel}
+                  onChange={onReasoningChange}
+                  onCommit={onReasoningCommit}
+                />
+              </div>
+            </div>
             <div className="ios-menu__divider" />
             <ModelParameters model={parametersModel} />
             {error && (

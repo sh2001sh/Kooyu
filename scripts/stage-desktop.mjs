@@ -2,6 +2,7 @@ import { cp, mkdir, readFile, writeFile, chmod, rm } from "node:fs/promises";
 import { resolve, join, dirname } from "node:path";
 import { spawn } from "node:child_process";
 import { build } from "esbuild";
+import "./sync-desktop-icons.mjs";
 
 // Stage on the target OS/architecture: keyring and other native addons are not portable.
 if (process.versions.node !== "24.13.0") throw new Error("Desktop staging requires Node 24.13.0.");

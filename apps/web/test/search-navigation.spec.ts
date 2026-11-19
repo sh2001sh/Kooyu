@@ -36,17 +36,16 @@ test("search opens an old event in the same or another session and leaves histor
     const url = new URL(route.request().url());
     const hit = url.searchParams.get("event");
     if (hit) located++;
-    const slice = hit
-      ? events.slice(0, 161)
-      : url.searchParams.has("before")
-        ? events.slice(400, 700)
-        : events.slice(-300);
+    const end = url.searchParams.has("before")
+      ? Number(url.searchParams.get("before")) - 1
+      : events.length;
+    const slice = hit ? events.slice(0, 161) : events.slice(Math.max(0, end - 300), end);
     return route.fulfill({
       json: {
         session,
         events: slice,
         commands: [],
-        olderCursor: hit ? null : slice[0].sequence,
+        olderCursor: hit || slice[0].sequence === 1 ? null : slice[0].sequence,
         anchorEventId: hit,
       },
     });
@@ -62,7 +61,10 @@ test("search opens an old event in the same or another session and leaves histor
   await page.goto("/");
   await page.locator(".session-row").filter({ hasText: session.title }).click();
   await expect(page.locator(".transcript .turn")).toHaveCount(300);
-  await page.getByRole("button", { name: "更早记录", exact: true }).click();
+  await page.locator(".transcript").evaluate((el) => {
+    el.scrollTop = 0;
+  });
+  await expect(page.locator(".transcript .turn")).toHaveCount(600);
   await page.getByRole("textbox", { name: /搜索/ }).fill("EARLY_SEARCH_TARGET_0010");
   await expect(page.locator(".search-snippet")).toBeVisible();
   await page.locator(".session-row").filter({ hasText: session.title }).click();
@@ -75,9 +77,15 @@ test("search opens an old event in the same or another session and leaves histor
   await page.locator(".session-row").filter({ hasText: session.title }).click();
   await expect(hit).toBeInViewport();
   expect(located).toBe(2);
-  await page.getByRole("button", { name: "返回最新记录", exact: true }).click();
-  await expect(page.locator(".transcript .turn")).toHaveCount(300);
+  await expect(page.getByRole("button", { name: "返回最新记录", exact: true })).toHaveCount(0);
+  // The bottom of a search snapshot is still historical; the floating action stays available.
+  await page.locator(".transcript").evaluate((el) => {
+    el.scrollTop = el.scrollHeight;
+  });
+  await page.getByRole("button", { name: "回到底部", exact: true }).click();
+  await expect(page.locator(".transcript .turn")).toHaveCount(1000);
   await expect(hit).toHaveCount(0);
+  await expect(page.getByText("synthetic message 999", { exact: true })).toBeInViewport();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "返回会话列表", exact: true }).click();
   await page.locator(".session-row").filter({ hasText: session.title }).click();
@@ -99,6 +107,7 @@ test("context-menu deletion syncs across tabs and removes the session from the r
   await other.goto("/");
   await other.locator(".session-row").filter({ hasText: session.title }).click();
   await expect(other.getByRole("heading", { name: session.title, exact: true })).toBeVisible();
+  await page.bringToFront();
   await page.locator(".session-row").filter({ hasText: session.title }).click({ button: "right" });
   const menu = page.getByRole("menu", { name: "会话操作", exact: true });
   await expect(menu).toBeVisible();
@@ -182,14 +191,12 @@ for (const width of [1440, 390])
     });
     const anchor = transcript.locator("#message-history-600 .markdown");
     const beforeTop = (await anchor.boundingBox())!.y;
-    await page.getByRole("button", { name: "更早记录", exact: true }).click();
     await expect(transcript.locator(".assistant-turn")).toHaveCount(600);
     expect(Math.abs((await anchor.boundingBox())!.y - beforeTop)).toBeLessThan(8);
     // Prepending the second page must keep both already loaded pages and the newest reply.
     await transcript.evaluate((el) => {
       el.scrollTop = 0;
     });
-    await page.getByRole("button", { name: "更早记录", exact: true }).click();
     await expect(transcript.locator(".assistant-turn")).toHaveCount(900);
     await transcript.evaluate((el) => {
       el.scrollTop = el.scrollHeight;
@@ -211,13 +218,23 @@ for (const width of [1440, 390])
     // The floating latest button must fetch the tail; scrolling an old page is insufficient.
     latestVersion = true;
     await transcript.evaluate((el) => {
-      el.scrollTop = 500;
+      el.scrollTop = el.scrollHeight;
     });
     const initialTails = tails;
     await page.getByRole("button", { name: "回到底部", exact: true }).click();
     await expect(transcript.getByText("FRESH_LATEST_REPLY", { exact: true })).toBeInViewport();
     expect(tails).toBeGreaterThan(initialTails);
-    await expect(transcript.locator(".assistant-turn")).toHaveCount(300);
+    await expect(transcript.locator(".assistant-turn")).toHaveCount(901);
+    await transcript.evaluate((el) => {
+      el.scrollTop = 0;
+    });
+    await expect(transcript.getByText("历史消息 0", { exact: true })).toBeInViewport();
+    await transcript.evaluate((el) => {
+      el.scrollTop = el.scrollHeight;
+    });
+    await expect(page.getByRole("button", { name: "返回最新记录", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "回到底部", exact: true })).toBeHidden();
+    await page.screenshot({ path: info.outputPath(`latest-message-fixed-${width}.png`) });
   });
 
 test("analysis channels and native thinking snapshots never become an assistant answer", async ({
@@ -293,3 +310,87 @@ test("analysis channels and native thinking snapshots never become an assistant 
   await expect(page.getByText("REASONING_ONLY_SNAPSHOT", { exact: true })).toBeVisible();
   await expect(page.getByText("STREAM_ANALYSIS_ONLY", { exact: true })).toHaveCount(1);
 });
+
+// The index rail is a desktop control; mobile history retention is covered above.
+for (const width of [1440])
+  test(`full message directory loads an old turn and retains it after latest and reconnect at ${width}px`, async ({
+    page,
+  }, info) => {
+    await page.setViewportSize({ width, height: 900 });
+    const session = await (
+      await page.request.post("/api/sessions", {
+        data: {
+          title: "历史分页完整性回归",
+          harnessId: "claude-code",
+          kind: "direct",
+        },
+      })
+    ).json();
+    const events = Array.from({ length: 900 }, (_, i) => ({
+      id: `directory-${i}`,
+      sessionId: session.id,
+      sequence: i + 1,
+      type: "message",
+      createdAt: new Date().toISOString(),
+      source: "native",
+      nativeRunId: null,
+      payload: { role: i % 100 === 0 ? "user" : "assistant", text: `目录消息 ${i}` },
+    }));
+    const messageIndex = events
+      .filter((e) => e.payload.role === "user")
+      .map((e) => ({
+        id: `message-${e.id}`,
+        eventId: e.id,
+        sequence: e.sequence,
+        label: e.payload.text,
+      }));
+    let failEarlier = true;
+    let earlierReads = 0;
+    await page.route(`**/api/sessions/${session.id}?*`, async (route) => {
+      const before = Number(new URL(route.request().url()).searchParams.get("before"));
+      if (before) {
+        earlierReads++;
+        if (failEarlier) {
+          failEarlier = false;
+          await route.fulfill({ status: 503, json: { error: { message: "合成网络中断" } } });
+          return;
+        }
+      }
+      const end = before ? before - 1 : events.length;
+      const slice = events.slice(Math.max(0, end - 300), end);
+      await route.fulfill({
+        json: {
+          session,
+          events: slice,
+          commands: [],
+          messageIndex,
+          olderCursor: slice[0].sequence > 1 ? slice[0].sequence : null,
+        },
+      });
+    });
+    await page.addInitScript((id) => localStorage.setItem("kodo.session", id), session.id);
+    await page.goto("/");
+    const transcript = page.locator(".transcript");
+    const nav = page.getByRole("navigation", { name: "对话导航", exact: true });
+    await expect(nav.locator(".conversation-nav__counter")).toHaveText("09/09");
+    await expect(nav.locator(".conversation-nav__item")).toHaveCount(9);
+    await transcript.evaluate((el) => {
+      el.scrollTop = 0;
+    });
+    await expect(page.getByRole("alert")).toContainText("合成网络中断");
+    expect(earlierReads).toBe(1);
+    await page.getByRole("button", { name: "重试加载更早记录", exact: true }).click();
+    await expect(transcript.locator(".turn")).toHaveCount(600);
+    await nav.getByRole("button", { name: "跳到第 1 条消息：目录消息 0", exact: true }).click();
+    await expect(transcript.locator("#message-directory-0")).toBeInViewport();
+    await expect(transcript.locator(".turn")).toHaveCount(900);
+    await page.getByRole("button", { name: "回到底部", exact: true }).click();
+    await expect(transcript.locator("#message-directory-899")).toBeInViewport();
+    await expect(transcript.locator(".turn")).toHaveCount(900);
+    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    await expect(page.getByText("Host 已连接", { exact: true })).toBeVisible();
+    await expect(transcript.locator(".turn")).toHaveCount(900);
+    await nav.getByRole("button", { name: "跳到第 1 条消息：目录消息 0", exact: true }).click();
+    await expect(transcript.locator("#message-directory-0")).toBeInViewport();
+    await page.screenshot({ path: info.outputPath(`complete-message-directory-${width}.png`) });
+  });

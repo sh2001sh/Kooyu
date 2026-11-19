@@ -10,6 +10,7 @@ import type { AdapterContext } from "../src/harnesses/adapter.js";
 import { readCompleteJsonLines } from "../src/harnesses/native-history.js";
 import { captureNativeCommand } from "../src/harnesses/native-command.js";
 import { listCursorSessions } from "../src/harnesses/cursor.js";
+import { RpcRejected } from "../src/harnesses/rpc.js";
 import type { RuntimeEvent, Session, BindingRuntime } from "@kodo/protocol";
 const fixture = fileURLToPath(new URL("./fixtures/native-peer.mjs", import.meta.url));
 const grokFixture = fileURLToPath(new URL("./fixtures/grok-cli.mjs", import.meta.url));
@@ -280,6 +281,10 @@ test("Kimi opens new sessions through the native Server API", async () => {
       });
     if (url.includes("/interactions/") && method === "POST")
       return Response.json({ code: 0, msg: "success", data: { outcome: body.decision } });
+    if (url.endsWith("/prompts") && body?.prompt_id === "synthetic-http-rejection")
+      return new Response("temporarily unavailable", { status: 503 });
+    if (url.endsWith("/prompts") && body?.prompt_id === "synthetic-business-rejection")
+      return Response.json({ code: 123, msg: "synthetic rejected" });
     if (url.endsWith("/prompts") && method === "POST")
       return Response.json({
         code: 0,
@@ -314,6 +319,14 @@ test("Kimi opens new sessions through the native Server API", async () => {
     );
     try {
       assert.equal(runtime.nativeSessionId, nativeSessionId);
+      await assert.rejects(
+        runtime.send("synthetic", "synthetic-http-rejection", "new"),
+        RpcRejected,
+      );
+      await assert.rejects(
+        runtime.send("synthetic", "synthetic-business-rejection", "new"),
+        RpcRejected,
+      );
       assert.equal(runtime.capabilities?.steer, "supported");
       assert.deepEqual(
         (await runtime.models!()).map((model) => [model.id, model.contextWindow]),
@@ -335,7 +348,7 @@ test("Kimi opens new sessions through the native Server API", async () => {
       });
       const sent = await runtime.send("hello", "command-mock", "queue");
       assert.deepEqual(sent, { nativeRunId: "prompt_mock" });
-      assert.deepEqual(requests.find((entry) => entry.url.endsWith("/prompts"))?.body, {
+      assert.deepEqual(requests.find((entry) => entry.body?.prompt_id === "command-mock")?.body, {
         content: [{ type: "text", text: "hello" }],
         prompt_id: "command-mock",
         permission_mode: "manual",

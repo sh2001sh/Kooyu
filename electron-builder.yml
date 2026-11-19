@@ -26,6 +26,8 @@ mac:
   hardenedRuntime: true
   entitlements: apps/desktop/entitlements.mac.plist
   entitlementsInherit: apps/desktop/entitlements.mac.plist
+  extendInfo:
+    NSMicrophoneUsageDescription: 用于语音输入，将你的语音实时转换为对话文本。
 win:
   icon: brand/icons/kooyu-app.ico
   target: [nsis]

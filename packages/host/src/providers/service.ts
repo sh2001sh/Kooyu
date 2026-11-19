@@ -38,6 +38,7 @@ import { CredentialRelay } from "./credential-relay.js";
 import { bindingConfigIssues } from "./native-config.js";
 import { appSettings } from "../configuration/preferences.js";
 import { officialModelReasoning } from "./model-reasoning.js";
+import { boundModelOption } from "./model-option.js";
 
 export interface ProviderVault {
   get(ref: string): Promise<string | null>;
@@ -934,16 +935,13 @@ export class ProviderService {
   }
   providerModelOptions(binding: HarnessBinding): HarnessModelOption[] {
     return (binding.availableModels ?? []).map((model) => ({
-      id: model.model,
+      ...boundModelOption({
+        ...binding,
+        model: model.model,
+        parameters: model.effective,
+        sources: model.sources,
+      }),
       name: model.name,
-      provider: `kodo-${binding.providerId}`,
-      source: "discovered" as const,
-      input: model.effective.input,
-      contextWindow: model.effective.contextWindow,
-      maxInputTokens: model.effective.maxInputTokens,
-      maxOutputTokens: model.effective.maxOutputTokens,
-      pricing: model.effective.pricing,
-      reasoning: bindingReasoningLevels(model.effective, binding.harnessId),
     }));
   }
   private refreshProviderBindings(providerId: string, providerRevision: number) {
@@ -1242,6 +1240,84 @@ export class ProviderService {
         protocol: binding.harnessId === "gemini" ? "google-generative-ai" : "anthropic-messages",
       },
       apiKey: runtime.token,
+    };
+  }
+  getFetcher(): typeof fetch {
+    return this.fetcher;
+  }
+  /** OpenAI-compatible provider endpoints usable for `/audio/transcriptions` voice STT. */
+  listVoiceProviders(): Array<{
+    providerId: string;
+    providerName: string;
+    endpointId: string;
+    protocol: string;
+    baseUrl: string;
+    hasCredential: boolean;
+  }> {
+    const out: Array<{
+      providerId: string;
+      providerName: string;
+      endpointId: string;
+      protocol: string;
+      baseUrl: string;
+      hasCredential: boolean;
+    }> = [];
+    for (const provider of this.store.records<Provider>("provider")) {
+      const openaiEndpoint =
+        provider.endpoints.find((e) => e.protocol === "openai-completions") ??
+        provider.endpoints.find((e) => e.protocol === "openai-responses");
+      if (!openaiEndpoint) continue;
+      out.push({
+        providerId: provider.id,
+        providerName: provider.name,
+        endpointId: openaiEndpoint.id,
+        protocol: openaiEndpoint.protocol,
+        baseUrl: openaiEndpoint.baseUrl,
+        hasCredential: Boolean(openaiEndpoint.credentialRef),
+      });
+    }
+    return out;
+  }
+  async resolveVoiceEndpoint(preferredProviderId?: string | null): Promise<{
+    providerId: string;
+    providerName: string;
+    endpointId: string;
+    baseUrl: string;
+    apiKey: string | null;
+  } | null> {
+    const allProviders = this.store.records<Provider>("provider");
+    const pickEndpoint = (provider: Provider) =>
+      provider.endpoints.find((e) => e.protocol === "openai-completions") ??
+      provider.endpoints.find((e) => e.protocol === "openai-responses") ??
+      null;
+    let chosen: { provider: Provider; endpoint: ProviderEndpoint } | null = null;
+    if (preferredProviderId) {
+      const p = allProviders.find((item) => item.id === preferredProviderId);
+      const ep = p ? pickEndpoint(p) : null;
+      if (p && ep) chosen = { provider: p, endpoint: ep };
+    }
+    if (!chosen) {
+      for (const p of allProviders) {
+        const ep = pickEndpoint(p);
+        if (ep) {
+          chosen = { provider: p, endpoint: ep };
+          break;
+        }
+      }
+    }
+    if (!chosen) return null;
+    const apiKey = chosen.endpoint.credentialRef
+      ? await this.vault.get(chosen.endpoint.credentialRef)
+      : null;
+    if (chosen.endpoint.credentialRef && !apiKey) {
+      throw new KodoError("UNAVAILABLE", `模型来源「${chosen.provider.name}」的 API 密钥不可用。`);
+    }
+    return {
+      providerId: chosen.provider.id,
+      providerName: chosen.provider.name,
+      endpointId: chosen.endpoint.id,
+      baseUrl: chosen.endpoint.baseUrl,
+      apiKey,
     };
   }
   async close() {

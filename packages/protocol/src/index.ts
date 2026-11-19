@@ -1,4 +1,6 @@
 import { z } from "zod";
+export { conversationEvents, conversationMessageIndex } from "./conversation.js";
+export type { ConversationMark } from "./conversation.js";
 export * from "./providers.js";
 export * from "./settings.js";
 export * from "./onboarding.js";
@@ -8,6 +10,7 @@ export * from "./goals.js";
 export * from "./notifications.js";
 export * from "./web.js";
 export * from "./files.js";
+export * from "./activity.js";
 import type { HarnessBinding, ModelParameters } from "./providers.js";
 
 import { HARNESS_IDS } from "./client.js";
@@ -27,6 +30,9 @@ export type PermissionMode =
   | "opencode-ask"
   | "opencode-deny"
   | "opencode-allow"
+  | "dsh:ask"
+  | "dsh:allow"
+  | "dsh:deny"
   | "kodo-tools-read"
   | "kodo-tools-none"
   | "kimi:manual"
@@ -120,6 +126,9 @@ export const permissionModeSchema = z.union([
     "opencode-ask",
     "opencode-deny",
     "opencode-allow",
+    "dsh:ask",
+    "dsh:allow",
+    "dsh:deny",
     "kodo-tools-read",
     "kodo-tools-none",
     "kimi:manual",
@@ -219,11 +228,23 @@ export interface Session {
   nativeCapabilities?: Partial<Record<Capability, CapabilitySupport>>;
   ownerEpoch: number;
   runState: "idle" | "running" | "waiting-input" | "unknown";
+  retry?: { attempt?: number; maxAttempts?: number; delayMs?: number; since: string };
   executionState: "settled" | "unknown";
   connectionState: "connected" | "offline" | "reconnecting";
   archived: boolean;
   pinned: boolean;
   unread?: boolean;
+  /** Inline message variants share one sidebar conversation and retain separate native contexts. */
+  conversation?: {
+    activeId: string;
+    branches: {
+      id: string;
+      rootEventId: string;
+      userEventId: string;
+      originalBranchId: string;
+      prefixEventIds: string[];
+    }[];
+  };
 }
 
 export interface Supervision {
@@ -247,6 +268,7 @@ export interface Supervision {
 }
 
 export interface RuntimeEvent {
+  conversationBranchId?: string;
   id: string;
   sessionId: string;
   nativeRunId: string | null;
@@ -255,6 +277,7 @@ export interface RuntimeEvent {
     | "message"
     | "text-delta"
     | "tool"
+    | "todo"
     | "subagent"
     | "interaction"
     | "turn-ended"
@@ -383,6 +406,8 @@ export interface Usage {
   costUsd: number | null;
   costKind: "actual" | "estimate" | "unknown";
   model: string | null;
+  firstTokenMs?: number | null;
+  durationMs?: number | null;
   createdAt: string;
 }
 export const MAX_MESSAGE_ATTACHMENTS = 10;
@@ -393,6 +418,8 @@ export const sendSchema = z
     mode: z.enum(["new", "queue", "steer"]).default("queue"),
     /** Managed files uploaded beforehand; resolved per harness capability at dispatch. */
     attachmentIds: z.array(z.string().uuid()).max(MAX_MESSAGE_ATTACHMENTS).optional(),
+    /** Replaces a prior user message in the same conversation after an inline edit. */
+    replaceEventId: z.string().min(1).max(1000).optional(),
   })
   .strict()
   .refine((v) => v.text.trim().length > 0 || Boolean(v.attachmentIds?.length), {
@@ -454,6 +481,139 @@ export const projectDefaultsSchema = z
     bindingDefaults: harnessBindingDefaultsSchema,
   })
   .strict();
+export interface NativeImportCandidate {
+  harnessId: HarnessId;
+  nativeSessionId: string;
+  title: string;
+  cwd: string | null;
+  projectId: string | null;
+  workspaceId: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  model: string | null;
+  messageCount: number | null;
+  alreadyImported: boolean;
+  existingSessionId: string | null;
+}
+
+export interface NativeImportDiscovery {
+  candidates: NativeImportCandidate[];
+  warnings: Array<{ harnessId: HarnessId; message: string }>;
+}
+
+export const nativeImportItemSchema = z
+  .object({
+    harnessId: z.enum(HARNESS_IDS),
+    nativeSessionId: z.string().trim().min(1).max(500),
+    title: z.string().trim().max(240).optional(),
+    cwd: z.string().trim().max(2000).nullable().optional(),
+    projectId: z.string().uuid().nullable().optional(),
+    workspaceId: z.string().uuid().nullable().optional(),
+    model: z.string().trim().max(200).nullable().optional(),
+    createdAt: z.string().max(100).nullable().optional(),
+  })
+  .strict();
+
+export const nativeImportSchema = z
+  .object({
+    items: z.array(nativeImportItemSchema).min(1).max(100),
+    projectId: z.string().uuid().nullable().optional(),
+    workspaceId: z.string().uuid().nullable().optional(),
+  })
+  .strict();
+
+export interface NativeImportResult {
+  imported: Session[];
+  skipped: Array<{ harnessId: HarnessId; nativeSessionId: string; reason: string }>;
+  errors: Array<{ harnessId: HarnessId; nativeSessionId: string; message: string }>;
+}
+
+export interface VoiceProviderOption {
+  providerId: string;
+  providerName: string;
+  endpointId: string;
+  protocol: string;
+  baseUrl: string;
+  hasCredential: boolean;
+}
+
+export interface VoiceStatus {
+  providerAvailable: boolean;
+  providers: VoiceProviderOption[];
+  configuredProviderId: string | null;
+  activeProviderId: string | null;
+  model: string;
+  engine: "auto" | "browser" | "provider";
+  language: "auto" | "zh-CN" | "en-US" | "ja-JP";
+  autoSend: boolean;
+}
+
+export interface VoiceTranscriptionResult {
+  text: string;
+  providerId: string;
+  providerName: string;
+  model: string;
+  durationMs: number;
+}
+
+export type AppUpdateAssetPlatform =
+  | "windows"
+  | "macos-arm64"
+  | "macos-x64"
+  | "linux-appimage"
+  | "linux-deb"
+  | "android"
+  | "ios"
+  | "other";
+
+export interface AppUpdateAsset {
+  name: string;
+  downloadUrl: string;
+  size: number;
+  sha256: string | null;
+  platform: AppUpdateAssetPlatform;
+}
+
+export interface AppUpdateRelease {
+  tag: string;
+  version: string;
+  buildNumber: number | null;
+  prerelease: boolean;
+  title: string;
+  notes: string;
+  publishedAt: string | null;
+  htmlUrl: string;
+  assets: AppUpdateAsset[];
+  recommendedAsset: AppUpdateAsset | null;
+  androidAsset: AppUpdateAsset | null;
+}
+
+export interface AppUpdateDownloadState {
+  state: "idle" | "downloading" | "verifying" | "ready" | "installing" | "error";
+  tag: string | null;
+  assetName: string | null;
+  downloadedBytes: number;
+  totalBytes: number | null;
+  localPath: string | null;
+  sha256Verified: boolean;
+  error: string | null;
+}
+
+export interface AppUpdateStatus {
+  currentVersion: string;
+  platform: string;
+  arch: string;
+  channel: "stable" | "preview";
+  autoCheck: boolean;
+  repository: string;
+  state: "idle" | "checking" | "available" | "up-to-date" | "error";
+  checkedAt: string | null;
+  updateAvailable: boolean;
+  latest: AppUpdateRelease | null;
+  error: string | null;
+  download: AppUpdateDownloadState;
+}
+
 export type ErrorCode =
   | "INVALID_INPUT"
   | "NOT_FOUND"

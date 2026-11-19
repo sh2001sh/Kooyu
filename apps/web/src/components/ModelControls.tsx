@@ -6,7 +6,7 @@ import type {
   Session,
 } from "@kodo/protocol";
 import { api, HostError } from "../lib/host-client";
-import { modelChoiceLabels, shortModelLabel } from "../lib/harnesses";
+import { modelChoiceLabels, shortModelLabel, modelOptionValue } from "../lib/harnesses";
 import { ComposerModelControls } from "./ComposerModelControls";
 
 type Options = {
@@ -52,8 +52,7 @@ export function ModelControls({
     if (next) setModelOpen(false);
   };
 
-  const value = (m: HarnessModelOption) =>
-    m.provider && !binding ? `${m.provider}/${m.id}` : m.id;
+  const value = (m: HarnessModelOption) => modelOptionValue(session.harnessId, m, Boolean(binding));
   const choices = useMemo(() => {
     const unique = new Map<string, HarnessModelOption>();
     for (const model of options?.models ?? []) {
@@ -187,9 +186,11 @@ export function ModelControls({
               ? "Provider 默认模型"
               : "绑定默认模型"
             : "原生配置与登录",
-          subtitle: nativeDefaults?.model
-            ? `当前：${shortModelLabel(nativeDefaults.model)}${nativeDefaults.reasoning ? ` · ${nativeDefaults.reasoning}` : ""}`
-            : undefined,
+          subtitle: binding
+            ? `当前：${shortModelLabel(binding.model)}${binding.reasoning ? ` · ${binding.reasoning}` : ""}`
+            : nativeDefaults?.model
+              ? `当前：${shortModelLabel(nativeDefaults.model)}${nativeDefaults.reasoning ? ` · ${nativeDefaults.reasoning}` : ""}`
+              : undefined,
           selected: !session.model,
           disabled: itemDisabled,
           onSelect: () => commit(null, null, true),

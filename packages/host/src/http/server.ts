@@ -33,6 +33,7 @@ import { onboardingState, saveOnboarding } from "../configuration/onboarding.js"
 import { readConfigFile, writeConfigFile } from "../configuration/config-files.js";
 import { HarnessSkills } from "../configuration/skills.js";
 import { handleWorkRoutes } from "./work-routes.js";
+import { getVoiceStatus, MAX_VOICE_BYTES, transcribeVoice } from "../voice.js";
 
 import { handleSelfHostedRoutes } from "./self-hosted-routes.js";
 
@@ -60,6 +61,17 @@ async function readBody(request: IncomingMessage): Promise<Wire> {
   } catch {
     throw new KodoError("INVALID_INPUT", "无法读取 JSON 对象。");
   }
+}
+async function readBinaryBody(request: IncomingMessage, maxBytes: number): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of request) {
+    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    size += buf.length;
+    if (size > maxBytes) throw new KodoError("INVALID_INPUT", "请求内容过大。");
+    chunks.push(buf);
+  }
+  return Buffer.concat(chunks);
 }
 const mime: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -640,6 +652,112 @@ export function createHostHandler(service: SessionService, options: HostHttpOpti
         json(response, 200, await service.syncNativeSessions());
         return;
       }
+      if (request.method === "GET" && url.pathname === "/api/native-imports") {
+        const harnessParam = url.searchParams.get("harnessId") ?? undefined;
+        const harnessId =
+          harnessParam && HARNESS_IDS.includes(harnessParam as HarnessId)
+            ? (harnessParam as HarnessId)
+            : undefined;
+        json(
+          response,
+          200,
+          await service.discoverNativeImports({
+            projectId: url.searchParams.get("projectId") ?? undefined,
+            workspaceId: url.searchParams.get("workspaceId") ?? undefined,
+            harnessId,
+            directory: url.searchParams.get("directory") ?? undefined,
+          }),
+        );
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/native-imports") {
+        json(response, 201, await service.importNativeSessions(await readBody(request)));
+        return;
+      }
+      if (request.method === "GET" && url.pathname === "/api/voice/status") {
+        json(response, 200, getVoiceStatus(service.store, service.providers));
+        return;
+      }
+      if (request.method === "GET" && url.pathname === "/api/app-update") {
+        json(response, 200, service.updater.status());
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/app-update/check") {
+        const body = request.headers["content-type"]?.startsWith("application/json")
+          ? await readBody(request)
+          : {};
+        const input = z
+          .object({
+            channel: z.enum(["stable", "preview"]).optional(),
+            repository: z.string().trim().min(3).max(120).optional(),
+          })
+          .strict()
+          .parse(body);
+        json(response, 200, await service.updater.check(input));
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/app-update/download") {
+        const body = request.headers["content-type"]?.startsWith("application/json")
+          ? await readBody(request)
+          : {};
+        const input = z
+          .object({
+            assetName: z.string().trim().min(1).max(240).optional(),
+          })
+          .strict()
+          .parse(body);
+        json(response, 202, await service.updater.startDownload(input));
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/app-update/install") {
+        if (!local) throw new KodoError("UNAUTHORIZED", "请在运行 Host 的本机执行更新安装。");
+        json(response, 200, await service.updater.install());
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/voice/transcribe") {
+        const contentType = request.headers["content-type"] ?? "";
+        let audio: Buffer;
+        let mimeType = contentType || "audio/webm";
+        let language = url.searchParams.get("language") ?? undefined;
+        let providerId = url.searchParams.get("providerId") ?? undefined;
+        let model = url.searchParams.get("model") ?? undefined;
+        let prompt = url.searchParams.get("prompt") ?? undefined;
+        if (contentType.startsWith("application/json")) {
+          const rawJson = (
+            await readBinaryBody(request, Math.ceil(MAX_VOICE_BYTES * 1.4))
+          ).toString();
+          let parsed: Wire;
+          try {
+            parsed = JSON.parse(rawJson);
+          } catch {
+            throw new KodoError("INVALID_INPUT", "无法读取语音转写 JSON 请求。");
+          }
+          const b64 = typeof parsed?.audioBase64 === "string" ? parsed.audioBase64 : "";
+          if (!b64) throw new KodoError("INVALID_INPUT", "缺少音频数据 audioBase64。");
+          audio = Buffer.from(b64, "base64");
+          if (typeof parsed.mimeType === "string" && parsed.mimeType) mimeType = parsed.mimeType;
+          if (typeof parsed.language === "string" && parsed.language) language = parsed.language;
+          if (typeof parsed.providerId === "string" && parsed.providerId)
+            providerId = parsed.providerId;
+          if (typeof parsed.model === "string" && parsed.model) model = parsed.model;
+          if (typeof parsed.prompt === "string" && parsed.prompt) prompt = parsed.prompt;
+        } else {
+          audio = await readBinaryBody(request, MAX_VOICE_BYTES);
+        }
+        json(
+          response,
+          200,
+          await transcribeVoice(service.store, service.providers, {
+            audio,
+            mimeType,
+            language,
+            providerId,
+            model,
+            prompt,
+          }),
+        );
+        return;
+      }
       if (request.method === "GET" && url.pathname === "/api/provider-configuration") {
         json(response, 200, await service.providers.configuration());
         return;
@@ -713,8 +831,25 @@ export function createHostHandler(service: SessionService, options: HostHttpOpti
         );
         return;
       }
+      const activityRoute = /^\/api\/sessions\/([^/]+)\/(activity|agents\/([^/]+))$/.exec(
+        url.pathname,
+      );
+      if (activityRoute && request.method === "GET") {
+        const id = decodeURIComponent(activityRoute[1]!);
+        const beforeValue = url.searchParams.get("before");
+        const before =
+          beforeValue === null ? undefined : z.coerce.number().int().positive().parse(beforeValue);
+        json(
+          response,
+          200,
+          activityRoute[2] === "activity"
+            ? service.activity(id)
+            : service.agentPage(id, decodeURIComponent(activityRoute[3]!), before),
+        );
+        return;
+      }
       const session =
-        /^\/api\/sessions\/([^/]+)(?:\/(open|send|stop|native|history|quota|handoff|branch|grant|reconcile|attach|settings|permissions))?$/.exec(
+        /^\/api\/sessions\/([^/]+)(?:\/(open|send|stop|native|history|quota|handoff|branch|message-branches|grant|reconcile|attach|settings|permissions))?$/.exec(
           url.pathname,
         );
       if (session) {
@@ -800,6 +935,10 @@ export function createHostHandler(service: SessionService, options: HostHttpOpti
         }
         if (request.method === "POST") {
           const b = await readBody(request);
+          if (action === "message-branches") {
+            json(response, 200, await service.messageBranch(id, b));
+            return;
+          }
           if (action === "branch") {
             json(response, 201, service.branch(id, b));
             return;

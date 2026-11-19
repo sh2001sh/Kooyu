@@ -1,5 +1,12 @@
 package app.kooyu.android
 
+import app.kooyu.android.ui.*
+import app.kooyu.android.ui.theme.*
+import app.kooyu.android.ui.components.*
+import app.kooyu.android.ui.home.*
+import app.kooyu.android.ui.conversation.*
+import app.kooyu.android.ui.screens.*
+
 import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.Call
 import okhttp3.Callback
@@ -66,6 +73,10 @@ class HostAPI(private val connection: Connection) {
         private val client = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false)
             .retryOnConnectionFailure(false)
             .connectTimeout(10, TimeUnit.SECONDS).callTimeout(20, TimeUnit.SECONDS).build()
+        // GETs may safely recover a stale pooled socket or try another resolved IP.
+        // Mutations retain their no-replay policy; both clients share the connection pool.
+        private val readClient = client.newBuilder().retryOnConnectionFailure(true).build()
+        internal fun clientFor(method: String): OkHttpClient = if (method == "GET") readClient else client
         fun origin(text: String): HttpUrl {
             val url = text.trim().toHttpUrlOrNull()
             require(url != null && url.isHttps && url.username.isEmpty() && url.password.isEmpty() && (url.encodedPath == "/" || Regex("/h/[a-f0-9]{64}/?").matches(url.encodedPath)) && url.query == null && url.fragment == null) {
@@ -92,7 +103,7 @@ class HostAPI(private val connection: Connection) {
             val builder = Request.Builder().url(url).header("Accept", "application/json").header("X-Kooyu-Protocol", PROTOCOL_VERSION.toString())
             if (token != null) builder.header("Authorization", "Bearer $token")
             builder.method(method, binary?.toRequestBody("application/octet-stream".toMediaType()) ?: body?.toString()?.toRequestBody("application/json; charset=utf-8".toMediaType()))
-            val call = client.newCall(builder.build())
+            val call = clientFor(method).newCall(builder.build())
             continuation.invokeOnCancellation { call.cancel() }
             call.enqueue(object : Callback {
                 override fun onFailure(call: Call, e: IOException) { if (!continuation.isCancelled) continuation.resumeWithException(HostError(0, "无法连接此设备，请检查设备是否在线以及网络是否可用。")) }

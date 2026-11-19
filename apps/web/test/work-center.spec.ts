@@ -2,6 +2,170 @@ import { expect, test } from "@playwright/test";
 import { randomUUID, generateKeyPairSync } from "node:crypto";
 
 for (const width of [1440, 390]) {
+  test(`work center guides first plan and keeps optional setup out of the way at ${width}px`, async ({
+    page,
+  }, info) => {
+    await page.setViewportSize({ width, height: 960 });
+    const project = await (
+      await page.request.post("/api/projects", { data: { name: `Simple work ${width}` } })
+    ).json();
+    let createdId = "";
+    await page.route("**/api/snapshot", async (route) => {
+      const response = await route.fetch();
+      const snapshot = await response.json();
+      snapshot.sessions = snapshot.sessions.filter(
+        (s: { id: string; kind: string }) => s.kind !== "supervisor" || s.id === createdId,
+      );
+      await route.fulfill({ response, json: snapshot });
+    });
+    await page.route("**/api/sessions", async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      const response = await route.fetch();
+      createdId = (await response.json()).id;
+      await route.fulfill({ response });
+    });
+    const openSettingsSection = async (name: string) => {
+      await page
+        .getByRole("navigation", { name: width < 600 ? "移动端标签导航" : "系统工具", exact: true })
+        .getByRole("button", { name: "设置", exact: true })
+        .click();
+      await page
+        .getByRole("navigation", { name: width < 600 ? "配置页面" : "配置导航", exact: true })
+        .getByRole("button", { name, exact: true })
+        .click();
+    };
+
+    await page.goto("/");
+    await openSettingsSection("自动化与通知");
+    const center = page.locator(".work-center");
+    await expect(center.getByText(/你还没有 Kooyu 主对话/)).toBeVisible();
+    await page.screenshot({ path: info.outputPath(`work-first-plan-${width}.png`) });
+
+    // Project memory & conventions in unified 记忆与约定 settings page must be usable without a supervisor.
+    if (width < 600) await page.getByRole("button", { name: "返回设置列表", exact: true }).click();
+    else {
+      await page.getByRole("button", { name: "返回对话", exact: true }).click();
+      await page.getByRole("button", { name: "设置", exact: true }).click();
+    }
+    if (width < 600) {
+      await page
+        .getByRole("navigation", { name: "配置页面", exact: true })
+        .getByRole("button", { name: "记忆与约定", exact: true })
+        .click();
+    } else {
+      await page
+        .getByRole("navigation", { name: "配置导航", exact: true })
+        .getByRole("button", { name: "记忆与约定", exact: true })
+        .click();
+    }
+    await page.getByLabel("适用范围", { exact: true }).selectOption(project.id);
+    await page.getByRole("button", { name: "新增约定", exact: true }).click();
+    await page.getByLabel("约定内容", { exact: true }).fill("项目文档使用中文");
+    await page.screenshot({
+      path: info.outputPath(`work-simple-memory-${width}.png`),
+      animations: "disabled",
+    });
+    await page.getByRole("button", { name: "保存并确认", exact: true }).click();
+    await expect(page.getByText("项目文档使用中文").first()).toBeVisible();
+    const memories = await (await page.request.get(`/api/memory?projectId=${project.id}`)).json();
+    const savedMemory = memories.find(
+      (m: { projectId: string; content: string }) =>
+        m.projectId === project.id && m.content === "项目文档使用中文",
+    );
+    expect(savedMemory.subject).toBe("项目文档使用中文");
+    await page.getByLabel("适用范围", { exact: true }).selectOption("");
+    await expect(page.getByText("项目文档使用中文")).toHaveCount(0);
+
+    // Automation & Notification channels remain streamlined in 设置 -> 自动化与通知
+    if (width < 600) {
+      await page.getByRole("button", { name: "返回设置列表", exact: true }).click();
+      await page
+        .getByRole("navigation", { name: "配置页面", exact: true })
+        .getByRole("button", { name: "自动化与通知", exact: true })
+        .click();
+    } else {
+      await page
+        .getByRole("navigation", { name: "配置导航", exact: true })
+        .getByRole("button", { name: "自动化与通知", exact: true })
+        .click();
+    }
+    await center.getByRole("button", { name: "通知", exact: true }).click();
+    await expect(page.getByLabel("管理的主对话")).toHaveCount(0);
+    await expect(page.getByLabel("Bark 推送地址")).toHaveCount(0);
+    await expect(center.getByText(/无需填写地址。点击下方按钮/)).toBeVisible();
+    await page.screenshot({ path: info.outputPath(`work-simple-notifications-${width}.png`) });
+    await page.getByRole("combobox", { name: "通知通道", exact: true }).selectOption("bark");
+    await expect(page.getByLabel("Bark 推送地址")).toBeVisible();
+    await expect(page.getByLabel("Bark 推送地址")).toHaveAttribute("required", "");
+    await page.getByRole("combobox", { name: "通知通道", exact: true }).selectOption("client");
+    await expect(page.getByLabel("Bark 推送地址")).toHaveCount(0);
+
+    await center.getByRole("button", { name: "执行环境", exact: true }).click();
+    await expect(center.getByText("默认在本机执行", { exact: true })).toBeVisible();
+    await expect(page.getByLabel("新节点名称")).toBeHidden();
+    await expect(page.getByLabel("允许访问的网站（每行一个）")).toBeHidden();
+    await page.screenshot({ path: info.outputPath(`work-simple-environments-${width}.png`) });
+
+    // Plans converged inside 工作 -> 自动计划 with direct + 新建计划
+    if (width < 600) {
+      await page.getByRole("button", { name: "返回设置列表", exact: true }).click();
+      await page
+        .getByRole("navigation", { name: "配置页面", exact: true })
+        .getByRole("button", { name: "工作与计划", exact: true })
+        .click();
+    } else {
+      await page.getByRole("button", { name: "返回对话", exact: true }).click();
+      await page.getByRole("button", { name: "工作", exact: true }).click();
+    }
+    const hub = page.locator(".workbench-hub");
+    await hub.getByLabel("项目范围", { exact: true }).selectOption(project.id);
+    await hub.getByRole("button", { name: "自动计划", exact: true }).click();
+    await hub.getByRole("button", { name: "新建计划", exact: true }).click();
+    const editor = page.getByRole("region", { name: "新建计划", exact: true });
+    await expect(editor).toBeVisible();
+    await editor.getByLabel("计划名称", { exact: true }).fill(`Simple plan ${width}`);
+    await editor.getByLabel("工作内容", { exact: true }).fill("整理本项目进展与待办");
+    await editor.getByRole("combobox", { name: "执行频率", exact: true }).selectOption("interval");
+    await editor.getByRole("combobox", { name: "间隔单位", exact: true }).selectOption("days");
+    await expect(editor.getByRole("button", { name: "保存计划", exact: true })).toBeDisabled();
+    await editor.getByRole("button", { name: "预览运行时间", exact: true }).click();
+    await expect(editor.getByText("允许此主对话按计划自动执行")).toBeVisible();
+    await editor.getByLabel("允许此主对话按计划自动执行", { exact: true }).check();
+    let failed = false;
+    await page.route("**/api/{automations,client/operations}", async (route) => {
+      const req = route.request();
+      const body = req.method() === "POST" ? req.postDataJSON() : undefined;
+      const isCreate =
+        req.url().endsWith("/api/automations") ||
+        (req.url().endsWith("/api/client/operations") &&
+          body?.method === "POST" &&
+          body?.path === "/api/automations");
+      if (req.method() === "POST" && isCreate && !failed) {
+        failed = true;
+        return route.fulfill({ status: 503, json: { error: { message: "保存临时失败，请重试" } } });
+      }
+      return route.continue();
+    });
+    await editor.getByRole("button", { name: "保存计划", exact: true }).click();
+    await expect(editor.getByRole("alert")).toContainText("保存临时失败");
+    await editor.getByRole("button", { name: "保存计划", exact: true }).click();
+    await expect(editor).toHaveCount(0);
+    await expect(hub.locator(".hub-row").filter({ hasText: `Simple plan ${width}` })).toContainText(
+      "已启用",
+    );
+    const grants = (await (await page.request.get("/api/grants")).json()).filter(
+      (g: { controllerSessionId: string }) => g.controllerSessionId === createdId,
+    );
+    expect(grants).toHaveLength(1);
+    expect(grants[0].operations).toEqual(["automation.execute"]);
+    expect(grants[0].resources).toEqual([`session:${createdId}`]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+  });
+}
+
+for (const width of [1440, 390]) {
   test(`work center saves authorization, plan and memory at ${width}px`, async ({
     page,
   }, testInfo) => {
@@ -25,52 +189,79 @@ for (const width of [1440, 390]) {
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
     await page.goto("/");
-    if (width < 600) await page.getByRole("button", { name: "打开导航", exact: true }).click();
-    await page.getByRole("button", { name: "设置", exact: true }).click();
     await page
-      .getByRole("navigation", { name: width < 600 ? "配置页面" : "配置导航" })
-      .getByRole("button", { name: "工作中心", exact: true })
+      .getByRole("navigation", { name: width < 600 ? "移动端标签导航" : "系统工具", exact: true })
+      .getByRole("button", { name: "设置", exact: true })
+      .click();
+    await page
+      .getByRole("navigation", { name: width < 600 ? "配置页面" : "配置导航", exact: true })
+      .getByRole("button", { name: "自动化与通知", exact: true })
       .click();
     const center = page.locator(".work-center");
     await page.getByLabel("管理的主对话").selectOption(session.id);
     await center.getByRole("button", { name: "应用与授权", exact: true }).click();
     await center.getByRole("button", { name: "新建授权", exact: true }).click();
-    await page.getByLabel("允许的操作（每行一个）").fill("automation.execute");
-    await page.getByLabel("允许的资源（每行一个，精确匹配）").fill(`session:${session.id}`);
+    await page.getByRole("checkbox", { name: "运行定时任务", exact: true }).check();
+    await expect(page.getByLabel("允许的资源（每行一个，精确匹配）")).toHaveValue(
+      `session:${session.id}`,
+    );
     await page.getByRole("button", { name: "授予以上范围" }).click();
     await expect(center.getByRole("status")).toContainText("授权已保存");
-    await center.getByRole("button", { name: "计划", exact: true }).click();
-    await center.getByRole("button", { name: "新建计划", exact: true }).click();
-    await page.getByRole("combobox", { name: "执行频率", exact: true }).selectOption("custom");
-    await page.getByLabel("计划名称", { exact: true }).fill(`Weekly ${width}`);
-    await page.getByLabel("工作内容与验收要求").fill("整理来源并生成带引用的周报");
-    await page.getByLabel("自定义 cron 规则").fill("0 9 * * 1");
+
+    // Create & pause plan in 工作 -> 自动计划
+    if (width < 600) {
+      await page.getByRole("button", { name: "返回设置列表", exact: true }).click();
+      await page
+        .getByRole("navigation", { name: "配置页面", exact: true })
+        .getByRole("button", { name: "工作与计划", exact: true })
+        .click();
+    } else {
+      await page.getByRole("button", { name: "返回对话", exact: true }).click();
+      await page.getByRole("button", { name: "工作", exact: true }).click();
+    }
+    const hub = page.locator(".workbench-hub");
+    await hub.getByLabel("项目范围", { exact: true }).selectOption(project.id);
+    await hub.getByRole("button", { name: "自动计划", exact: true }).click();
+    await hub.getByRole("button", { name: "新建计划", exact: true }).click();
+    const editor = page.getByRole("region", { name: "新建计划", exact: true });
+    await editor.getByLabel("管理的主对话", { exact: true }).selectOption(session.id);
+    await editor.getByRole("combobox", { name: "执行频率", exact: true }).selectOption("custom");
+    await editor.getByLabel("计划名称", { exact: true }).fill(`Weekly ${width}`);
+    await editor.getByLabel("工作内容", { exact: true }).fill("整理来源并生成带引用的周报");
+    await editor.getByLabel("自定义 cron 规则").fill("0 9 * * 1");
+    await editor.getByText("高级设置", { exact: true }).click();
+    await editor.getByLabel("计划执行节点").selectOption(executor.id);
+    await editor.getByRole("button", { name: "预览运行时间" }).click();
+    await editor.getByRole("button", { name: "保存计划", exact: true }).click();
+    const planRow = hub.locator(".hub-row").filter({ hasText: `Weekly ${width}` });
+    await expect(planRow).toContainText("已启用");
+    await planRow.getByRole("button", { name: "编辑与运行记录", exact: true }).click();
+    await hub.getByRole("button", { name: "暂停计划", exact: true }).click();
+    await expect(planRow).toContainText("已暂停");
+
+    // Memory CRUD in unified 设置 -> 记忆与约定
+    if (width < 600) {
+      await page.getByRole("button", { name: "返回设置列表", exact: true }).click();
+    } else {
+      await page
+        .getByRole("navigation", { name: "系统工具", exact: true })
+        .getByRole("button", { name: "设置", exact: true })
+        .click();
+    }
     await page
-      .getByRole("dialog", { name: "新建计划", exact: true })
-      .getByText("高级设置", { exact: true })
+      .getByRole("navigation", { name: width < 600 ? "配置页面" : "配置导航", exact: true })
+      .getByRole("button", { name: "记忆与约定", exact: true })
       .click();
-    await page.getByLabel("计划执行节点").selectOption(executor.id);
-    await page.getByRole("button", { name: "预览运行时间" }).click();
-    await expect(
-      page.getByRole("list", { name: "接下来三次运行" }).getByRole("listitem"),
-    ).toHaveCount(3);
-    await page.getByRole("button", { name: "保存计划", exact: true }).click();
-    const row = center.locator(".work-row").filter({ hasText: `Weekly ${width}` });
-    await expect(row).toContainText("已启用");
-    await row.getByRole("button", { name: "暂停计划" }).click();
-    await expect(row).toContainText("已暂停");
-    await center.getByRole("button", { name: "项目记忆", exact: true }).click();
-    await center.getByRole("button", { name: "新建记忆", exact: true }).click();
-    await page.getByLabel("记忆主题").fill("周报格式");
-    await page.getByLabel("约定内容").fill("每条结论附原始来源");
-    await page.getByLabel("来源引用（每行一个）").fill("UI synthetic preference");
-    await page.getByRole("button", { name: "保存已确认记忆" }).click();
-    const memory = center.locator(".work-row").filter({ hasText: "周报格式" });
-    await expect(memory).toContainText("每条结论附原始来源");
-    await memory.getByRole("button", { name: "纠正", exact: true }).click();
-    await page.getByLabel("约定内容").fill("每条结论附原始来源和日期");
-    await page.getByRole("button", { name: "保存已确认记忆" }).click();
-    await expect(memory).toContainText("修订 2");
+    await page.getByLabel("适用范围", { exact: true }).selectOption(project.id);
+    await page.getByRole("button", { name: "新增约定", exact: true }).click();
+    await page.getByLabel("主题（可选）", { exact: true }).fill("周报格式");
+    await page.getByLabel("约定内容", { exact: true }).fill("每条结论附原始来源");
+    await page.getByRole("button", { name: "保存并确认", exact: true }).click();
+    await expect(page.getByText("每条结论附原始来源")).toBeVisible();
+    await page.getByRole("button", { name: "编辑", exact: true }).first().click();
+    await page.getByLabel("约定内容", { exact: true }).fill("每条结论附原始来源和日期");
+    await page.getByRole("button", { name: "保存并确认", exact: true }).click();
+    await expect(page.getByText("每条结论附原始来源和日期")).toBeVisible();
     await page.screenshot({
       path: testInfo.outputPath(`work-center-${width}.png`),
       fullPage: true,
@@ -78,8 +269,9 @@ for (const width of [1440, 390]) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
     );
-    await memory.getByRole("button", { name: "删除", exact: true }).click();
-    await expect(memory).toHaveCount(0);
+    page.once("dialog", (d) => d.accept());
+    await page.getByRole("button", { name: "删除", exact: true }).first().click();
+    await expect(page.getByText("每条结论附原始来源和日期")).toHaveCount(0);
     const plans = await (await page.request.get("/api/automations")).json();
     const saved = plans.find(
       (p: { controllerSessionId: string }) => p.controllerSessionId === session.id,
@@ -94,11 +286,13 @@ for (const width of [1440, 390]) {
     async ({ page }, testInfo) => {
       await page.setViewportSize({ width, height: 960 });
       await page.goto("/");
-      if (width < 600) await page.getByRole("button", { name: "打开导航", exact: true }).click();
-      await page.getByRole("button", { name: "设置", exact: true }).click();
       await page
-        .getByRole("navigation", { name: width < 600 ? "配置页面" : "配置导航" })
-        .getByRole("button", { name: "工作中心", exact: true })
+        .getByRole("navigation", { name: width < 600 ? "移动端标签导航" : "系统工具", exact: true })
+        .getByRole("button", { name: "设置", exact: true })
+        .click();
+      await page
+        .getByRole("navigation", { name: width < 600 ? "配置页面" : "配置导航", exact: true })
+        .getByRole("button", { name: "自动化与通知", exact: true })
         .click();
       const center = page.locator(".work-center");
       await center.getByRole("button", { name: "通知", exact: true }).click();
@@ -162,7 +356,7 @@ test("OAuth provides an external authorization link without navigating the work 
   await page.getByRole("button", { name: "设置", exact: true }).click();
   await page
     .getByRole("navigation", { name: "配置导航" })
-    .getByRole("button", { name: "工作中心", exact: true })
+    .getByRole("button", { name: "自动化与通知", exact: true })
     .click();
   const center = page.locator(".work-center");
   await center.getByRole("button", { name: "应用与授权", exact: true }).click();

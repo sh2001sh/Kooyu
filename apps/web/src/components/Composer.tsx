@@ -1,6 +1,16 @@
 import { shouldSend, useAppPreferences } from "../lib/preferences";
 import { useEffect, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, AlertTriangle, Clock, Pencil, Shield, Square, X } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  AlertTriangle,
+  Clock,
+  Pencil,
+  Plus,
+  Shield,
+  Square,
+  X,
+} from "lucide-react";
 import type {
   Command,
   HarnessBinding,
@@ -11,10 +21,19 @@ import type {
 import { answerInteraction, changePendingMessage, stopSession } from "../lib/host-client";
 import { HARNESS_NAMES } from "../lib/harnesses";
 import { AttachmentButton, AttachmentList, useAttachments } from "./Attachments";
+import {
+  ComposerDropOverlay,
+  MobileComposerPlusSheet,
+  SlashTemplateMenu,
+  useFileDropZone,
+} from "./ComposerExtras";
 import { HarnessBadge } from "./KodoBrand";
 import { ModelControls } from "./ModelControls";
+import { Modal } from "./Motion";
 import { PermissionControls } from "./PermissionControls";
 import { api } from "../lib/host-client";
+import { appendVoiceTranscript, useVoiceInput } from "../lib/voice";
+import { VoiceInputButton, VoiceRecordingBar } from "./VoiceInputControls";
 import { NativeQuestions, nativeQuestions } from "./NativeQuestions";
 
 type Wire = Record<string, any>;
@@ -231,6 +250,8 @@ interface ComposerProps {
   binding?: HarnessBinding;
   connected: boolean;
   busy: boolean;
+  running: boolean;
+  supervised?: boolean;
   compose: string;
   interactions: InboxItem[];
   unknownCommands: Command[];
@@ -252,6 +273,8 @@ export function Composer({
   binding,
   connected,
   busy,
+  running,
+  supervised = false,
   compose,
   interactions,
   unknownCommands,
@@ -270,6 +293,43 @@ export function Composer({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const attachments = useAttachments(session.id, session.id);
   const [stopping, setStopping] = useState(false);
+  const stoppingRef = useRef(false);
+  const [stopNotice, setStopNotice] = useState("");
+  const [stopSheetOpen, setStopSheetOpen] = useState(false);
+  const [plusSheetOpen, setPlusSheetOpen] = useState(false);
+  const supportsSteer =
+    (session.nativeCapabilities?.steer ?? harnessDesc?.capabilities.steer) === "supported";
+  const canSend = connected && !session.bindingUnavailable;
+  const dropZone = useFileDropZone(canSend && !busy, (files) => void attachments.add(files));
+
+  const stop = async (pause: boolean) => {
+    if (stoppingRef.current) return;
+    stoppingRef.current = true;
+    setStopping(true);
+    setStopNotice("");
+    try {
+      // Cancellation must remain available while a send or another mutation is awaiting IO.
+      const result = await stopSession(session.id, pause);
+      if (result.cancel === "requested; await native event")
+        setStopNotice(pause ? "托管已暂停，已请求中断当前回合。" : "已请求中断当前回合。");
+      else if (result.cancel === "not running; native execution settled")
+        setStopNotice(pause ? "托管已暂停，当前回合已结束。" : "当前回合已结束。");
+      else if (result.cancel === "not delivered: native connection offline")
+        setStopNotice(
+          pause
+            ? "托管已暂停；原生连接未建立，停止请求未递送。"
+            : "原生连接未建立，停止请求未递送。",
+        );
+      else if (result.status === "paused")
+        setStopNotice(`托管已暂停；当前回合的中断结果尚未确认：${result.cancel}`);
+      else onError(result.cancel);
+    } catch (error) {
+      onError(error instanceof Error ? error.message : "停止失败，请重试。");
+    } finally {
+      stoppingRef.current = false;
+      setStopping(false);
+    }
+  };
 
   useEffect(() => {
     const el = textareaRef.current;
@@ -278,23 +338,62 @@ export function Composer({
     el.style.height = `${Math.max(54, Math.min(el.scrollHeight, 220))}px`;
   }, [compose]);
 
-  const supportsSteer =
-    (session.nativeCapabilities?.steer ?? harnessDesc?.capabilities.steer) === "supported";
-  const canSend = connected && !session.bindingUnavailable;
-  const submitMessage = () => {
+  const submitMessage = (overrideText?: string) => {
+    const textToSend = overrideText ?? compose;
     const ids = attachments.readyIds;
-    if ((!compose.trim() && !ids.length) || !canSend || busy || attachments.uploading) return;
+    if ((!textToSend.trim() && !ids.length) || !canSend || busy || attachments.uploading) return;
     if (attachments.failed) {
       attachments.setError("有附件上传失败，请移除后再发送。");
       return;
     }
-    void onSubmit(compose, ids).then((accepted) => {
+    void onSubmit(textToSend, ids).then((accepted) => {
       if (accepted) attachments.clear();
     });
   };
 
+  const composeRef = useRef(compose);
+  composeRef.current = compose;
+  const voice = useVoiceInput({
+    disabled: session.bindingUnavailable || busy,
+    onTranscript: (spoken) => {
+      const merged = appendVoiceTranscript(composeRef.current, spoken);
+      composeRef.current = merged;
+      onComposeChange(merged);
+      requestAnimationFrame(() => textareaRef.current?.focus());
+    },
+    onAutoSend: () => {
+      const merged = composeRef.current;
+      if (merged.trim()) submitMessage(merged);
+    },
+  });
+
+  const showStopButton =
+    (running ||
+      supervised ||
+      (session.runState === "unknown" && session.connectionState === "connected")) &&
+    !compose.trim() &&
+    !attachments.attachments.length;
+  const cancelUnsupported = harnessDesc?.capabilities.cancel === "unsupported";
+  const permissionsNode = (
+    <PermissionControls
+      key={`permissions:${session.id}`}
+      harnessId={session.harnessId}
+      nativePermission={harnessDesc?.nativeDefaults?.permission}
+      value={session.permissionMode ?? null}
+      sessionId={session.id}
+      nativeSessionId={session.nativeSessionId}
+      connected={session.connectionState === "connected"}
+      disabled={busy || !canSend}
+      onChange={async (permissionMode) => {
+        await api(`/sessions/${session.id}`, "PATCH", { permissionMode });
+        await act(async () => {});
+      }}
+    />
+  );
+
   return (
-    <div className="composer-area">
+    <div className="composer-area" {...dropZone.handlers}>
+      <ComposerDropOverlay active={dropZone.dragOver} label="松开以上传文件到当前对话" />
       {showScrollToBottom && (
         <div className="scroll-bottom-wrap">
           <button
@@ -363,12 +462,20 @@ export function Composer({
           e.currentTarget.style.setProperty("--my", `${e.clientY - r.top}px`);
         }}
       >
+        <SlashTemplateMenu
+          compose={compose}
+          onSelect={(text) => {
+            onComposeChange(text);
+            requestAnimationFrame(() => textareaRef.current?.focus());
+          }}
+        />
         <AttachmentList
           attachments={attachments.attachments}
           error={attachments.error}
           disabled={busy || !canSend}
           onRemove={attachments.remove}
         />
+        <VoiceRecordingBar voice={voice} />
         <textarea
           ref={textareaRef}
           rows={2}
@@ -380,6 +487,7 @@ export function Composer({
                 ? HARNESS_NAMES[session.harnessId] || "Kooyu"
                 : "Host 未连接"
           }
+          title="支持输入 / 调出快捷任务模板，或拖拽文件到此上传"
           value={compose}
           onChange={(e) => onComposeChange(e.target.value)}
           disabled={session.bindingUnavailable}
@@ -391,7 +499,16 @@ export function Composer({
           }}
         />
         <div className="composer-toolbar">
-          <div className="composer-pickers">
+          <button
+            type="button"
+            className="composer-mobile-plus mobile-only"
+            aria-label="添加附件、权限或模板"
+            disabled={busy || !canSend}
+            onClick={() => setPlusSheetOpen(true)}
+          >
+            <Plus size={19} />
+          </button>
+          <div className="composer-pickers desktop-only-flex">
             <AttachmentButton
               loading={false}
               disabled={busy || !canSend}
@@ -401,54 +518,54 @@ export function Composer({
               <HarnessBadge harnessId={session.harnessId} size="xs" shape="circle" tone="mono" />
               <span className="composer-harness__name">{HARNESS_NAMES[session.harnessId]}</span>
             </span>
-            <PermissionControls
-              key={`permissions:${session.id}`}
-              harnessId={session.harnessId}
-              nativePermission={harnessDesc?.nativeDefaults?.permission}
-              value={session.permissionMode ?? null}
-              sessionId={session.id}
-              nativeSessionId={session.nativeSessionId}
-              connected={session.connectionState === "connected"}
-              disabled={busy || !canSend}
-              onChange={async (permissionMode) => {
-                await api(`/sessions/${session.id}`, "PATCH", { permissionMode });
-                await act(async () => {});
-              }}
-            />
+            {permissionsNode}
           </div>
           <div className="composer-actions-right">
-            <ModelControls
-              key={session.id}
-              session={session}
-              binding={binding}
-              modelSupport={harnessDesc?.modelSupport}
-              nativeDefaults={harnessDesc?.nativeDefaults}
-              disabled={busy || !canSend}
-              act={act}
-            />
-            {session.runState === "running" &&
-            !compose.trim() &&
-            !attachments.attachments.length ? (
+            <div className="composer-mobile-chips">
+              <ModelControls
+                key={session.id}
+                session={session}
+                binding={binding}
+                modelSupport={harnessDesc?.modelSupport}
+                nativeDefaults={harnessDesc?.nativeDefaults}
+                disabled={busy || !canSend}
+                act={act}
+              />
+              <span className="mobile-only-inline composer-mobile-perm">
+                <PermissionControls
+                  key={`mobile-perm:${session.id}`}
+                  ariaLabel="工具权限"
+                  harnessId={session.harnessId}
+                  nativePermission={harnessDesc?.nativeDefaults?.permission}
+                  value={session.permissionMode ?? null}
+                  sessionId={session.id}
+                  nativeSessionId={session.nativeSessionId}
+                  connected={session.connectionState === "connected"}
+                  disabled={busy || !canSend}
+                  onChange={async (permissionMode) => {
+                    await api(`/sessions/${session.id}`, "PATCH", { permissionMode });
+                    await act(async () => {});
+                  }}
+                />
+              </span>
+            </div>
+            <VoiceInputButton voice={voice} disabled={session.bindingUnavailable || busy} />
+            {showStopButton ? (
               <button
                 type="button"
                 className="send-button send-button--stop"
-                aria-label="中断当前回合"
+                aria-label={supervised ? "停止或暂停托管" : "中断当前回合"}
                 title={
-                  harnessDesc?.capabilities.cancel === "unsupported"
+                  !supervised && cancelUnsupported
                     ? "此 harness 不支持中断单轮"
-                    : "中断当前回合"
+                    : supervised
+                      ? "停止运行或暂停自动托管"
+                      : "中断当前回合"
                 }
-                disabled={
-                  stopping || !connected || harnessDesc?.capabilities.cancel === "unsupported"
-                }
+                disabled={stopping || !connected || (!supervised && cancelUnsupported)}
                 onClick={() => {
-                  setStopping(true);
-                  void stopSession(session.id, false)
-                    .then((r) => {
-                      if (r.cancel !== "requested; await native event") onError(r.cancel);
-                    })
-                    .catch((e) => onError(e instanceof Error ? e.message : "中断失败"))
-                    .finally(() => setStopping(false));
+                  if (supervised) setStopSheetOpen(true);
+                  else void stop(false);
                 }}
               >
                 <Square size={13} fill="currentColor" />
@@ -464,7 +581,7 @@ export function Composer({
                   busy ||
                   attachments.uploading
                 }
-                onClick={submitMessage}
+                onClick={() => submitMessage()}
               >
                 <ArrowUp size={17} strokeWidth={2.4} />
               </button>
@@ -473,22 +590,63 @@ export function Composer({
         </div>
       </div>
 
-      <div className="composer-foot">
-        <button
-          type="button"
-          className="stop-button"
-          disabled={busy}
-          onClick={() =>
-            void act(async () => {
-              const r = await stopSession(session.id, true);
-              if (r.cancel !== "requested; await native event") onError(r.cancel);
-            })
-          }
+      {stopNotice && (
+        <div className="composer-foot" role="status">
+          <span>{stopNotice}</span>
+        </div>
+      )}
+
+      {stopSheetOpen && (
+        <Modal
+          title="停止当前运行"
+          subtitle="此对话已开启自动托管；请选择仅中断本轮或同时暂停托管"
+          onClose={() => setStopSheetOpen(false)}
         >
-          <Square size={10} fill="currentColor" />
-          <span>停止并暂停托管</span>
-        </button>
-      </div>
+          <div className="ios-inset-group action-sheet-group">
+            <button
+              type="button"
+              className="ios-sheet-action-row is-destructive"
+              disabled={stopping || !connected}
+              onClick={() => {
+                setStopSheetOpen(false);
+                void stop(true);
+              }}
+            >
+              <span>停止并暂停托管（推荐）</span>
+            </button>
+            <button
+              type="button"
+              className="ios-sheet-action-row"
+              disabled={stopping || !connected || cancelUnsupported}
+              onClick={() => {
+                setStopSheetOpen(false);
+                void stop(false);
+              }}
+            >
+              <span>仅中断本轮（保留托管）</span>
+            </button>
+            <button
+              type="button"
+              className="ios-sheet-action-row is-cancel"
+              onClick={() => setStopSheetOpen(false)}
+            >
+              <span>取消</span>
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      <MobileComposerPlusSheet
+        open={plusSheetOpen}
+        onClose={() => setPlusSheetOpen(false)}
+        disabled={busy || !canSend}
+        onAddFiles={(files) => void attachments.add(files)}
+        permissionsNode={permissionsNode}
+        onSelectTemplate={(text) => {
+          onComposeChange(text);
+          requestAnimationFrame(() => textareaRef.current?.focus());
+        }}
+      />
     </div>
   );
 }

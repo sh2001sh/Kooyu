@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 const legacyUserData = app.getPath("userData");
 app.setName("Kooyu");
 app.setPath("userData", legacyUserData);
+const appIconPath = fileURLToPath(new URL("../assets/app.png", import.meta.url));
 // This Windows host has a GPU initialization access violation. Keep the
 // rendering fallback explicit and reversible without weakening the sandbox.
 if (
@@ -27,37 +28,61 @@ async function show() {
     return;
   }
   const dark = nativeTheme.shouldUseDarkColors;
+  const applyWindowChrome = (isDark: boolean, bgHex?: string) => {
+    if (!window || window.isDestroyed()) return;
+    const bg = bgHex ?? (isDark ? "#0b0c0e" : "#f5f5f7");
+    try {
+      window.setBackgroundColor(bg);
+    } catch {}
+    if (process.platform === "win32") {
+      try {
+        window.setTitleBarOverlay({
+          color: "#00000000",
+          symbolColor: isDark ? "#a6aab3" : "#52555c",
+          height: 38,
+        });
+      } catch {}
+    }
+  };
+  const isHexDark = (hex: string): boolean => {
+    const clean = hex.replace(/^#/, "");
+    if (!/^[0-9a-fA-F]{6}$/.test(clean)) return nativeTheme.shouldUseDarkColors;
+    const r = parseInt(clean.slice(0, 2), 16);
+    const g = parseInt(clean.slice(2, 4), 16);
+    const b = parseInt(clean.slice(4, 6), 16);
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b < 128;
+  };
   window = new BrowserWindow({
     width: 1360,
     height: 900,
     minWidth: 760,
     minHeight: 580,
     title: "Kooyu",
-    backgroundColor: dark ? "#141517" : "#ffffff",
+    icon: appIconPath,
+    backgroundColor: dark ? "#0b0c0e" : "#f5f5f7",
     titleBarStyle: "hidden",
+    ...(process.platform === "darwin" ? { trafficLightPosition: { x: 14, y: 17 } } : {}),
     titleBarOverlay:
       process.platform === "win32"
         ? {
-            color: dark ? "#141517" : "#ffffff",
-            symbolColor: dark ? "#9ca3af" : "#4b5563",
+            color: "#00000000",
+            symbolColor: dark ? "#a6aab3" : "#52555c",
             height: 38,
           }
         : undefined,
     webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true },
   });
-  if (process.platform === "win32") {
-    nativeTheme.on("updated", () => {
-      if (!window) return;
-      const isDark = nativeTheme.shouldUseDarkColors;
-      try {
-        window.setTitleBarOverlay({
-          color: isDark ? "#141517" : "#ffffff",
-          symbolColor: isDark ? "#9ca3af" : "#4b5563",
-          height: 38,
-        });
-      } catch {}
-    });
-  }
+  const onNativeThemeUpdated = () => {
+    applyWindowChrome(nativeTheme.shouldUseDarkColors);
+  };
+  nativeTheme.on("updated", onNativeThemeUpdated);
+  window.webContents.on("did-change-theme-color", (_event, color) => {
+    if (!color) return;
+    applyWindowChrome(isHexDark(color), color);
+  });
+  window.on("closed", () => {
+    nativeTheme.off("updated", onNativeThemeUpdated);
+  });
   if (process.platform !== "darwin") window.setMenuBarVisibility(false);
   window.webContents.setWindowOpenHandler(({ url }) => {
     try {
@@ -69,6 +94,26 @@ async function show() {
   });
   window.webContents.on("will-navigate", (event, url) => {
     if (new URL(url).origin !== new URL(hostUrl).origin) event.preventDefault();
+  });
+  const allowedOrigin = new URL(process.env.KODO_DEV_URL ?? hostUrl).origin;
+  window.webContents.session.setPermissionCheckHandler((_wc, permission, requestingOrigin) => {
+    if (permission === "media") {
+      try {
+        return new URL(requestingOrigin).origin === allowedOrigin;
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  });
+  window.webContents.session.setPermissionRequestHandler((wc, permission, callback) => {
+    if (permission === "media") {
+      try {
+        callback(new URL(wc.getURL()).origin === allowedOrigin);
+        return;
+      } catch {}
+    }
+    callback(false);
   });
   window.on("close", (event) => {
     if (!quitting && (tray || process.platform === "darwin")) {
@@ -101,6 +146,14 @@ app
     const icon = nativeImage.createFromPath(
       fileURLToPath(new URL("../assets/tray.png", import.meta.url)),
     );
+    const openUpdateCenter = async () => {
+      await show();
+      try {
+        await window?.webContents.executeJavaScript(
+          'window.dispatchEvent(new Event("kooyu:open-update"))',
+        );
+      } catch {}
+    };
     Menu.setApplicationMenu(
       Menu.buildFromTemplate([
         ...(process.platform === "darwin" ? [{ role: "appMenu" as const }] : []),
@@ -113,6 +166,13 @@ app
                 void show();
               },
             },
+            {
+              label: "检查更新…",
+              click: () => {
+                void openUpdateCenter();
+              },
+            },
+            { type: "separator" as const },
             { role: "quit" as const },
           ],
         },
@@ -132,6 +192,12 @@ app
           label: "打开 Kooyu",
           click: () => {
             void show();
+          },
+        },
+        {
+          label: "检查更新…",
+          click: () => {
+            void openUpdateCenter();
           },
         },
         {

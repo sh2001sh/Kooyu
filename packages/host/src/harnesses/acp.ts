@@ -1,5 +1,5 @@
 import { descriptor, needCwd, unsupported, type HarnessAdapter, type Wire } from "./adapter.js";
-import { JsonRpc } from "./rpc.js";
+import { JsonRpc, RpcRejected } from "./rpc.js";
 import { AcpClient } from "./acp-client.js";
 import { collectAcpSessions } from "./acp-sessions.js";
 import { KodoError, type HarnessId, type PermissionMode } from "@kodo/protocol";
@@ -110,7 +110,8 @@ export function acpHarness(id: HarnessId, name: string): HarnessAdapter {
             }
           : ctx.emit;
         if (child) {
-          if (["agent_message_chunk", "agent_thought_chunk"].includes(u.sessionUpdate))
+          if (u.sessionUpdate === "plan") emit("todo", { items: u.entries });
+          else if (["agent_message_chunk", "agent_thought_chunk"].includes(u.sessionUpdate))
             emit("text-delta", {
               text: u.content?.text ?? "",
               channel: u.sessionUpdate === "agent_thought_chunk" ? "thought" : "assistant",
@@ -124,7 +125,8 @@ export function acpHarness(id: HarnessId, name: string): HarnessAdapter {
           modes.currentModeId = u.currentModeId;
         if (u.sessionUpdate === "current_model_update" && models)
           models.currentModelId = u.currentModelId;
-        if (["agent_message_chunk", "agent_thought_chunk"].includes(u.sessionUpdate))
+        if (u.sessionUpdate === "plan") ctx.emit("todo", { items: u.entries });
+        else if (["agent_message_chunk", "agent_thought_chunk"].includes(u.sessionUpdate))
           ctx.emit("text-delta", {
             text: u.content?.text ?? "",
             channel: u.sessionUpdate === "agent_thought_chunk" ? "thought" : "assistant",
@@ -410,6 +412,17 @@ export function acpHarness(id: HarnessId, name: string): HarnessAdapter {
               );
               return { nativeRunId: null };
             } catch (error) {
+              if (promptDispatched && error instanceof RpcRejected)
+                ctx.emit(
+                  "turn-ended",
+                  {
+                    outcome: "failed",
+                    commandId,
+                    error: { message: error.message },
+                    backgroundState: "unknown",
+                  },
+                  `prompt:${commandId}:end`,
+                );
               // No prompt was dispatched while configuring; this is safe to reject,
               // even if the configuration RPC itself lost its connection.
               if (!promptDispatched)

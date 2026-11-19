@@ -209,9 +209,9 @@ export function ReasoningSlider({
         >
           <defs>
             <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#634ce6" />
-              <stop offset="52%" stopColor="#9458f5" />
-              <stop offset="100%" stopColor="#df553e" />
+              <stop offset="0%" stopColor="var(--text-tertiary)" />
+              <stop offset="70%" stopColor="var(--text)" />
+              <stop offset="100%" stopColor="var(--info-raw)" />
             </linearGradient>
             <linearGradient id={areaGradId} x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stopColor="var(--fader-accent)" stopOpacity="0.34" />

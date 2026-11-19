@@ -93,7 +93,7 @@ test("desktop: ten direct draft entries, project workspace, history filters and 
     ),
   ).toBe(true);
   await page.screenshot({ path: "../../output/playwright/desktop.png", fullPage: true });
-  await page.getByRole("button", { name: "会话详情与管理", exact: true }).click();
+  await page.getByRole("button", { name: "会话检查器", exact: true }).click();
   await expect(page.getByText("尚未创建", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "关闭详情" }).click();
   await page.getByRole("button", { name: "设置", exact: true }).click();
@@ -189,8 +189,9 @@ test("an unassigned draft can create a project by choosing a Host folder", async
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: "../../output/playwright/project-selected-mobile.png" });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.getByLabel("标题", { exact: true }).fill("归属项目会话");
-  await page.getByRole("button", { name: "创建会话", exact: true }).click();
+  await page.getByRole("button", { name: "新对话设置", exact: true }).click();
+  await page.getByLabel("自定义标题", { exact: true }).fill("归属项目会话");
+  await page.getByRole("button", { name: "保存为空会话草稿", exact: true }).click();
   const snapshot = await (await page.request.get("/api/snapshot")).json();
   const project = snapshot.projects.find((p: { name: string }) => p.name === "文件夹选择项目");
   const session = snapshot.sessions.find((s: { title: string }) => s.title === "归属项目会话");
@@ -203,7 +204,7 @@ test("an unassigned draft can create a project by choosing a Host folder", async
   await page.locator(".new-conversation").click();
   await page.getByLabel("标题", { exact: true }).fill("原先未归属");
   await page.getByRole("button", { name: "创建会话", exact: true }).click();
-  await page.getByRole("button", { name: "会话详情与管理", exact: true }).click();
+  await page.getByRole("button", { name: "会话检查器", exact: true }).click();
   await page.getByRole("button", { name: "新建项目" }).click();
   await page.getByLabel("项目名称").fill("详情新项目");
   await page.getByRole("dialog").getByRole("button", { name: "创建项目" }).click();
@@ -224,29 +225,30 @@ test("mobile: scope/list/chat navigation, all harness choices and accessible com
   await page.goto("/");
   await page.getByRole("button", { name: "新建会话", exact: true }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await page.getByLabel("标题", { exact: true }).fill("手机 UI 验收 · 草稿");
-  await pickPopoverOption(page, "Harness", "pi");
-  await page.getByRole("button", { name: "创建会话", exact: true }).click();
+  await page.getByRole("button", { name: "切换对话引擎", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "选择对话引擎" })
+    .locator('[role="option"][data-value="pi"]')
+    .click();
+  await page.getByRole("button", { name: "新对话设置", exact: true }).click();
+  await page.getByLabel("自定义标题", { exact: true }).fill("手机 UI 验收 · 草稿");
+  await page.getByRole("button", { name: "保存为空会话草稿", exact: true }).click();
   await expect(page.getByRole("textbox", { name: "消息", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "停止并暂停托管", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "停止并暂停托管", exact: true })).toHaveCount(0);
   await page.screenshot({ path: "../../output/playwright/mobile.png", fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
-  await page.getByRole("button", { name: "停止并暂停托管", exact: true }).click();
   const snapshot = await (await page.request.get("/api/snapshot")).json(),
     session = snapshot.sessions.find((s: any) => s.title === "手机 UI 验收 · 草稿");
-  const detail = await (await page.request.get(`/api/sessions/${session.id}`)).json();
-  expect(
-    detail.commands.some(
-      (c: any) => c.kind === "stop" && c.status === "unknown" && c.body.pause === true,
-    ),
-  ).toBe(true);
+  expect(session.harnessId).toBe("pi");
   expect(session.nativeSessionId).toBeNull();
   await page.getByRole("button", { name: "返回会话列表" }).click();
-  await expect(page.getByRole("heading", { name: "全部会话", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "打开导航" }).click();
-  await page.getByRole("button", { name: "设置", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "对话", exact: true })).toBeVisible();
+  await page
+    .getByRole("navigation", { name: "移动端标签导航", exact: true })
+    .getByRole("button", { name: "设置", exact: true })
+    .click();
   await page
     .getByRole("navigation", { name: "配置页面" })
     .getByRole("button", { name: "手机连接", exact: true })
@@ -315,7 +317,7 @@ for (const mobile of [false, true])
     await page.getByRole("button", { name: "允许本次", exact: true }).click();
     await expect.poll(() => answered).toBe(true);
     await expect(page.getByText("Kooyu 管理操作 · 等待确认", { exact: true })).toHaveCount(0);
-    await page.getByRole("button", { name: "会话详情与管理", exact: true }).click();
+    await page.getByRole("button", { name: "会话检查器", exact: true }).click();
     const inspector = page.getByRole("complementary", { name: "会话检查器" });
     await expect(inspector).toBeVisible();
     await page.evaluate(() => {

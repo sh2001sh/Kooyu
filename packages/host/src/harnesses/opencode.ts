@@ -9,7 +9,7 @@ import {
   type NativeRuntime,
   type Wire,
 } from "./adapter.js";
-import { launch } from "./rpc.js";
+import { launch, RpcRejected } from "./rpc.js";
 import {
   openCodeDeclaredInput,
   openCodeModelOptions,
@@ -25,7 +25,7 @@ import { readOpenCodeTree } from "./opencode-history.js";
 import { NativeInteractions } from "./native-interactions.js";
 import type { PermissionMode, Session } from "@kodo/protocol";
 import { presenceMap, type SessionPresenceMap } from "./session-presence.js";
-class OpenCodeHttpError extends Error {
+class OpenCodeHttpError extends RpcRejected {
   constructor(
     path: string,
     readonly status: number,

@@ -18,23 +18,43 @@ export function Modal({
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
+  const [closing, setClosing] = useState(false);
+  const closeTimer = useRef<number>(0);
 
   useEffect(() => {
     const el = ref.current;
     if (el && !el.open) el.showModal();
+    return () => {
+      if (closeTimer.current) window.clearTimeout(closeTimer.current);
+    };
   }, []);
+
+  const requestClose = () => {
+    if (closing) return;
+    const reduced =
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
+      document.documentElement.getAttribute("data-reduce-motion") === "true";
+    if (reduced) {
+      onClose();
+      return;
+    }
+    setClosing(true);
+    closeTimer.current = window.setTimeout(() => {
+      onClose();
+    }, 150);
+  };
 
   return (
     <dialog
       ref={ref}
-      className="ios-sheet"
+      className={`ios-sheet ${closing ? "is-closing" : ""}`}
       aria-labelledby={titleId}
       onCancel={(e) => {
         e.preventDefault();
-        onClose();
+        requestClose();
       }}
       onClick={(e) => {
-        if (e.target === ref.current) onClose();
+        if (e.target === ref.current) requestClose();
       }}
     >
       <div className="ios-sheet__grabber" aria-hidden="true" />
@@ -43,7 +63,7 @@ export function Modal({
           <h2 id={titleId}>{title}</h2>
           {subtitle && <p className="modal-header__subtitle">{subtitle}</p>}
         </div>
-        <button type="button" aria-label="关闭" className="ios-close-pill" onClick={onClose}>
+        <button type="button" aria-label="关闭" className="ios-close-pill" onClick={requestClose}>
           <X size={16} />
         </button>
       </div>

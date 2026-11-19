@@ -1,0 +1,818 @@
+/* 侧边栏：搜索、导航、分段控制器、分组树与折叠轨道
+   Split mechanically from the former monolithic app.css; cascade order is preserved by import order in app.css. */
+/* Sidebar list region: search bar, unified nav + masters, hairline underline tabs, tree. */
+.sidebar__list {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.list-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 12px 8px;
+  flex-shrink: 0;
+}
+
+.sidebar__primary-links {
+  flex-shrink: 0;
+  padding: 2px 10px 4px;
+}
+
+.sidebar__section {
+  flex-shrink: 0;
+  padding: 0 10px 6px;
+}
+
+.sidebar__section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 6px 2px;
+}
+
+.sidebar__section-label {
+  font-size: 11px;
+  font-weight: 550;
+  letter-spacing: 0.02em;
+  color: var(--text-tertiary);
+}
+
+.nav-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-height: 31px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 480;
+  text-align: left;
+  transition:
+    background var(--dur-fast) ease,
+    color var(--dur-fast) ease;
+}
+
+.nav-row:hover:not(:disabled) {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+.nav-row.selected {
+  background: var(--fill-selected);
+  color: var(--text);
+  font-weight: 550;
+}
+
+.nav-row--subtle {
+  color: var(--text-secondary);
+}
+
+.nav-row__icon,
+.nav-row__trailing {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.nav-row__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-row__badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  background: var(--text);
+  color: var(--surface-paper);
+  font-size: 10.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.pinned-masters__list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 120px;
+  overflow-y: auto;
+  margin-right: 4px;
+}
+
+.master-row {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  min-height: 36px;
+  padding: 6px 8px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  background: transparent;
+  transition:
+    background var(--dur-fast) var(--ease-out-soft),
+    transform var(--spring-snap-dur) var(--spring-snap);
+}
+
+.master-row:hover:not(:disabled) {
+  background: var(--fill-hover);
+}
+
+.master-row.selected {
+  background: var(--fill-selected);
+}
+
+.master-row.is-archived {
+  opacity: 0.65;
+}
+
+.master-row__mark {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  background: var(--fill-hover);
+  flex-shrink: 0;
+}
+
+.master-row__content {
+  flex: 1;
+  min-width: 0;
+}
+
+.master-row__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.master-row__title > span:first-child {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.master-row__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 1px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+/* Sliding segmented switcher: 按项目 | 按 Harness | 归档 (layout only; skin is .segmented) */
+.sidebar__tabs-wrap {
+  padding: 6px 12px 6px;
+  flex-shrink: 0;
+}
+
+.sidebar-tabs.segmented {
+  width: 100%;
+}
+
+.sidebar-tabs.segmented > button {
+  gap: 4px;
+}
+
+/* Collapsible Project / Harness Tree */
+.tree-group {
+  margin-bottom: 2px;
+}
+
+.tree-group__header {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 0;
+}
+
+.tree-group__toggle {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 5px;
+  min-height: 28px;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.tree-group__toggle:hover:not(:disabled) {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+.tree-group__icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.tree-group__name {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-group__count {
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--fill-hover);
+  flex-shrink: 0;
+}
+
+.tree-group__add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-tertiary);
+}
+
+.tree-group__add:hover:not(:disabled) {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+.tree-group__rows {
+  padding-left: 6px;
+}
+
+.tree-new-project {
+  width: 100%;
+  margin-top: 4px;
+  min-height: 30px;
+  padding: 0 8px;
+  justify-content: flex-start;
+  gap: 6px;
+  border-radius: 8px;
+  border: 0;
+  background: none;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 480;
+}
+
+.tree-new-project:hover:not(:disabled) {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+.sidebar__bottom {
+  flex-shrink: 0;
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface-navigator);
+}
+
+.sidebar__tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.sidebar__tools button {
+  width: 100%;
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 32px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-paper);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 500;
+  gap: 7px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) ease,
+    border-color var(--dur-fast) ease,
+    color var(--dur-fast) ease;
+}
+
+.dark .sidebar__tools button {
+  background: color-mix(in srgb, var(--surface-raised) 70%, var(--surface-sunken));
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.sidebar__tools button:hover:not(:disabled) {
+  background: var(--fill-hover);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.sidebar__tools button.active {
+  background: var(--fill-selected);
+  border-color: var(--border);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.sidebar__tools button svg {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.sidebar__tools button.active svg {
+  color: var(--text);
+}
+
+/* Collapsed icon-rail mode (68px) applies only on tablet/desktop viewports. */
+@media (min-width: 761px) {
+  .sidebar.is-collapsed .brand {
+    height: auto;
+    flex-direction: column;
+    padding: 12px 6px 8px;
+    gap: 8px;
+  }
+
+  .sidebar.is-collapsed .brand-actions {
+    margin-left: 0;
+    flex-direction: column-reverse;
+    gap: 6px;
+  }
+
+  .sidebar.is-collapsed .new-conversation {
+    width: 34px;
+    min-height: 34px;
+    padding: 0;
+    border-radius: 9px;
+  }
+
+  .sidebar.is-collapsed .list-controls,
+  .sidebar.is-collapsed .sidebar__section-head,
+  .sidebar.is-collapsed .nav-row__title,
+  .sidebar.is-collapsed .nav-row--subtle,
+  .sidebar.is-collapsed .master-row__content,
+  .sidebar.is-collapsed .sidebar__tabs-wrap,
+  .sidebar.is-collapsed .tree-group__header,
+  .sidebar.is-collapsed .tree-new-project,
+  .sidebar.is-collapsed .list-empty,
+  .sidebar.is-collapsed .session-row__content,
+  .sidebar.is-collapsed .connection__label,
+  .sidebar.is-collapsed .sidebar__tools button span {
+    display: none;
+  }
+
+  .sidebar.is-collapsed .sidebar__section {
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .sidebar.is-collapsed .nav-row {
+    justify-content: center;
+    padding: 7px 0;
+  }
+
+  .sidebar.is-collapsed .nav-row__badge {
+    display: none;
+  }
+
+  .sidebar.is-collapsed .master-row {
+    justify-content: center;
+    padding: 6px 0;
+  }
+
+  .sidebar.is-collapsed .session-rows {
+    padding: 4px 8px;
+  }
+
+  .sidebar.is-collapsed .tree-group__rows {
+    padding-left: 0;
+  }
+
+  .sidebar.is-collapsed .session-row {
+    justify-content: center;
+    align-items: center;
+    padding: 7px 0;
+  }
+
+  .sidebar.is-collapsed .sidebar__bottom {
+    padding: 8px;
+  }
+
+  .sidebar.is-collapsed .sidebar__tools {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
+
+  .sidebar.is-collapsed .sidebar__tools button {
+    justify-content: center;
+    min-height: 34px;
+    padding: 5px 0;
+  }
+
+  .sidebar.is-collapsed .connection {
+    justify-content: center;
+    padding: 8px 0 0;
+  }
+}
+
+.icon-button {
+  padding: 0;
+  border: 0;
+  min-width: 30px;
+  min-height: 30px;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-secondary);
+}
+
+.icon-button:hover:not(:disabled) {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+.icon-button.active {
+  background: var(--fill-selected);
+  color: var(--text);
+}
+
+.icon-button--tinted {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+.search {
+  flex: 1 1 100px;
+  min-width: 0;
+  min-height: 30px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  background: color-mix(in srgb, var(--surface-sunken) 70%, var(--surface-paper));
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 0 9px;
+  color: var(--text-tertiary);
+  transition:
+    background var(--dur-fast) ease,
+    border-color var(--dur-fast) ease,
+    box-shadow var(--dur-fast) ease;
+}
+
+.search:hover {
+  background: var(--surface-paper);
+  border-color: var(--border);
+}
+
+.search input {
+  width: 100%;
+  min-width: 0;
+  background: none;
+  border: 0;
+  padding: 5px 0;
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.search input:focus-visible {
+  outline: none;
+}
+
+.search:focus-within {
+  outline: none;
+  background: var(--surface-paper);
+  border-color: var(--border-strong);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.search__clear {
+  min-height: 18px;
+  min-width: 18px;
+  padding: 2px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--border);
+  color: var(--text-secondary);
+}
+
+.filter-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-width: 30px;
+  min-height: 30px;
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-sunken) 70%, var(--surface-paper));
+  color: var(--text-secondary);
+  transition:
+    background var(--dur-fast) ease,
+    border-color var(--dur-fast) ease,
+    color var(--dur-fast) ease;
+}
+
+.filter-icon-btn:hover:not(:disabled) {
+  background: var(--surface-paper);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.filter-icon-btn.active {
+  background: var(--surface-paper);
+  border-color: var(--border-strong);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.session-rows {
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex: 1;
+  padding: 8px 6px 14px 10px;
+  margin-right: 4px;
+}
+
+/* Session row: exactly two lines.
+   1) [harness badge] title ··· relative time   2) [dot + 状态词] · short model / project.
+   Selection = Coral Discipline #1: a 3px rounded coral bar plus the coral tint. */
+.session-row {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  text-align: left;
+  width: 100%;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-row);
+  padding: 6px 8px 6px 10px;
+  margin-bottom: 1px;
+  transition:
+    background var(--dur-fast) var(--ease-out-soft),
+    transform var(--spring-snap-dur) var(--spring-snap);
+}
+
+.session-row:hover:not(:disabled) {
+  background: var(--fill-hover);
+}
+
+.session-row.selected {
+  background: var(--fill-selected);
+}
+
+.session-row::before,
+.master-row::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 9px;
+  bottom: 9px;
+  width: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--brand-coral);
+  opacity: 0;
+  transform: scaleY(calc(1 - 0.6 * var(--motion-scale)));
+  transition:
+    opacity var(--dur-fast) var(--ease-out-soft),
+    transform var(--spring-snap-dur) var(--spring-snap);
+}
+
+.session-row.selected::before,
+.master-row.selected::before {
+  opacity: 1;
+  transform: scaleY(1);
+}
+
+.session-row.is-archived {
+  opacity: 0.65;
+}
+
+.session-row__content {
+  flex: 1;
+  min-width: 0;
+}
+
+.session-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13.5px;
+  line-height: 18px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.session-row.selected .session-title {
+  font-weight: 600;
+}
+
+.session-title > span:first-child {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.session-row__pin {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.session-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 4px;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.harness-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-tertiary);
+  font-weight: 450;
+  white-space: nowrap;
+}
+
+.session-meta .session-model-tag {
+  flex-shrink: 0;
+}
+
+.session-state-text {
+  flex-shrink: 0;
+}
+
+.session-meta__sep {
+  flex-shrink: 0;
+  color: var(--text-disabled);
+}
+
+.row-date {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.list-empty--compact {
+  padding: 28px 16px;
+}
+
+.list-empty {
+  padding: 64px 20px;
+  text-align: center;
+  color: var(--text-tertiary);
+}
+
+.list-empty__icon {
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 12px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: var(--fill-hover);
+  color: var(--text-secondary);
+}
+
+.list-empty p,
+.list-empty strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.list-empty span {
+  font-size: 12px;
+}
+
+.search-snippet {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 4px;
+  max-height: 34px;
+  overflow: hidden;
+  line-height: 1.45;
+}
+
+/* L0 pinned commander card (Kooyu 主对话): crisp monochrome card, sits above the tree. */
+.l0-card {
+  margin-top: 6px;
+  padding: 4px 4px 4px;
+  border-radius: var(--radius-card);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-paper);
+  box-shadow: var(--elev-card);
+}
+
+.dark .l0-card {
+  background: var(--surface-raised);
+}
+
+.l0-card__head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 4px 3px 6px;
+}
+
+.l0-card__mark {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 7px;
+  background: var(--surface-paper);
+  color: var(--text);
+  box-shadow: 0 0 0 1px var(--border-subtle);
+}
+
+.dark .l0-card__mark {
+  background: var(--surface-sunken);
+}
+
+.l0-card__title {
+  flex: 1;
+  min-width: 0;
+  font: var(--type-section);
+  color: var(--text);
+}
+
+.l0-card .pinned-masters__list {
+  margin-right: 0;
+}
+
+.l0-card .master-row {
+  padding-left: 10px;
+}
+
+.master-row__summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.master-row__title .row-date {
+  font-weight: 400;
+}
+
+.sidebar.is-collapsed .l0-card {
+  padding: 2px;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.sidebar.is-collapsed .l0-card__head {
+  display: none;
+}

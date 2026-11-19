@@ -1,5 +1,12 @@
 package app.kooyu.android
 
+import app.kooyu.android.ui.*
+import app.kooyu.android.ui.theme.*
+import app.kooyu.android.ui.components.*
+import app.kooyu.android.ui.home.*
+import app.kooyu.android.ui.conversation.*
+import app.kooyu.android.ui.screens.*
+
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.*
@@ -49,8 +56,10 @@ class MobileParityTest {
         assertEquals(0.0, records[1].costUsd!!, 0.0)
     }
     @Test fun usageParserKeepsBindingBudgetScope() {
-        val record = JSONObject("""{"id":"a","sessionId":"s","source":"kodo","scope":"turn","bindingId":"binding","costUsd":null}""")
-        assertEquals("binding", UsageRecord.parse(record).bindingId); assertNull(UsageRecord.parse(record).costUsd)
+        val record = JSONObject("""{"id":"a","sessionId":"s","source":"kodo","scope":"turn","bindingId":"binding","costUsd":null,"firstTokenMs":680,"durationMs":4250}""")
+        val parsed = UsageRecord.parse(record)
+        assertEquals("binding", parsed.bindingId); assertNull(parsed.costUsd)
+        assertEquals(680.0, parsed.firstTokenMs!!, 0.0); assertEquals(4250.0, parsed.durationMs!!, 0.0)
     }
     @Test fun newSessionBodyIsStrictAndPreservesInheritance() {
         val body = SessionDraft(firstMessage = "第一条消息\n下一行").body()
@@ -103,5 +112,35 @@ class MobileParityTest {
         val file = readTextAttachment("a\nb.txt", ByteArrayInputStream("内容".toByteArray()), emptyList())
         assertEquals("说明\n\n--- 附加文本文件：a b.txt ---\n内容\n--- 文件结束 ---", attachedMessage(" 说明 ", listOf(file)))
         assertTrue(attachedMessage("", listOf(file)).startsWith("--- 附加文本文件"))
+    }
+    @Test fun formatWorkspaceLabelSanitizesPathsAcrossPlatforms() {
+        assertEquals("", formatWorkspaceLabel(null))
+        assertEquals("", formatWorkspaceLabel("   "))
+        assertEquals("Coding/agent-harness", formatWorkspaceLabel("e:\\sh\\Coding\\agent-harness"))
+        assertEquals("repos/agent-harness", formatWorkspaceLabel("/Users/dev/repos/agent-harness/"))
+        assertEquals("/", formatWorkspaceLabel("/"))
+    }
+    @Test fun i18nResolvesLocalesAndTranslatesPrimaryLabels() {
+        assertEquals("en", app.kooyu.android.ui.theme.resolveKooyuLocale("en", "zh"))
+        assertEquals("ja", app.kooyu.android.ui.theme.resolveKooyuLocale("system", "ja"))
+        assertEquals("zh-CN", app.kooyu.android.ui.theme.resolveKooyuLocale("system", "zh"))
+        assertEquals("Chats", app.kooyu.android.ui.theme.kooyuTranslate("en", "dock.chats"))
+        assertEquals("チャット", app.kooyu.android.ui.theme.kooyuTranslate("ja", "dock.chats"))
+        assertEquals("导入对话", app.kooyu.android.ui.theme.kooyuTranslate("zh-CN", "import.title"))
+        assertEquals("Import Chats", app.kooyu.android.ui.theme.kooyuTranslate("en", "import.title"))
+        assertEquals("音声入力", app.kooyu.android.ui.theme.kooyuTranslate("ja", "voice.start"))
+    }
+    @Test fun appendVoiceTranscriptHandlesCjkAndAsciiSpacing() {
+        assertEquals("你好世界", app.kooyu.android.ui.conversation.appendVoiceTranscript("", " 你好世界 "))
+        assertEquals("hello world", app.kooyu.android.ui.conversation.appendVoiceTranscript("hello", "world"))
+        assertEquals("查看代码结构", app.kooyu.android.ui.conversation.appendVoiceTranscript("查看", "代码结构"))
+    }
+    @Test fun androidUpdaterComparesSemverAndParsesChecksums() {
+        assertEquals(1, compareSemver("0.3.0", "0.2.1"))
+        assertEquals(0, compareSemver("v0.2.1", "0.2.1"))
+        assertEquals(-1, compareSemver("0.2.0", "0.2.1"))
+        val sha = "a".repeat(64)
+        val parsed = parseSha256SumsText("$sha  Kooyu-0.3.0-android-debug.apk\n")
+        assertEquals(sha, parsed["Kooyu-0.3.0-android-debug.apk"])
     }
 }

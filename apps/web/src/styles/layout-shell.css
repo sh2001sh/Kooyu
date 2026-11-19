@@ -1,0 +1,266 @@
+/* 三栏 Workbench 框架：分栏、左轨与拖动分隔线
+   Split mechanically from the former monolithic app.css; cascade order is preserved by import order in app.css. */
+/* Native Edge-to-Edge Split View (Apple Messages / Codex / DeepSeek Harness style) */
+.app {
+  position: relative;
+  height: 100dvh;
+  display: flex;
+  gap: 0;
+  padding: 0;
+  background: var(--surface-navigator);
+  overflow: hidden;
+}
+
+.app.is-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+.app.is-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+/* Left Split Pane Rail */
+.sidebar {
+  width: var(--sidebar-width, 300px);
+  flex: 0 0 var(--sidebar-width, 300px);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface-navigator);
+  border-right: 0;
+  overflow: hidden;
+  transition:
+    width var(--spring-panel-dur) var(--spring-panel),
+    flex-basis var(--spring-panel-dur) var(--spring-panel);
+}
+
+.sidebar.is-resizing {
+  transition: none;
+}
+
+.sidebar.is-collapsed {
+  width: var(--sidebar-collapsed, 68px);
+  flex-basis: var(--sidebar-collapsed, 68px);
+}
+
+.sidebar__mobilebar {
+  display: none;
+}
+
+.sidebar__chrome {
+  flex-shrink: 0;
+}
+
+.sidebar__collapse {
+  flex-shrink: 0;
+}
+
+.sidebar__navclose {
+  display: none;
+  flex-shrink: 0;
+}
+
+/* Zero-gap hairline resizer overlapping sidebar right border */
+.sidebar-resizer {
+  flex: 0 0 5px;
+  width: 5px;
+  margin-left: -2px;
+  margin-right: -3px;
+  z-index: 16;
+  cursor: col-resize;
+  position: relative;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  min-height: 0;
+  align-self: stretch;
+}
+
+.sidebar-resizer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1.5px;
+  transform: translateX(-50%);
+  background: transparent;
+  transition: background var(--dur-fast) ease;
+}
+
+.sidebar-resizer:hover::after,
+.sidebar-resizer:focus-visible::after,
+.app.is-resizing .sidebar-resizer::after {
+  background: var(--border-strong);
+}
+
+.sidebar-resizer:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -1px;
+}
+
+.brand {
+  height: 52px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 0 8px 0 14px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  -webkit-app-region: drag;
+}
+
+/* Reserve native traffic-light clearance in macOS hiddenInset Electron windows */
+html[data-platform="darwin"] .brand {
+  padding-left: 78px;
+}
+
+html[data-platform="darwin"] .sidebar.is-collapsed .brand {
+  padding-left: 6px;
+  padding-top: 38px;
+}
+
+.brand button,
+.brand a,
+.brand input {
+  -webkit-app-region: no-drag;
+}
+
+.brand-mark {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  background: transparent;
+  flex-shrink: 0;
+}
+
+.brand-title {
+  font-size: 15.5px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  color: var(--text);
+}
+
+.brand-wordmark {
+  display: block;
+  width: auto;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.brand-actions {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.new-conversation {
+  width: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: var(--control-solid);
+  border: 1px solid transparent;
+  color: var(--on-control);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  transition:
+    transform var(--spring-snap-dur) var(--spring-snap),
+    background var(--dur-fast) ease,
+    border-color var(--dur-fast) ease;
+}
+
+.new-conversation svg {
+  color: currentColor;
+  flex-shrink: 0;
+}
+
+.new-conversation:hover:not(:disabled) {
+  background: var(--control-solid-hover);
+}
+
+.new-conversation:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.sidebar__drawer-actions {
+  display: none;
+}
+
+.drawer-inbox-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-paper);
+  color: var(--text-secondary);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.drawer-inbox-btn.active {
+  background: var(--fill-selected);
+  color: var(--text);
+}
+
+.connection {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 4px 0;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.connection .status-dot.online {
+  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--success-text) 22%, transparent);
+}
+
+.connection__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.theme-toggle {
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: none;
+  min-height: 26px;
+  min-width: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) ease,
+    background var(--dur-fast) ease,
+    border-color var(--dur-fast) ease;
+}
+
+.theme-toggle:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--fill-hover);
+  border-color: var(--border-subtle);
+}

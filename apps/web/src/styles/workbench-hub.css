@@ -71,7 +71,7 @@
   background: transparent;
 }
 .hub-tabs button[aria-current] {
-  border-bottom-color: var(--brand-coral, #f17561);
+  border-bottom-color: var(--control-solid);
   color: var(--text);
   font-weight: 600;
 }
@@ -216,6 +216,52 @@
   border-radius: 10px;
   margin-bottom: 18px;
 }
+.hub-project-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  margin: 0 0 18px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--surface-sunk);
+  font-size: 13px;
+}
+.hub-project-strip__dirs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  min-width: 0;
+}
+.hub-project-strip__dirs code {
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  color: var(--text);
+  font-size: 12px;
+}
+.workbench-hub .hub-link.primary-pill {
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 560;
+}
+.workbench-hub .hub-link.primary-pill:hover {
+  color: #fff;
+  text-decoration: none;
+  filter: brightness(1.06);
+}
+.hub-note {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
 .hub-editor {
   margin-top: 28px;
   padding-top: 8px;
@@ -226,7 +272,8 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
 }
-.hub-editor form label {
+.hub-editor form label,
+.hub-editor form .hub-field {
   display: grid;
   gap: 8px;
   font-size: 13px;

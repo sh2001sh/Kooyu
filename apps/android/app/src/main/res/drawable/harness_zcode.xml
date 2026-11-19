@@ -2,10 +2,10 @@
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="280"
-    android:viewportHeight="274">
+    android:viewportHeight="280">
     <group
         android:translateX="12"
-        android:translateY="28">
+        android:translateY="31">
         <path
             android:fillColor="#FFFFFF"
             android:pathData="M134.4,0.130152L116.48,25.6022C113.665,29.5699 109.054,32.0019 104.064,32.0019H6.3999V0C6.3999,0.130149 134.4,0.130152 134.4,0.130152Z" />

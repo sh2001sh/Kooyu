@@ -125,8 +125,14 @@ export const deepSeekAdapter: HarnessAdapter = {
       closed = true;
       if (!replacing) ctx.emit("disconnected", { message: e.message });
     };
-    rpc.onRequest = (method, p, id) =>
-      ctx.interact(String(id), { protocol: "dsh", method, params: p });
+    rpc.onRequest = (method, p, id) => {
+      if (method === "approval/request") {
+        const mode = ctx.permissionMode?.() ?? session.permissionMode;
+        if (mode === "dsh:allow") return Promise.resolve({ outcome: "allowed-once" });
+        if (mode === "dsh:deny") return Promise.resolve({ outcome: "rejected" });
+      }
+      return ctx.interact(String(id), { protocol: "dsh", method, params: p });
+    };
     rpc.onNotification = (method, p) => {
       if (replacing || closed) return;
       if (method === "subagent.started" || method === "subagent.finished") {

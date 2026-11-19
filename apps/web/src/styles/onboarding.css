@@ -87,10 +87,10 @@
   color: var(--text);
 }
 .setup-steps .is-current .setup-step-index {
-  background: linear-gradient(135deg, #f69b7b, #f17561, #e04838);
-  color: #ffffff;
+  background: var(--control-solid);
+  color: var(--on-control);
   border-color: transparent;
-  box-shadow: 0 2px 10px rgba(241, 117, 97, 0.4);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
 .setup-steps .is-done .setup-step-index {
   background: color-mix(in srgb, var(--success-raw) 12%, transparent);
@@ -591,7 +591,7 @@
 }
 @media (prefers-reduced-motion: no-preference) {
   .setup-content {
-    animation: setup-arrive 240ms cubic-bezier(0.16, 1, 0.3, 1);
+    animation: setup-arrive var(--spring-base-dur) var(--spring-base);
   }
   @keyframes setup-arrive {
     from {

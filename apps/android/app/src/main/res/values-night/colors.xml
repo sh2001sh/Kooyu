@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="kooyu_window_background">#1C1B1F</color>
+    <color name="kooyu_window_background">#0B0C0E</color>
     <bool name="kooyu_light_status_bar">false</bool>
 </resources>

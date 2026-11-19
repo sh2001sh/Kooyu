@@ -5,8 +5,12 @@ struct SessionComposerView: View {
     @Bindable var model: Workbench
     var initialProject = ""
     var initialText = ""
+    /// Preselected engine (the L0 card passes "kodo"); empty uses the device default.
+    var initialHarness = ""
     @Environment(\.dismiss) private var dismiss
+    private let quickPrompts = ["审查当前 Git 改动", "运行测试并修复错误", "分析项目架构"]
     @State private var draft = SessionDraft()
+    @State private var plusOpen = false
     @State private var context = false
     @State private var directory = false
     @State private var importing = false
@@ -15,11 +19,10 @@ struct SessionComposerView: View {
     @State private var files: [ManagedAttachment] = []
     @State private var catalog: JSONValue?
     @State private var executors: [JSONValue] = []
-    @State private var query = ""
     @State private var modelsOpen = false
+    @State private var modelSheetTab = "model"
     @State private var loading = false
     @State private var loadError = ""
-    @State private var reasoningOpen = false
     private var descriptor: HostHarness? { model.snapshot?.harnesses?.first { $0.id == draft.harnessId } }
     private var bindings: [JSONValue] { model.snapshot?.bindings?.filter { $0["harnessId"].string == draft.harnessId && !$0["archived"].boolean } ?? [] }
     private var inherited: String {
@@ -41,8 +44,22 @@ struct SessionComposerView: View {
         }
         return catalog?["models"].array ?? []
     }
+    private var harnessPreset: JSONValue? { model.appSettings?["harnessDefaults"][draft.harnessId] }
+    private var presetModel: String? {
+        guard draft.executorId == "local", draft.choice == "inherit", let m = harnessPreset?["model"].string.nonEmpty else { return nil }
+        if let provider { return provider["availableModels"].array.contains { $0["model"].string == m } ? m : nil }
+        return binding == nil ? m : nil
+    }
+    private var effectiveReasoning: String? {
+        draft.reasoning.nonEmpty ?? (draft.executorId == "local" && draft.choice == "inherit" ? harnessPreset?["reasoning"].string.nonEmpty : nil)
+    }
+    private var effectivePermission: String {
+        if let chosen = draft.permission.nonEmpty { return chosen }
+        if let preset = harnessPreset?["permissionMode"].string.nonEmpty, permissionOptions(draft.harnessId).contains(where: { $0.0 == preset }) { return preset }
+        return ""
+    }
     private var active: String {
-        draft.model.nonEmpty ?? binding?["model"].string.nonEmpty ?? composerDefaultModel(catalog?["defaultModel"]) ?? descriptor?.nativeDefaults?["model"].string ?? ""
+        draft.model.nonEmpty ?? presetModel ?? binding?["model"].string.nonEmpty ?? composerDefaultModel(catalog?["defaultModel"]) ?? descriptor?.nativeDefaults?["model"].string ?? ""
     }
     private func modelID(_ item: JSONValue) -> String { binding == nil ? nativeModelID(draft.harnessId, item) : item["id"].string }
     private var selected: JSONValue? { selectComposerModel(models, active, inherited: draft.model.isEmpty) }
@@ -58,59 +75,150 @@ struct SessionComposerView: View {
         return model.snapshot?.workspaces?.filter { (draft.projectId.isEmpty || $0.projectId == draft.projectId) && ($0.hostId == nil || $0.hostId == host) } ?? []
     }
     private var validation: String? { draft.validation(model.snapshot) }
+    private var harnessTitle: String {
+        if draft.harnessId == "kodo" { return draft.kind == "supervisor" ? "Kooyu 主对话" : "Kooyu" }
+        return descriptor?.name ?? harnessVisual(draft.harnessId).name
+    }
+    private var projectLabel: String {
+        model.snapshot?.projects.first { $0.id == draft.projectId }?.name ?? "全局对话"
+    }
+    private var workspaceLabel: String {
+        if let raw = workspaces.first(where: { $0.id == draft.workspaceId })?.rootPath ?? draft.customPath.nonEmpty {
+            let short = formatWorkspaceLabel(raw)
+            return short.isEmpty ? raw : short
+        }
+        return "未绑定目录"
+    }
+    private var draftPermissionLabel: String {
+        permissionOptions(draft.harnessId).first { $0.0 == effectivePermission }?.1 ?? defaultPermissionLabel(draft.harnessId)
+    }
+    private var draftModelLabel: String {
+        if draft.executorId != "local" { return "节点原生配置" }
+        return selected?["name"].string.nonEmpty ?? active.nonEmpty ?? "原生默认"
+    }
+    private var draftModelSummary: String {
+        if let r = effectiveReasoning { return "\(draftModelLabel) · \(r)" }
+        return draftModelLabel
+    }
     var body: some View {
         NavigationStack {
             VStack(spacing: 8) {
-                HStack {
-                    Menu {
-                        Button("全局对话") { setProject("") }
-                        ForEach(model.snapshot?.projects ?? []) { project in Button(project.name) { setProject(project.id) } }
-                    } label: { ComposerPill(title: model.snapshot?.projects.first { $0.id == draft.projectId }?.name ?? "全局对话", icon: "folder") }
-                    Menu {
-                        Button("未绑定目录") { draft.workspaceId = ""; draft.customPath = "" }
-                        ForEach(workspaces) { workspace in Button(workspace.rootPath) { draft.workspaceId = workspace.id; draft.customPath = "" } }
-                        if draft.executorId == "local" { Button("浏览设备目录…") { directory = true } }
-                    } label: { ComposerPill(title: workspaces.first { $0.id == draft.workspaceId }?.rootPath ?? draft.customPath.nonEmpty ?? "选择目录", icon: "folder.badge.plus") }
-                }.frame(maxWidth: .infinity, alignment: .leading)
-                ComposerWelcome(title: model.snapshot?.projects.first { $0.id == draft.projectId }.map { "在 \($0.name) 中做什么？" } ?? "今天想做些什么？").frame(maxHeight: .infinity)
+                HStack(spacing: 8) {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(KY.textSecondary)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.kooyuPress)
+                    .accessibilityLabel("取消")
+
+                    Spacer(minLength: 4)
+
+                    VStack(spacing: 2) {
+                        Menu {
+                            ForEach(model.snapshot?.harnesses ?? []) { engine in
+                                Button {
+                                    chooseHarness(engine.id)
+                                } label: {
+                                    HStack {
+                                        Text(engine.id == "kodo" ? (draft.kind == "supervisor" ? "Kooyu 主对话" : "Kooyu") : engine.name)
+                                        if engine.id == draft.harnessId { Image(systemName: "checkmark") }
+                                    }
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 6) {
+                                EngineBadge(harnessId: draft.harnessId, size: 18, circle: false)
+                                Text(harnessTitle).font(.system(size: 15, weight: .semibold)).foregroundStyle(KY.text).lineLimit(1)
+                                Image(systemName: "chevron.down").font(.system(size: 10, weight: .bold)).foregroundStyle(KY.textTertiary)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(KY.sunken, in: Capsule())
+                        }
+                        .accessibilityLabel("切换引擎：\(harnessTitle)")
+
+                        Button { plusOpen = true } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "folder").font(.system(size: 10, weight: .medium))
+                                Text("\(projectLabel) · \(workspaceLabel)")
+                                    .font(KYFont.caption)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            }
+                            .foregroundStyle(KY.textSecondary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("项目与目录：\(projectLabel)，\(workspaceLabel)")
+                    }
+
+                    Spacer(minLength: 4)
+
+                    Button { context = true } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .font(.system(size: 17, weight: .medium))
+                            .foregroundStyle(KY.textSecondary)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.kooyuPress)
+                    .accessibilityLabel("更多会话设置")
+                }
+
+                Spacer(minLength: 8)
+                ComposerWelcome(title: model.snapshot?.projects.first { $0.id == draft.projectId }.map { "在 \($0.name) 中做什么？" } ?? "今天想做些什么？")
+                Spacer(minLength: 8)
+
+                if draft.firstMessage.isEmpty && files.isEmpty {
+                    quickPromptRow.transition(.opacity)
+                }
                 if let validation { Text(validation).font(.caption).foregroundStyle(KY.textSecondary) }
                 if !model.error.isEmpty { Text(model.error).font(.caption).foregroundStyle(KY.destructive) }
-                WorkbenchComposer(text: $draft.firstMessage, placeholder: "问问 Kooyu 主对话，或输入任务说明…", enabled: !model.busy,
+                WorkbenchComposer(
+                    text: $draft.firstMessage,
+                    placeholder: "问问 \(harnessTitle)，或输入任务说明…",
+                    enabled: !model.busy,
                     sendEnabled: model.canWrite && validation == nil && !uploading && attachmentError.isEmpty && (!draft.firstMessage.isEmpty || !files.isEmpty),
-                    uploading: uploading, error: attachmentError, attachments: files, remove: { id in files.removeAll { $0.id == id }; attachmentError = "" }, submit: submit,
-                    left: { leftControls }, right: { rightControls })
-            }.padding(.horizontal, 16).padding(.bottom, 12).background(KY.paper)
-                .navigationTitle("新建对话").navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
-                    ToolbarItemGroup(placement: .confirmationAction) {
-                        Button { context = true } label: { Image(systemName: "slider.horizontal.3") }.accessibilityLabel("对话设置")
-                        Button("创建") { submit() }.disabled(!model.canWrite || validation != nil || uploading)
-                    }
-                }
-                .task {
-                    draft.firstMessage = initialText
-                    draft.harnessId = model.appSettings?["defaultHarnessId"].string.nonEmpty ?? "kodo"
-                    setProject(initialProject)
-                    executors = await model.read("/executors")?.array ?? []
-                }
-                .task(id: draft.harnessId) {
-                    catalog = nil; await loadCatalog(false)
-                }
-                .sheet(isPresented: $context) { contextView }
-                .sheet(isPresented: $directory) { DirectoryPickerView(model: model, initial: draft.customPath) { draft.customPath = $0; draft.workspaceId = "" } }
-                .sheet(isPresented: $modelsOpen) { modelPicker }
-                .sheet(isPresented: $reasoningOpen) {
-                    ComposerReasoningPicker(levels: levels, current: draft.reasoning, loading: loading, error: loadError, refresh: { await loadCatalog(true) }) { level in
-                        draft.reasoning = level
-                        if !level.isEmpty, let target = reasoningModelTarget(active, selected: selected, harness: draft.harnessId, bound: binding != nil) {
-                            draft.model = target
-                            draft.choice = binding.map { "binding:" + $0["id"].string } ?? "model"
-                        }
-                        reasoningOpen = false
-                    }
-                }
-                .fileImporter(isPresented: $importing, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+                    uploading: uploading,
+                    error: attachmentError,
+                    attachments: files,
+                    remove: { id in files.removeAll { $0.id == id }; attachmentError = "" },
+                    submit: submit,
+                    autoFocus: true,
+                    onPlus: { plusOpen = true },
+                    plusCount: files.count,
+                    plusEnabled: model.canWrite,
+                    modelSummary: draftModelLabel,
+                    modelEnabled: draft.executorId == "local" && (descriptor?.modelSupport != "native-only" || !levels.isEmpty),
+                    harnessId: draft.harnessId,
+                    onModel: { modelSheetTab = "model"; modelsOpen = true },
+                    reasoningSummary: effectiveReasoning,
+                    onReasoning: { modelSheetTab = "reasoning"; modelsOpen = true },
+                    permissionSummary: draftPermissionLabel,
+                    onPermission: { plusOpen = true }
+                )
+            }
+            .animation(KYMotion.base, value: draft.firstMessage.isEmpty)
+            .padding(.horizontal, 16).padding(.top, 6).padding(.bottom, 12).background(KY.paper)
+            .toolbar(.hidden, for: .navigationBar)
+            .task {
+                draft.firstMessage = initialText
+                draft.harnessId = initialHarness.nonEmpty ?? model.appSettings?["defaultHarnessId"].string.nonEmpty ?? "kodo"
+                setProject(initialProject)
+                executors = await model.read("/executors")?.array ?? []
+            }
+            .task(id: draft.harnessId) {
+                catalog = nil; await loadCatalog(false)
+            }
+            .sheet(isPresented: $plusOpen) { plusSheet }
+            .sheet(isPresented: $context) { contextView }
+            .sheet(isPresented: $directory) { DirectoryPickerView(model: model, initial: draft.customPath) { draft.customPath = $0; draft.workspaceId = "" } }
+            .sheet(isPresented: $modelsOpen) { modelPicker }
+            .fileImporter(isPresented: $importing, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
                     Task { @MainActor in
                         uploading = true; defer { uploading = false }
                         do {
@@ -133,29 +241,82 @@ struct SessionComposerView: View {
     }
     private func setProject(_ id: String) { draft.projectId = id; draft.workspaceId = model.snapshot?.workspaces?.first { $0.projectId == id && ($0.hostId == nil || $0.hostId == model.snapshot?.hostId) }?.id ?? ""; draft.customPath = "" }
     private func submit() { Task { if await model.createSession(draft, attachments: files) { model.selectedTab = "sessions"; dismiss() } } }
-    private var leftControls: some View {
-        HStack(spacing: 2) {
-            Button { importing = true } label: { Image(systemName: "plus").frame(width: 44, height: 44) }.disabled(!model.canWrite || uploading || files.count >= 10).accessibilityLabel("添加附件")
-            Menu {
-                ForEach(model.snapshot?.harnesses ?? []) { engine in
-                    Button(engine.id == "kodo" ? "Kooyu · 主对话" : engine.name) { draft.harnessId = engine.id; draft.choice = "inherit"; draft.model = ""; draft.reasoning = ""; draft.permission = "" }
-                }
-            } label: { ComposerPill(title: draft.harnessId == "kodo" && draft.kind == "supervisor" ? "Kooyu · 主对话" : descriptor?.name ?? draft.harnessId, icon: "terminal", selected: true) }
-            Menu {
-                Button(defaultPermissionLabel(draft.harnessId)) { draft.permission = "" }
-                ForEach(permissionOptions(draft.harnessId), id: \.0) { value, label in Button(label) { draft.permission = value } }
-            } label: { ComposerPill(title: permissionOptions(draft.harnessId).first { $0.0 == draft.permission }?.1 ?? defaultPermissionLabel(draft.harnessId), icon: "shield") }
-        }.buttonStyle(.plain)
+    private func chooseHarness(_ id: String) {
+        withAnimation(KYMotion.snap) { draft.harnessId = id }
+        draft.choice = "inherit"; draft.model = ""; draft.reasoning = ""; draft.permission = ""
     }
-    private var rightControls: some View {
-        HStack(spacing: 2) {
-            Button { modelsOpen = true } label: { ComposerPill(title: draft.executorId != "local" ? "节点原生配置" : selected?["name"].string.nonEmpty ?? active.nonEmpty ?? "原生默认", icon: "cpu", compact: true) }
-                .disabled(draft.executorId != "local" || descriptor?.modelSupport == "native-only")
-                .accessibilityLabel("模型配置")
-            Button { reasoningOpen = true } label: { ComposerPill(title: draft.reasoning.nonEmpty ?? "默认思考", icon: "speedometer", compact: true) }
-                .fixedSize(horizontal: true, vertical: false).disabled(draft.executorId != "local").accessibilityLabel("思考强度")
-            Spacer(minLength: 0)
-        }.buttonStyle(.plain)
+    private var quickPromptRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(quickPrompts, id: \.self) { prompt in
+                    Button { draft.firstMessage = prompt } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "sparkles").font(.system(size: 11, weight: .semibold))
+                            Text(prompt)
+                        }
+                        .font(KYFont.label)
+                        .foregroundStyle(KY.textSecondary)
+                        .padding(.horizontal, 12)
+                        .frame(height: 32)
+                        .background(KY.sunken, in: Capsule())
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.kooyuPress)
+                }
+            }
+            .padding(.horizontal, 2)
+        }
+    }
+    private var plusSheet: some View {
+        NavigationStack {
+            Form {
+                Section("附件") {
+                    Button {
+                        plusOpen = false
+                        importing = true
+                    } label: {
+                        Label(files.isEmpty ? "添加文件附件…" : "继续添加附件（已选 \(files.count)/10）", systemImage: "paperclip")
+                    }
+                    .disabled(!model.canWrite || uploading || files.count >= 10)
+                }
+                Section("项目与目录") {
+                    Picker("所属项目", selection: Binding(get: { draft.projectId }, set: { setProject($0) })) {
+                        Text("全局对话").tag("")
+                        ForEach(model.snapshot?.projects ?? []) { Text($0.name).tag($0.id) }
+                    }
+                    Picker("工作目录", selection: Binding(
+                        get: { draft.workspaceId },
+                        set: { draft.workspaceId = $0; draft.customPath = "" }
+                    )) {
+                        Text("未绑定目录").tag("")
+                        ForEach(workspaces) { w in
+                            let label = formatWorkspaceLabel(w.rootPath)
+                            Text(label.isEmpty ? w.rootPath : label).tag(w.id)
+                        }
+                    }
+                    if draft.executorId == "local" {
+                        Button("浏览设备目录…") {
+                            plusOpen = false
+                            directory = true
+                        }
+                        if !draft.customPath.isEmpty {
+                            LabeledContent("已选路径", value: formatWorkspaceLabel(draft.customPath))
+                        }
+                    }
+                }
+                Section("工具权限") {
+                    Picker("权限策略", selection: $draft.permission) {
+                        Text(defaultPermissionLabel(draft.harnessId)).tag("")
+                        ForEach(permissionOptions(draft.harnessId), id: \.0) { value, label in
+                            Text(label).tag(value)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("会话上下文与附件").navigationBarTitleDisplayMode(.inline)
+            .toolbar { Button("完成") { plusOpen = false } }
+        }
     }
     private var contextView: some View {
         NavigationStack {
@@ -170,25 +331,48 @@ struct SessionComposerView: View {
         }
     }
     private var modelPicker: some View {
-        NavigationStack {
-            List {
-                if loading { ProgressView() }
-                if !loadError.isEmpty { Text(loadError).foregroundStyle(KY.destructive) }
-                Button("继承项目 / 设备配置") { draft.choice = "inherit"; draft.model = ""; draft.reasoning = ""; modelsOpen = false }
-                if descriptor?.modelSupport != "binding-required" { Button("原生配置与登录") { draft.choice = "native"; draft.model = ""; draft.reasoning = ""; modelsOpen = false } }
-                Section("引擎绑定") {
-                    ForEach(Array(bindings.enumerated()), id: \.offset) { _, binding in Button(binding["name"].string + " · " + binding["model"].string) { draft.choice = "binding:" + binding["id"].string; draft.model = ""; draft.reasoning = ""; modelsOpen = false } }
+        ComposerModelReasoningSheet(
+            models: models,
+            currentModel: draft.model.nonEmpty,
+            effectiveModelLabel: draftModelLabel,
+            inheritLabel: "继承项目 / 设备配置",
+            modelSupport: descriptor?.modelSupport,
+            levels: levels,
+            currentReasoning: draft.reasoning,
+            loading: loading,
+            error: loadError,
+            enabled: draft.executorId == "local",
+            initialTab: modelSheetTab,
+            bindings: bindings,
+            bindingChoice: draft.choice,
+            allowNativeChoice: descriptor?.modelSupport != "binding-required",
+            onSelectInherit: {
+                draft.choice = "inherit"; draft.model = ""; draft.reasoning = ""; modelsOpen = false
+            },
+            onSelectNative: {
+                draft.choice = "native"; draft.model = ""; draft.reasoning = ""; modelsOpen = false
+            },
+            onSelectBinding: { id in
+                draft.choice = "binding:" + id; draft.model = ""; draft.reasoning = ""; modelsOpen = false
+            },
+            modelID: modelID,
+            refresh: { await loadCatalog(true) },
+            chooseModel: { id in
+                if let id {
+                    selectModel(id)
+                } else {
+                    draft.choice = "inherit"; draft.model = ""; draft.reasoning = ""; modelsOpen = false
                 }
-                if descriptor?.modelSupport != "binding-required" || provider != nil {
-                    Section("模型") {
-                        ForEach(Array(models.filter { query.isEmpty || (modelID($0) + " " + $0["name"].string).localizedCaseInsensitiveContains(query) }.enumerated()), id: \.offset) { _, item in
-                            Button(item["name"].string.nonEmpty ?? modelID(item)) { selectModel(modelID(item)) }
-                        }
-                        if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { Button("使用自定义模型：\(query)") { selectModel(query.trimmingCharacters(in: .whitespacesAndNewlines)) } }
-                    }
+            },
+            chooseReasoning: { level in
+                draft.reasoning = level ?? ""
+                if let level, !level.isEmpty, let target = reasoningModelTarget(active, selected: selected, harness: draft.harnessId, bound: binding != nil) {
+                    draft.model = target
+                    draft.choice = binding.map { "binding:" + $0["id"].string } ?? "model"
                 }
-            }.refreshable { await loadCatalog(true) }.task { await loadCatalog(true) }.searchable(text: $query, prompt: "搜索或输入模型 ID").navigationTitle("模型配置").toolbar { Button("完成") { modelsOpen = false } }
-        }
+                modelsOpen = false
+            }
+        )
     }
     private func selectModel(_ id: String) {
         if provider == nil { draft.choice = "model" } else if let binding { draft.choice = "binding:" + binding["id"].string }

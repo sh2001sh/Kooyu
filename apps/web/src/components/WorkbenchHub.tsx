@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowUpRight,
-  BookOpen,
   CalendarClock,
   CheckCircle2,
   Download,
@@ -16,38 +15,32 @@ import {
   X,
 } from "lucide-react";
 import type {
+  AuthorizationGrant,
   Automation,
   ClientMutationReceipt,
   Goal,
-  MemoryEntry,
+  Session,
   Snapshot,
   WorkbenchOverview,
 } from "@kodo/protocol";
 import { scheduleEditorValue, editorTrigger, describeAutomationSchedule } from "@kodo/protocol";
 import { ScheduleFields } from "./ScheduleFields";
-import { api, apiPath, hostPath, HostError } from "../lib/host-client";
+import { api, apiPath, hostPath, HostError, remoteClient } from "../lib/host-client";
 import { GoalCard, GOAL_STATUS_LABELS, VERIFICATION_LABELS } from "./GoalPanel";
-import { HARNESS_NAMES, formatDate } from "../lib/harnesses";
+import {
+  HARNESS_NAMES,
+  WORK_QUICK_TEMPLATES,
+  formatDate,
+  formatWorkspaceLabel,
+} from "../lib/harnesses";
 import "../styles/workbench-hub.css";
 
-type Tab = "work" | "artifacts" | "plans" | "project" | "memory" | "capabilities" | "templates";
-const tabs: [Tab, string][] = [
-  ["work", "工作记录"],
-  ["artifacts", "成果"],
+export { WORK_QUICK_TEMPLATES };
+export type WorkbenchTab = "work" | "artifacts" | "plans";
+const tabs: [WorkbenchTab, string][] = [
+  ["work", "进行中与目标"],
+  ["artifacts", "交付成果"],
   ["plans", "自动计划"],
-  ["project", "项目概览"],
-  ["memory", "项目约定"],
-  ["capabilities", "执行能力"],
-  ["templates", "常用任务"],
-];
-const templates = [
-  ["检查项目", "请检查当前项目的结构和运行方式，指出需要优先处理的问题，并给出依据。"],
-  ["修复并验证", "请定位并修复以下问题，运行相关检查，并交付修改说明、验证结果和剩余限制：\n"],
-  ["整理成果", "请整理本项目当前工作的成果、实际验证记录和待处理事项，并关联来源对话。"],
-  [
-    "安排计划",
-    "请帮我创建一个自动计划。先与我确认工作内容、执行时间、时区、执行设备和次数或预算边界，再请求必要授权。",
-  ],
 ];
 
 const scheduleDescription = describeAutomationSchedule;
@@ -62,13 +55,13 @@ export function WorkbenchHub({
 }: {
   snapshot: Snapshot;
   initialProject?: string;
-  initialTab?: Tab;
+  initialTab?: WorkbenchTab | "project";
   onOpenSession: (id: string) => void;
   onCompose: (projectId: string | null, text: string) => void;
   onBack?: () => void;
 }) {
   const [project, setProject] = useState(initialProject);
-  const [tab, setTab] = useState<Tab>(initialTab);
+  const [tab, setTab] = useState<WorkbenchTab>(initialTab === "project" ? "work" : initialTab);
   const [data, setData] = useState<WorkbenchOverview>();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -77,8 +70,8 @@ export function WorkbenchHub({
   const [attention, setAttention] = useState(false);
   const [goal, setGoal] = useState<Goal>();
   const [plan, setPlan] = useState<Automation>();
+  const [createPlanOpen, setCreatePlanOpen] = useState(false);
   const [preview, setPreview] = useState<WorkbenchOverview["artifacts"][number]>();
-  const [memory, setMemory] = useState<MemoryEntry | null>();
   const receiptKey = "kooyu.workbench.receipt:" + hostPath + ":" + snapshot.hostId;
   const [pending, setPending] = useState<string | null>(() => localStorage.getItem(receiptKey));
   const request = useRef(0);
@@ -101,8 +94,8 @@ export function WorkbenchHub({
     setData(undefined);
     setGoal(undefined);
     setPlan(undefined);
+    setCreatePlanOpen(false);
     setPreview(undefined);
-    setMemory(undefined);
     void reload();
     return () => {
       request.current++;
@@ -125,7 +118,7 @@ export function WorkbenchHub({
       setBusy(false);
     }
   };
-  const mutate = async (path: string, method: "POST" | "PATCH", body: unknown) => {
+  const mutate = async (path: string, method: "POST" | "PATCH", body: unknown, rethrow = false) => {
     if (busy || pending) return false;
     const requestId = crypto.randomUUID();
     setBusy(true);
@@ -155,6 +148,7 @@ export function WorkbenchHub({
         localStorage.removeItem(receiptKey);
         setPending(null);
       }
+      if (rethrow) throw e;
       setError((e as Error).message);
       return false;
     } finally {
@@ -179,18 +173,6 @@ export function WorkbenchHub({
         matches(session.title) &&
         (!attention || session.runState === "waiting-input"),
     ) ?? [];
-  const capabilityLabels: Record<string, string> = {
-    directChat: "对话",
-    historyRead: "历史读取",
-    resume: "恢复会话",
-    observeLive: "执行状态",
-    observeExternal: "外部会话",
-    steer: "途中补充",
-    cancel: "停止",
-    interaction: "询问与审批",
-    usage: "用量",
-    quota: "额度",
-  };
   const sourceButton = (id: string | null) => (
     <button type="button" className="hub-link" onClick={() => openSource(id)} disabled={!id}>
       返回来源对话 <ArrowUpRight size={14} />
@@ -210,9 +192,13 @@ export function WorkbenchHub({
           <p>跟进工作，查看成果，继续下一步。</p>
         </div>
         <div className="hub-actions">
-          <label className="hub-scope">
-            项目范围
-            <select value={project} onChange={(e) => setProject(e.target.value)}>
+          <div className="hub-scope">
+            <label htmlFor="hub-project-scope">项目范围</label>
+            <select
+              id="hub-project-scope"
+              value={project}
+              onChange={(e) => setProject(e.target.value)}
+            >
               <option value="">全部项目</option>
               {snapshot.projects.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -220,7 +206,7 @@ export function WorkbenchHub({
                 </option>
               ))}
             </select>
-          </label>
+          </div>
           <button
             type="button"
             className="icon-button"
@@ -277,29 +263,51 @@ export function WorkbenchHub({
       {loading && <p role="status">正在读取设备上的工作…</p>}
       {data && (
         <>
-          {["work", "artifacts", "plans"].includes(tab) && (
-            <div className="hub-filter">
-              <label>
-                <Search size={16} />
-                <input
-                  aria-label="搜索工作与成果"
-                  placeholder="搜索名称或内容"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                />
-              </label>
-              {tab === "work" && (
-                <label className="hub-check">
-                  <input
-                    type="checkbox"
-                    checked={attention}
-                    onChange={(e) => setAttention(e.target.checked)}
-                  />
-                  需要我处理
-                </label>
-              )}
+          {data.project && (
+            <div className="hub-project-strip" aria-label="当前项目目录摘要">
+              <div className="hub-project-strip__dirs">
+                <Folder size={15} />
+                {data.workspaces.length ? (
+                  data.workspaces.map((w) => (
+                    <code key={w.id} title={w.rootPath}>
+                      {formatWorkspaceLabel(w.rootPath) || w.rootPath}
+                    </code>
+                  ))
+                ) : (
+                  <span>尚未关联目录，可在项目管理中选择设备目录。</span>
+                )}
+              </div>
+              <button
+                type="button"
+                className="hub-link"
+                onClick={() => onCompose(project || null, "")}
+              >
+                <Plus size={15} />
+                在此新建对话
+              </button>
             </div>
           )}
+          <div className="hub-filter">
+            <label>
+              <Search size={16} />
+              <input
+                aria-label="搜索工作与成果"
+                placeholder="搜索名称或内容"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </label>
+            {tab === "work" && (
+              <label className="hub-check">
+                <input
+                  type="checkbox"
+                  checked={attention}
+                  onChange={(e) => setAttention(e.target.checked)}
+                />
+                需要我处理
+              </label>
+            )}
+          </div>
           <div className={`hub-layout ${goal || preview ? "hub-layout--detail" : ""}`}>
             <div className="hub-content">
               {tab === "work" && (
@@ -336,7 +344,7 @@ export function WorkbenchHub({
                       <span>
                         <strong>{s.title}</strong>
                         <small>
-                          {s.runState === "running" ? "正在运行" : "等待输入"} ·{" "}
+                          {s.runState === "running" ? "运行中" : "需确认"} ·{" "}
                           {HARNESS_NAMES[s.harnessId]}
                         </small>
                       </span>
@@ -450,8 +458,21 @@ export function WorkbenchHub({
                   <div className="hub-actions">
                     <button
                       type="button"
+                      className="hub-link primary-pill"
+                      disabled={
+                        blocked ||
+                        (!snapshot.sessions.some((s) => s.kind === "supervisor" && !s.archived) &&
+                          remoteClient)
+                      }
+                      onClick={() => setCreatePlanOpen(true)}
+                    >
+                      <Plus size={16} />
+                      新建计划
+                    </button>
+                    <button
+                      type="button"
                       className="hub-link"
-                      onClick={() => onCompose(project || null, templates[3]![1]!)}
+                      onClick={() => onCompose(project || null, WORK_QUICK_TEMPLATES[3]![1]!)}
                     >
                       <Plus size={16} />
                       通过对话创建计划
@@ -484,158 +505,9 @@ export function WorkbenchHub({
                   {!data.plans.some((p) => matches(p.name + p.promptTemplate)) && (
                     <HubEmpty
                       title="还没有匹配的自动计划"
-                      text="告诉主对话执行什么、何时执行；确认范围后再启用。"
+                      text="点击“新建计划”直接安排定时任务，或让主对话协助规划。"
                     />
                   )}
-                </>
-              )}
-              {tab === "project" && (
-                <>
-                  <h3>{data.project ? "项目目录" : "项目与目录"}</h3>
-                  {data.workspaces.map((w) => (
-                    <div className="hub-row" key={w.id}>
-                      <Folder size={20} />
-                      <span>
-                        <strong>
-                          {data.projects.find((p) => p.id === w.projectId)?.name ?? "未分组目录"}
-                        </strong>
-                        <code>{w.rootPath}</code>
-                      </span>
-                    </div>
-                  ))}
-                  {!data.workspaces.length && <p>尚未关联目录，可在项目管理中选择设备目录。</p>}
-                  <h3>最近对话</h3>
-                  {[...data.sessions]
-                    .filter((s) => !s.archived)
-                    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-                    .slice(0, 12)
-                    .map((s) => (
-                      <button
-                        type="button"
-                        key={s.id}
-                        className="hub-row hub-row--action"
-                        onClick={() => openSource(s.id)}
-                      >
-                        <span>
-                          <strong>{s.title}</strong>
-                          <small>
-                            {HARNESS_NAMES[s.harnessId]} ·{" "}
-                            {s.runState === "running"
-                              ? "正在运行"
-                              : s.runState === "waiting-input"
-                                ? "等待输入"
-                                : "打开对话"}
-                          </small>
-                        </span>
-                        <ArrowUpRight size={16} />
-                      </button>
-                    ))}
-                  <button
-                    type="button"
-                    className="hub-link"
-                    onClick={() => onCompose(project || null, "")}
-                  >
-                    <Plus size={16} />
-                    在此新建对话
-                  </button>
-                </>
-              )}
-              {tab === "memory" && (
-                <>
-                  <div className="hub-actions">
-                    <button
-                      type="button"
-                      className="hub-link"
-                      disabled={blocked}
-                      onClick={() => setMemory(null)}
-                    >
-                      <Plus size={16} />
-                      新增约定
-                    </button>
-                  </div>
-                  {data.memories.map((m) => (
-                    <article key={m.id} className="hub-row">
-                      <BookOpen size={19} />
-                      <div className="hub-row-body">
-                        <strong>{m.subject}</strong>
-                        <small>
-                          {m.scope === "user"
-                            ? "全局"
-                            : data.projects.find((p) => p.id === m.projectId)?.name}{" "}
-                          · {m.status === "confirmed" ? "已确认" : "待确认"} · 修订 {m.revision}
-                        </small>
-                        <p>{m.content}</p>
-                        <button
-                          type="button"
-                          className="hub-link"
-                          onClick={() => setMemory(m)}
-                          disabled={blocked}
-                        >
-                          查看与编辑
-                        </button>
-                      </div>
-                    </article>
-                  ))}
-                  {!data.memories.length && (
-                    <HubEmpty
-                      title="还没有长期约定"
-                      text="保存稳定的项目规范；临时进度留在对话中。"
-                    />
-                  )}
-                </>
-              )}
-              {tab === "capabilities" && (
-                <>
-                  <p>能力来自当前设备的真实引擎信息；手机连接后由这台设备执行。</p>
-                  {data.harnesses.map((h) => (
-                    <div className="hub-row" key={h.id}>
-                      <Monitor size={20} />
-                      <span>
-                        <strong>{h.name}</strong>
-                        <small>
-                          {h.health
-                            ? h.health.installed
-                              ? "已安装"
-                              : "未安装"
-                            : "尚未检查安装状态"}{" "}
-                          ·{" "}
-                          {h.health?.launchable === false
-                            ? "当前不可运行"
-                            : h.implementation === "partial"
-                              ? "部分支持"
-                              : "已接入"}
-                        </small>
-                        <small>
-                          {Object.entries(h.capabilities)
-                            .filter(([, v]) => v !== "unsupported")
-                            .map(
-                              ([k, v]) =>
-                                (capabilityLabels[k] ?? k) + (v === "unknown" ? "（待确认）" : ""),
-                            )
-                            .join(" / ") || "暂无已声明能力"}
-                        </small>
-                      </span>
-                    </div>
-                  ))}
-                </>
-              )}
-              {tab === "templates" && (
-                <>
-                  <p>选择后填入草稿，你可以修改后再发送。</p>
-                  {templates.map(([title, text]) => (
-                    <button
-                      type="button"
-                      className="hub-row hub-row--action"
-                      key={title}
-                      onClick={() => onCompose(project || null, text!)}
-                    >
-                      <span>
-                        <strong>{title}</strong>
-                        <small>{text}</small>
-                      </span>
-                      <ArrowUpRight size={16} />
-                    </button>
-                  ))}
                 </>
               )}
             </div>
@@ -717,21 +589,18 @@ export function WorkbenchHub({
               onOpenSession={openSource}
             />
           )}
-          {memory !== undefined && (
-            <MemoryEditor
-              memory={memory}
+          {createPlanOpen && (
+            <CreatePlanModal
+              snapshot={snapshot}
               project={project}
               disabled={blocked}
-              onClose={() => setMemory(undefined)}
-              onSave={async (body, deleting) => {
-                if (
-                  await mutate(
-                    memory ? `/memory/${memory.id}` : "/memory",
-                    memory ? "PATCH" : "POST",
-                    { ...body, status: deleting ? "deleted" : "confirmed" },
-                  )
-                )
-                  setMemory(undefined);
+              onClose={() => setCreatePlanOpen(false)}
+              onCreate={async (body) => {
+                if (await mutate("/automations", "POST", body, true)) {
+                  setCreatePlanOpen(false);
+                  return true;
+                }
+                return false;
               }}
             />
           )}
@@ -968,71 +837,286 @@ function PlanEditor({
   );
 }
 
-function MemoryEditor({
-  memory,
+function CreatePlanModal({
+  snapshot,
   project,
   disabled,
-  onSave,
+  onCreate,
   onClose,
 }: {
-  memory: MemoryEntry | null;
+  snapshot: Snapshot;
   project: string;
   disabled: boolean;
-  onSave: (body: Record<string, unknown>, deleting?: boolean) => Promise<void>;
+  onCreate: (body: Record<string, unknown>) => Promise<boolean>;
   onClose: () => void;
 }) {
-  const [subject, setSubject] = useState(memory?.subject ?? ""),
-    [content, setContent] = useState(memory?.content ?? "");
-  const body = {
-    subject,
-    content,
-    scope: memory?.scope ?? (project ? "project" : "user"),
-    projectId: memory ? memory.projectId : project || null,
-    sourceRefs: memory?.sourceRefs ?? ["user:workbench"],
-    ...(memory ? { expectedRevision: memory.revision } : {}),
+  const controllers = snapshot.sessions.filter((s) => s.kind === "supervisor" && !s.archived);
+  const initialController =
+    controllers.find((s) => (project ? s.projectId === project : true))?.id ?? "";
+  const [controllerId, setControllerId] = useState(initialController);
+  const [name, setName] = useState("");
+  const [prompt, setPrompt] = useState("");
+  const [timing, setTiming] = useState(() => scheduleEditorValue());
+  const [zone, setZone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
+  const [executorId, setExecutorId] = useState("local");
+  const [maxRuns, setMaxRuns] = useState("0");
+  const [maxCost, setMaxCost] = useState("0");
+  const [misfirePolicy, setMisfirePolicy] = useState<"coalesce" | "skip">("coalesce");
+  const [allowSchedule, setAllowSchedule] = useState(false);
+  const [grants, setGrants] = useState<AuthorizationGrant[]>([]);
+  const [executors, setExecutors] = useState<Array<{ id: string; name: string; status?: string }>>(
+    [],
+  );
+  const [occurrences, setOccurrences] = useState<string[]>([]);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const local = !remoteClient;
+
+  useEffect(() => {
+    void Promise.allSettled([
+      api<AuthorizationGrant[]>("/grants"),
+      api<Array<{ id: string; name: string; status?: string }>>("/executors"),
+    ]).then(([g, e]) => {
+      if (g.status === "fulfilled") setGrants(g.value);
+      if (e.status === "fulfilled") setExecutors(e.value);
+    });
+  }, []);
+
+  const eligibleGrant = grants.find(
+    (g) =>
+      g.controllerSessionId === controllerId &&
+      !g.revoked &&
+      (!g.expiresAt || Date.parse(g.expiresAt) > Date.now()) &&
+      g.operations.includes("automation.execute") &&
+      g.resources.includes("session:" + controllerId),
+  );
+
+  const buildPayload = (targetController: string, grantId?: string) => ({
+    controllerSessionId: targetController,
+    name: name.trim(),
+    promptTemplate: prompt.trim(),
+    trigger: editorTrigger(timing),
+    timeZone: zone.trim(),
+    executorId,
+    ...(grantId ? { grantId } : {}),
+    misfirePolicy,
+    enabled: true,
+    limits: {
+      ...(maxRuns && Number(maxRuns) > 0 ? { maxRuns: Number(maxRuns) } : {}),
+      ...(maxCost && Number(maxCost) > 0 ? { maxCostUsd: Number(maxCost) } : {}),
+    },
+  });
+
+  const validate = () => {
+    if (!name.trim() || !prompt.trim() || !zone.trim())
+      throw new Error("请填写名称、工作内容和时区。");
+    if (
+      (maxRuns && (!Number.isInteger(Number(maxRuns)) || Number(maxRuns) < 0)) ||
+      (maxCost && (!Number.isFinite(Number(maxCost)) || Number(maxCost) < 0))
+    )
+      throw new Error("次数须为非负整数，预算须为非负数；0 表示不限制。");
   };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setSaving(true);
+    try {
+      validate();
+      let targetController = controllerId;
+      if (!targetController) {
+        if (!local) throw new Error("请在运行 Kooyu 的电脑上新建主对话与自动计划。");
+        const proj = snapshot.projects.find((p) => p.id === project);
+        const created = await api<Session>("/sessions", "POST", {
+          title: proj ? `${proj.name} 主对话` : "Kooyu 主对话",
+          harnessId: "kodo",
+          kind: "supervisor",
+          projectId: project || null,
+        });
+        targetController = created.id;
+        setControllerId(created.id);
+      }
+      let grantId = eligibleGrant?.id;
+      if (!grantId) {
+        if (!local || !allowSchedule) throw new Error("请先勾选允许此主对话按计划自动执行。");
+        await api("/automations/preview", "POST", {
+          ...buildPayload(targetController),
+          requestId: crypto.randomUUID(),
+        });
+        const authorized = await api<AuthorizationGrant>("/automations/authorize", "POST", {
+          requestId: crypto.randomUUID(),
+          controllerSessionId: targetController,
+        });
+        grantId = authorized.id;
+        setGrants((prev) => [...prev, authorized]);
+      }
+      await onCreate(buildPayload(targetController, grantId));
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "保存计划失败，请重试。");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
-    <section className="hub-editor" aria-label="约定编辑">
-      <h3>{memory ? "编辑约定" : "新增约定"}</h3>
-      <p>{body.scope === "user" ? "作用于全局主对话" : "作用于所属项目"}；确认后下轮生效。</p>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          void onSave(body);
-        }}
-      >
+    <section className="hub-editor" aria-label="新建计划">
+      <div className="hub-actions">
+        <h3>新建计划</h3>
+        <button type="button" className="hub-link" onClick={onClose}>
+          <X size={16} />
+          关闭
+        </button>
+      </div>
+      <p>按设定时间把工作交给所选主对话，并把结果与交付成果统一汇入“工作”视图。</p>
+      <form onSubmit={(e) => void handleSubmit(e)}>
+        <div className="hub-field">
+          <label htmlFor="hub-plan-controller">管理的主对话</label>
+          <select
+            id="hub-plan-controller"
+            value={controllerId}
+            onChange={(e) => setControllerId(e.target.value)}
+          >
+            {!controllers.length && <option value="">保存时自动创建主对话</option>}
+            {controllers.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.title}
+              </option>
+            ))}
+          </select>
+        </div>
         <label>
-          约定主题
-          <input required value={subject} onChange={(e) => setSubject(e.target.value)} />
-        </label>
-        <label>
-          约定内容
-          <textarea
+          计划名称
+          <input
             required
-            rows={5}
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
+            maxLength={100}
+            placeholder="例如：每周项目汇总"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
           />
         </label>
-        <div className="hub-actions">
-          <button type="submit" disabled={disabled}>
-            保存并确认
-          </button>
-          {memory && (
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={() => {
-                if (confirm("删除这条长期约定？下轮起不再使用。")) void onSave(body, true);
-              }}
-            >
-              删除约定
-            </button>
+        <label>
+          工作内容
+          <textarea
+            required
+            rows={4}
+            placeholder="例如：每周整理本项目的进展，列出已完成工作、待办和风险。"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+          />
+        </label>
+        <ScheduleFields
+          value={timing}
+          onChange={(v) => {
+            setTiming(v);
+            setOccurrences([]);
+          }}
+          zone={zone}
+          onZoneChange={(z) => {
+            setZone(z);
+            setOccurrences([]);
+          }}
+        />
+        {!eligibleGrant &&
+          (local ? (
+            <label className="hub-check">
+              <input
+                type="checkbox"
+                checked={allowSchedule}
+                onChange={(e) => setAllowSchedule(e.target.checked)}
+              />
+              允许此主对话按计划自动执行
+            </label>
+          ) : (
+            <p className="hub-note">请先在运行 Kooyu 的电脑上允许此主对话运行定时任务。</p>
+          ))}
+        <details>
+          <summary>高级设置</summary>
+          {executors.length > 0 && (
+            <div className="hub-field">
+              <label htmlFor="hub-plan-executor">计划执行节点</label>
+              <select
+                id="hub-plan-executor"
+                value={executorId}
+                onChange={(e) => setExecutorId(e.target.value)}
+              >
+                {executors.map((ex) => (
+                  <option key={ex.id} value={ex.id}>
+                    {ex.name} · {ex.status === "online" ? "在线" : "离线"}
+                  </option>
+                ))}
+              </select>
+            </div>
           )}
+          <label>
+            最多执行次数（0 不限制）
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={maxRuns}
+              onChange={(e) => setMaxRuns(e.target.value)}
+            />
+          </label>
+          <label>
+            最高费用 USD（0 不限制）
+            <input
+              type="number"
+              min="0"
+              step="any"
+              value={maxCost}
+              onChange={(e) => setMaxCost(e.target.value)}
+            />
+          </label>
+          <div className="hub-field">
+            <label htmlFor="hub-plan-misfire">错过时点的处理</label>
+            <select
+              id="hub-plan-misfire"
+              value={misfirePolicy}
+              onChange={(e) => setMisfirePolicy(e.target.value as "coalesce" | "skip")}
+            >
+              <option value="coalesce">恢复后合并一次</option>
+              <option value="skip">超过一分钟则跳过</option>
+            </select>
+          </div>
+        </details>
+        <div className="hub-actions">
+          <button
+            type="submit"
+            disabled={disabled || saving || (!eligibleGrant && (!local || !allowSchedule))}
+          >
+            {saving ? "正在保存…" : "保存计划"}
+          </button>
+          <button
+            type="button"
+            disabled={disabled || saving}
+            onClick={() => {
+              setError("");
+              try {
+                validate();
+                const target = controllerId || controllers[0]?.id || "preview";
+                void api<{ occurrences: string[] }>("/automations/preview", "POST", {
+                  ...buildPayload(target),
+                  requestId: crypto.randomUUID(),
+                })
+                  .then((v) => setOccurrences(v.occurrences))
+                  .catch((err: Error) => setError(err.message));
+              } catch (failure) {
+                setError((failure as Error).message);
+              }
+            }}
+          >
+            预览运行时间
+          </button>
           <button type="button" onClick={onClose}>
             取消
           </button>
         </div>
+        {error && <p role="alert">{error}</p>}
+        {occurrences.map((at) => (
+          <p key={at}>
+            {formatDate(at)} · {zone}
+          </p>
+        ))}
       </form>
     </section>
   );

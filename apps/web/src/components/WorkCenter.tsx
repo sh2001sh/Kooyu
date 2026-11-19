@@ -1,23 +1,35 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Plus } from "lucide-react";
-import type { Automation, AuthorizationGrant, MemoryEntry, Snapshot } from "@kodo/protocol";
-import { scheduleEditorValue, editorTrigger, describeAutomationSchedule } from "@kodo/protocol";
-import { ScheduleFields } from "./ScheduleFields";
+import type { AuthorizationGrant, Session, Snapshot } from "@kodo/protocol";
 import { DateTimeSelection } from "./DateTimeSelection";
 import { api, hostPath } from "../lib/host-client";
 import { SettingsPage, SettingsSection, StatusDot } from "./settings/SettingsKit";
 import { Modal } from "./Motion";
 import "../styles/work-center.css";
 type Row = Record<string, any>;
-type Tab = "plans" | "apps" | "memory" | "environments" | "notifications" | "activity";
+type Tab = "apps" | "environments" | "notifications" | "activity";
 const tabs: [Tab, string][] = [
-  ["plans", "计划"],
   ["apps", "应用与授权"],
-  ["memory", "项目记忆"],
   ["environments", "执行环境"],
   ["notifications", "通知"],
   ["activity", "运行与核对"],
 ];
+const introductions: Record<Tab, string> = {
+  apps: "连接 GitHub、Slack 等外部服务，并指定主对话可以操作的范围。日常本地聊天无需配置。",
+  environments: "任务默认在本机运行。只有需要自动操作网页或在另一台电脑执行时，才需要添加环境。",
+  notifications: "任务完成或需要你处理时发送提醒。桌面通知无需填写地址；手机推送可选 Bark。",
+  activity: "查看后台任务状态、外部操作结果，以及需要人工核对的记录。",
+};
+const permissionNames: Record<string, string> = {
+  "automation.execute": "运行定时任务",
+  "browser.read": "读取网页",
+  "browser.write": "操作网页",
+  "github.issues.read": "读取 Issue",
+  "github.issues.create": "创建 Issue",
+  "github.comments.create": "发表评论",
+  "slack.history.read": "读取频道历史",
+  "slack.messages.create": "发送频道消息",
+};
 const words = (value: string) =>
   value
     .split(/[\n,]+/)
@@ -99,39 +111,27 @@ function PayloadForm({
   );
 }
 export function WorkCenter({ snapshot }: { snapshot: Snapshot }) {
-  const [tab, setTab] = useState<Tab>("plans"),
+  const [tab, setTab] = useState<Tab>("apps"),
     [controller, setController] = useState(
-      snapshot.sessions.find((s) => s.kind === "supervisor")?.id ?? "",
+      snapshot.sessions.find((s) => s.kind === "supervisor" && !s.archived)?.id ?? "",
     );
-  const session = snapshot.sessions.find((s) => s.id === controller),
-    projectId = session?.projectId ?? null;
+  const [createdController, setCreatedController] = useState<Session | null>(null);
+  const session =
+    snapshot.sessions.find((s) => s.id === controller) ??
+    (createdController?.id === controller ? createdController : undefined);
+  const [controllerModalOpen, setControllerModalOpen] = useState(false);
+  const [controllerProject, setControllerProject] = useState("");
+  const [notificationKind, setNotificationKind] = useState("client");
   const [data, setData] = useState<Row>({}),
     [loading, setLoading] = useState(true),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [token, setToken] = useState<Row | null>(null),
-    [detail, setDetail] = useState<Row[] | null>(null),
-    [preview, setPreview] = useState<string[]>([]);
+    [detail, setDetail] = useState<Row[] | null>(null);
   const locked = useRef(false),
     mounted = useRef(true),
     request = useRef(0);
-  const [plan, setPlan] = useState<Row>({
-    name: "",
-    promptTemplate: "",
-    timing: scheduleEditorValue(),
-    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    executorId: "local",
-    grantId: "",
-    maxRuns: "0",
-    maxCostUsd: "0",
-    misfirePolicy: "coalesce",
-  });
-  const [memory, setMemory] = useState<Row>({
-    subject: "",
-    content: "",
-    sourceRefs: "user:work-center",
-  });
   const [app, setApp] = useState<Row>({
     applicationId: "github",
     version: "1.0.0",
@@ -146,11 +146,11 @@ export function WorkCenter({ snapshot }: { snapshot: Snapshot }) {
     expiresAt: "",
   });
   const [oauthLink, setOAuthLink] = useState<string | null>(null);
-  const [planModalOpen, setPlanModalOpen] = useState(false);
   const [appModalOpen, setAppModalOpen] = useState(false);
   const [grantModalOpen, setGrantModalOpen] = useState(false);
-  const [memoryModalOpen, setMemoryModalOpen] = useState(false);
   const controllers = snapshot.sessions.filter((s) => s.kind === "supervisor" && !s.archived);
+  if (createdController && !controllers.some((s) => s.id === createdController.id))
+    controllers.push(createdController);
   const local = data.status?.localAdministrator === true;
   const load = useCallback(async () => {
     const generation = ++request.current;
@@ -159,7 +159,6 @@ export function WorkCenter({ snapshot }: { snapshot: Snapshot }) {
       plans: "/automations",
       grants: "/grants",
       apps: "/applications",
-      memory: "/memory" + (projectId ? "?projectId=" + projectId : ""),
       browsers: "/browsers",
       executors: "/executors",
       channels: "/notification-channels",
@@ -179,7 +178,7 @@ export function WorkCenter({ snapshot }: { snapshot: Snapshot }) {
     setData((old) => ({ ...old, ...next }));
     setLoading(false);
     if (failed) setError("部分数据读取失败：" + failed);
-  }, [projectId]);
+  }, []);
   useEffect(() => {
     mounted.current = true;
     void load();
@@ -216,53 +215,22 @@ export function WorkCenter({ snapshot }: { snapshot: Snapshot }) {
     void perform(work, message);
   };
   const ownGrants: AuthorizationGrant[] = (data.grants ?? []).filter(
-    (g: AuthorizationGrant) => g.controllerSessionId === controller && !g.revoked,
+    (g: AuthorizationGrant) =>
+      g.controllerSessionId === controller &&
+      !g.revoked &&
+      (!g.expiresAt || Date.parse(g.expiresAt) > Date.now()),
   );
-  const eligible = ownGrants.filter(
-    (g) =>
-      g.operations.includes("automation.execute") && g.resources.includes("session:" + controller),
-  );
-  const plans: Automation[] = (data.plans ?? []).filter(
-    (a: Automation) => a.controllerSessionId === controller,
-  );
-  const planBody = () => ({
-    requestId: crypto.randomUUID(),
-    controllerSessionId: controller,
-    name: plan.name,
-    promptTemplate: plan.promptTemplate,
-    trigger: editorTrigger(plan.timing),
-    timeZone: plan.timeZone,
-    executorId: plan.executorId ?? "local",
-    grantId: plan.grantId || eligible[0]?.id,
-    misfirePolicy: plan.misfirePolicy,
-    enabled: plan.id ? plan.enabled : true,
-    limits: {
-      ...(plan.maxRuns ? { maxRuns: Number(plan.maxRuns) } : {}),
-      ...(plan.maxCostUsd ? { maxCostUsd: Number(plan.maxCostUsd) } : {}),
-    },
-    ...(plan.id ? { expectedRevision: plan.revision } : {}),
-  });
+  const plans: Row[] = (data.plans ?? []).filter((a: Row) => a.controllerSessionId === controller);
   const connections: Row[] = data.apps?.connections ?? [];
   const versions: Row[] = data.apps?.versions ?? [];
   const selectedConnection = connections.find((c) => c.id === grant.connectionId);
-  const remember = (entry?: MemoryEntry) => {
-    setMemory(
-      entry
-        ? { ...entry, sourceRefs: entry.sourceRefs.join("\n") }
-        : { subject: "", content: "", sourceRefs: "user:work-center" },
-    );
-  };
-  const saveMemory = (status = "confirmed", entry = memory) =>
-    api("/memory" + (entry.id ? "/" + entry.id : ""), entry.id ? "PATCH" : "POST", {
-      requestId: crypto.randomUUID(),
-      scope: entry.id ? entry.scope : projectId ? "project" : "user",
-      projectId: entry.id ? entry.projectId : projectId,
-      subject: entry.subject,
-      content: entry.content,
-      sourceRefs: typeof entry.sourceRefs === "string" ? words(entry.sourceRefs) : entry.sourceRefs,
-      status,
-      ...(entry.id ? { expectedRevision: entry.revision } : {}),
-    });
+  const grantOperations: string[] = selectedConnection
+    ? (versions.find(
+        (v) =>
+          v.manifest.id === selectedConnection.applicationId &&
+          v.manifest.version === selectedConnection.version,
+      )?.manifest.requestedPermissions ?? [])
+    : ["automation.execute", "browser.read", "browser.write"];
   const internal = async (action: string, body?: Row) => {
     const r = await fetch(hostPath + "/internal/" + action, {
         method: "POST",
@@ -275,7 +243,8 @@ export function WorkCenter({ snapshot }: { snapshot: Snapshot }) {
   };
   return (
     <SettingsPage
-      title="工作中心"
+      title="自动化与通知"
+      description="管理外部应用连接、主对话授权、执行环境、通知通道与运行核对。定时计划请前往「工作 -> 自动计划」，记忆与约定请前往设置中的「记忆与约定」。"
       actions={
         <button disabled={busy || loading} onClick={() => void perform(load, "已刷新")}>
           刷新
@@ -283,32 +252,45 @@ export function WorkCenter({ snapshot }: { snapshot: Snapshot }) {
       }
     >
       <div className="work-center">
-        <div className="work-context">
-          <Field label="管理的主对话">
-            <select
-              value={controller}
-              onChange={(e) => {
-                setController(e.target.value);
-                setPlan((p) => ({ ...p, id: undefined, grantId: "" }));
-                setDetail(null);
-                setMemory({ subject: "", content: "", sourceRefs: "user:work-center" });
+        {["apps", "environments"].includes(tab) && (
+          <div className="work-context">
+            <Field label="管理的主对话">
+              <select
+                value={controller}
+                onChange={(e) => {
+                  setController(e.target.value);
+                }}
+              >
+                <option value="">
+                  {controllers.length ? "请选择主对话" : "尚无主对话，请先创建"}
+                </option>
+                {controllers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.title}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <button
+              type="button"
+              disabled={busy || loading || !local}
+              onClick={() => {
+                setControllerProject(session?.projectId ?? "");
+                setControllerModalOpen(true);
               }}
             >
-              <option value="">请选择主对话</option>
-              {controllers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.title}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <p>
-            {session?.projectId
-              ? snapshot.projects.find((p) => p.id === session.projectId)?.name
-              : "全局范围"}
-          </p>
-        </div>
-        <nav className="work-tabs" aria-label="工作中心分类">
+              新建主对话
+            </button>
+            <p>
+              {session?.projectId
+                ? snapshot.projects.find((p) => p.id === session.projectId)?.name
+                : controller
+                  ? "全局范围"
+                  : "未选择主对话"}
+            </p>
+          </div>
+        )}
+        <nav className="work-tabs" aria-label="自动化与通知分类">
           {tabs.map(([id, label]) => (
             <button
               key={id}
@@ -324,6 +306,7 @@ export function WorkCenter({ snapshot }: { snapshot: Snapshot }) {
             </button>
           ))}
         </nav>
+        <p className="work-intro">{introductions[tab]}</p>
         {error && (
           <p className="form-error" role="alert">
             {error}
@@ -334,301 +317,73 @@ export function WorkCenter({ snapshot }: { snapshot: Snapshot }) {
             {notice}
           </p>
         )}
-        {loading && <p role="status">正在读取工作配置…</p>}
-        {!controller && <Empty>请选择主对话。</Empty>}
-        {tab === "plans" && (
-          <>
-            <SettingsSection
-              title="定时任务"
-              actions={
-                <button
-                  type="button"
-                  className="primary"
-                  disabled={busy || !controller}
-                  onClick={() => {
-                    setPlan({
-                      name: "",
-                      promptTemplate: "",
-                      timing: scheduleEditorValue(),
-                      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-                      executorId: "local",
-                      grantId: "",
-                      maxRuns: "0",
-                      maxCostUsd: "0",
-                      misfirePolicy: "coalesce",
+        {loading && <p role="status">正在读取自动化与通知配置…</p>}
+        {!controller && ["apps", "environments"].includes(tab) && (
+          <p className="work-hint">
+            {controllers.length
+              ? "请选择上方的主对话，管理它的操作权限和执行环境。"
+              : "你还没有 Kooyu 主对话。普通引擎对话用于直接聊天，主对话负责管理计划与自动工作。"}
+            {!local && !loading && " 请在运行 Kooyu 的电脑上创建主对话和授权。"}
+          </p>
+        )}
+        {controllerModalOpen && (
+          <Modal title="新建主对话" onClose={() => setControllerModalOpen(false)}>
+            <form
+              className="work-form work-modal-form"
+              onSubmit={(e) =>
+                submit(
+                  e,
+                  async () => {
+                    const project = snapshot.projects.find((p) => p.id === controllerProject);
+                    const next = await api<Session>("/sessions", "POST", {
+                      title: project ? `${project.name} 主对话` : "Kooyu 主对话",
+                      harnessId: "kodo",
+                      kind: "supervisor",
+                      projectId: controllerProject || null,
                     });
-                    setPreview([]);
-                    setPlanModalOpen(true);
-                  }}
-                >
-                  <Plus size={14} />
-                  <span>新建计划</span>
-                </button>
+                    setCreatedController(next);
+                    setController(next.id);
+                    setControllerModalOpen(false);
+                  },
+                  "主对话已创建",
+                )
               }
             >
-              {!plans.length && <Empty>暂无计划。</Empty>}
-              {plans.map((a) => (
-                <div className="work-row" key={a.id}>
-                  <div>
-                    <strong>{a.name}</strong>
-                    <p>
-                      <StatusDot tone={a.enabled ? "ok" : "off"}>
-                        {a.enabled ? "已启用" : "已暂停"}
-                      </StatusDot>{" "}
-                      · {describeAutomationSchedule(a.trigger)} · {a.timeZone} · 下次{" "}
-                      {stamp(a.nextDueAt)}
-                    </p>
-                    <p>{a.promptTemplate}</p>
-                  </div>
-                  <div className="work-actions">
-                    <button
-                      disabled={busy}
-                      onClick={() => {
-                        setPlan({
-                          ...a,
-                          timing: scheduleEditorValue(a.trigger),
-                          maxRuns: a.limits.maxRuns ?? 0,
-                          maxCostUsd: a.limits.maxCostUsd ?? 0,
-                        });
-                        setPreview([]);
-                        setPlanModalOpen(true);
-                      }}
-                    >
-                      编辑
-                    </button>
-                    <button
-                      disabled={busy}
-                      onClick={() =>
-                        void perform(
-                          () =>
-                            a.enabled
-                              ? api("/automations/" + a.id + "/pause", "POST", {
-                                  expectedRevision: a.revision,
-                                })
-                              : api("/automations/" + a.id, "PATCH", {
-                                  ...a,
-                                  requestId: crypto.randomUUID(),
-                                  expectedRevision: a.revision,
-                                  enabled: true,
-                                  id: undefined,
-                                  revision: undefined,
-                                  dispatchGeneration: undefined,
-                                  effectiveAt: undefined,
-                                  nextDueAt: undefined,
-                                  createdAt: undefined,
-                                  updatedAt: undefined,
-                                }),
-                          a.enabled ? "计划已暂停；当前运行保留" : "计划已启用",
-                        )
-                      }
-                    >
-                      {a.enabled ? "暂停计划" : "启用计划"}
-                    </button>
-                    <button
-                      disabled={busy || !a.enabled}
-                      onClick={() =>
-                        void perform(
-                          () =>
-                            api("/automations/" + a.id + "/run", "POST", {
-                              requestId: crypto.randomUUID(),
-                            }),
-                          "已登记本次执行",
-                        )
-                      }
-                    >
-                      运行一次
-                    </button>
-                    <button
-                      disabled={busy}
-                      onClick={() =>
-                        void perform(
-                          async () =>
-                            setDetail(await api<Row[]>("/automations/" + a.id + "/activations")),
-                          "已读取发生记录",
-                        )
-                      }
-                    >
-                      发生记录
-                    </button>
-                  </div>
-                </div>
-              ))}
-              {detail && (
-                <div className="work-list" aria-label="计划发生记录">
-                  {detail.length ? (
-                    detail.map((a) => (
-                      <p key={a.id}>
-                        {stamp(a.scheduledFor)} · {state(a.status)} · 目标 {a.goalId ?? "尚未创建"}
-                      </p>
-                    ))
-                  ) : (
-                    <Empty>尚无发生记录。</Empty>
-                  )}
-                </div>
+              <p className="work-hint">主对话会管理计划并接收执行结果。创建后不会立即运行任务。</p>
+              {error && (
+                <p className="form-error" role="alert">
+                  {error}
+                </p>
               )}
-            </SettingsSection>
-            {planModalOpen && (
-              <Modal
-                title={plan.id ? "编辑计划" : "新建计划"}
-                onClose={() => {
-                  setPlanModalOpen(false);
-                  setPreview([]);
-                }}
-              >
-                <form
-                  className="work-form work-modal-form"
-                  onSubmit={(e) =>
-                    submit(
-                      e,
-                      async () => {
-                        await api(
-                          "/automations" + (plan.id ? "/" + plan.id : ""),
-                          plan.id ? "PATCH" : "POST",
-                          planBody(),
-                        );
-                        setPlan((p) => ({ ...p, id: undefined, name: "", promptTemplate: "" }));
-                        setPreview([]);
-                        setPlanModalOpen(false);
-                      },
-                      "计划已保存",
-                    )
-                  }
+              <Field label="主对话所属项目">
+                <select
+                  value={controllerProject}
+                  onChange={(e) => setControllerProject(e.target.value)}
                 >
-                  <Field label="计划名称">
-                    <input
-                      required
-                      placeholder="例如：每周项目汇总"
-                      maxLength={100}
-                      value={plan.name}
-                      onChange={(e) => setPlan({ ...plan, name: e.target.value })}
-                    />
-                  </Field>
-                  <Field label="工作内容与验收要求">
-                    <textarea
-                      required
-                      rows={4}
-                      value={plan.promptTemplate}
-                      onChange={(e) => setPlan({ ...plan, promptTemplate: e.target.value })}
-                    />
-                  </Field>
-                  <ScheduleFields
-                    value={plan.timing}
-                    onChange={(timing) => {
-                      setPlan({ ...plan, timing });
-                      setPreview([]);
-                    }}
-                    zone={plan.timeZone}
-                    onZoneChange={(timeZone) => {
-                      setPlan({ ...plan, timeZone });
-                      setPreview([]);
-                    }}
-                  />
-                  {!eligible.length && local && (
-                    <button
-                      type="button"
-                      disabled={busy || !controller}
-                      onClick={() =>
-                        void perform(
-                          () =>
-                            api("/automations/authorize", "POST", {
-                              requestId: crypto.randomUUID(),
-                              controllerSessionId: controller,
-                            }),
-                          "已允许此主对话运行定时任务",
-                        )
-                      }
-                    >
-                      允许此主对话运行定时任务
-                    </button>
-                  )}
-                  <details className="work-details">
-                    <summary>高级设置</summary>
-                    <Field label="计划执行节点">
-                      <select
-                        value={plan.executorId ?? "local"}
-                        onChange={(e) => setPlan({ ...plan, executorId: e.target.value })}
-                      >
-                        {(data.executors ?? []).map((e: Row) => (
-                          <option key={e.id} value={e.id}>
-                            {e.name} · {e.status === "online" ? "在线" : "离线"}
-                          </option>
-                        ))}
-                      </select>
-                    </Field>
-                    <div className="work-grid">
-                      <Field label="累计运行上限（0 不限制）">
-                        <input
-                          type="number"
-                          min="0"
-                          step="1"
-                          value={plan.maxRuns}
-                          onChange={(e) => setPlan({ ...plan, maxRuns: e.target.value })}
-                        />
-                      </Field>
-                      <Field label="累计费用上限 USD（0 不限制）">
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={plan.maxCostUsd}
-                          onChange={(e) => setPlan({ ...plan, maxCostUsd: e.target.value })}
-                        />
-                      </Field>
-                    </div>
-                    <Field label="错过时点的处理">
-                      <select
-                        value={plan.misfirePolicy}
-                        onChange={(e) => setPlan({ ...plan, misfirePolicy: e.target.value })}
-                      >
-                        <option value="coalesce">恢复后合并一次</option>
-                        <option value="skip">超过一分钟则跳过</option>
-                      </select>
-                    </Field>
-                  </details>
-                  <div className="work-actions modal-footer-actions">
-                    <button
-                      type="button"
-                      disabled={busy || !controller}
-                      onClick={() =>
-                        void perform(async () => {
-                          const p = await api<Row>("/automations/preview", "POST", planBody());
-                          setPreview(p.occurrences);
-                        }, "已生成运行时间预览")
-                      }
-                    >
-                      预览运行时间
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPlanModalOpen(false);
-                        setPreview([]);
-                      }}
-                    >
-                      取消
-                    </button>
-                    <button className="primary" disabled={busy || !controller || !eligible.length}>
-                      {busy ? "正在保存…" : "保存计划"}
-                    </button>
-                  </div>
-                  {!!preview.length && (
-                    <ol className="work-preview" aria-label="接下来三次运行">
-                      {preview.map((s) => (
-                        <li key={s}>
-                          <time>{s}</time> · {stamp(s)}
-                        </li>
-                      ))}
-                    </ol>
-                  )}
-                </form>
-              </Modal>
-            )}
-          </>
+                  <option value="">全局 · 跨项目工作</option>
+                  {snapshot.projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <div className="work-actions modal-footer-actions">
+                <button type="button" onClick={() => setControllerModalOpen(false)}>
+                  取消
+                </button>
+                <button className="primary" disabled={busy || !local}>
+                  {busy ? "正在创建…" : "创建主对话"}
+                </button>
+              </div>
+            </form>
+          </Modal>
         )}
         {tab === "apps" && (
           <>
             <SettingsSection
               title="应用连接"
+              description="先连接账号，再授予具体操作范围。连接本身不会允许主对话发送消息或修改外部内容。"
               actions={
                 local ? (
                   <button
@@ -652,7 +407,11 @@ export function WorkCenter({ snapshot }: { snapshot: Snapshot }) {
                 ) : undefined
               }
             >
-              {!connections.length && <Empty>暂无连接应用。</Empty>}
+              {!connections.length && (
+                <Empty>
+                  还没有连接应用。需要读取 GitHub Issue 或使用 Slack 时，再添加对应连接。
+                </Empty>
+              )}
               {connections.map((c) => (
                 <div className="work-row" key={c.id}>
                   <div>
@@ -660,7 +419,6 @@ export function WorkCenter({ snapshot }: { snapshot: Snapshot }) {
                     <p>
                       {c.applicationId} · {c.version} · {c.enabled ? "启用" : "已停用"}
                     </p>
-                    <small>{c.id}</small>
                   </div>
                   <div className="work-actions">
                     <button
@@ -716,8 +474,13 @@ export function WorkCenter({ snapshot }: { snapshot: Snapshot }) {
                       })
                     }
                   >
+                    {error && (
+                      <p className="form-error" role="alert">
+                        {error}
+                      </p>
+                    )}
                     <div className="work-grid">
-                      <Field label="应用版本">
+                      <Field label="选择应用">
                         <select
                           value={app.applicationId + "@" + app.version}
                           onChange={(e) => {
@@ -727,15 +490,17 @@ export function WorkCenter({ snapshot }: { snapshot: Snapshot }) {
                         >
                           {versions.map((v) => (
                             <option key={v.id} value={v.id}>
-                              {v.manifest.name} · {v.manifest.version}
+                              {v.manifest.name}
+                              {v.manifest.runtime !== "builtin" ? ` · ${v.manifest.version}` : ""}
                             </option>
                           ))}
                         </select>
                       </Field>
-                      <Field label="连接名称">
+                      <Field label="连接名称（可选）">
                         <input
                           value={app.name}
                           maxLength={100}
+                          placeholder="例如：我的 GitHub"
                           onChange={(e) => setApp({ ...app, name: e.target.value })}
                         />
                       </Field>
@@ -746,7 +511,7 @@ export function WorkCenter({ snapshot }: { snapshot: Snapshot }) {
                         onChange={(e) => setApp({ ...app, auth: e.target.value })}
                       >
                         <option value="token">访问令牌</option>
-                        <option value="oauth">OAuth（先创建连接，再配置）</option>
+                        <option value="oauth">浏览器授权（需管理员先配置 OAuth）</option>
                       </select>
                     </Field>
                     {app.auth === "token" && (
@@ -759,6 +524,9 @@ export function WorkCenter({ snapshot }: { snapshot: Snapshot }) {
                         />
                       </Field>
                     )}
+                    <p className="work-hint">
+                      访问令牌用于连接对应账号，保存在本机凭据库中。只需开通任务实际需要的账号权限。
+                    </p>
                     <div className="work-actions modal-footer-actions">
                       <button type="button" onClick={() => setAppModalOpen(false)}>
                         取消
@@ -771,40 +539,49 @@ export function WorkCenter({ snapshot }: { snapshot: Snapshot }) {
                 </Modal>
               )}
               {local && (
-                <PayloadForm
-                  title="导入应用清单"
-                  initial={{
-                    schemaVersion: 1,
-                    id: "my-mcp",
-                    version: "1.0.0",
-                    name: "My MCP",
-                    publisher: "local",
-                    description: "",
-                    runtime: "remote-mcp",
-                    endpoint: "https://example.com/mcp",
-                    requestedPermissions: ["mcp.example"],
-                    skills: [],
-                    filesManifest: {},
-                  }}
-                  disabled={busy}
-                  onSubmit={(v) => perform(() => api("/applications", "POST", v))}
-                />
-              )}
-              {local && (
-                <PayloadForm
-                  title="OAuth 客户端配置"
-                  initial={{
-                    connectionId: app.id ?? "",
-                    expectedRevision: app.revision ?? 1,
-                    clientId: "",
-                    authorizationEndpoint: "https://example.com/authorize",
-                    tokenEndpoint: "https://example.com/token",
-                    redirectUri: location.origin + hostPath + "/api/oauth/callback",
-                    scopes: [],
-                  }}
-                  disabled={busy}
-                  onSubmit={(v) => perform(() => api("/oauth/configure", "POST", v))}
-                />
+                <details className="work-details">
+                  <summary>高级集成：自定义应用与 OAuth</summary>
+                  <p>
+                    内置应用可直接使用访问令牌连接。自定义 MCP
+                    服务或部署浏览器授权时，再填写以下配置。
+                  </p>
+                  {local && (
+                    <PayloadForm
+                      title="导入应用清单"
+                      initial={{
+                        schemaVersion: 1,
+                        id: "my-mcp",
+                        version: "1.0.0",
+                        name: "My MCP",
+                        publisher: "local",
+                        description: "",
+                        runtime: "remote-mcp",
+                        endpoint: "https://example.com/mcp",
+                        requestedPermissions: ["mcp.example"],
+                        skills: [],
+                        filesManifest: {},
+                      }}
+                      disabled={busy}
+                      onSubmit={(v) => perform(() => api("/applications", "POST", v))}
+                    />
+                  )}
+                  {local && (
+                    <PayloadForm
+                      title="OAuth 客户端配置"
+                      initial={{
+                        connectionId: app.id ?? "",
+                        expectedRevision: app.revision ?? 1,
+                        clientId: "",
+                        authorizationEndpoint: "https://example.com/authorize",
+                        tokenEndpoint: "https://example.com/token",
+                        redirectUri: location.origin + hostPath + "/api/oauth/callback",
+                        scopes: [],
+                      }}
+                      disabled={busy}
+                      onSubmit={(v) => perform(() => api("/oauth/configure", "POST", v))}
+                    />
+                  )}
+                </details>
               )}
               {connections
                 .filter((c) => c.enabled)
@@ -835,15 +612,16 @@ export function WorkCenter({ snapshot }: { snapshot: Snapshot }) {
             )}
             <SettingsSection
               title="明确授权"
+              description="指定所选主对话可以做什么、可以操作哪些仓库或频道。定时任务的运行授权可在保存计划时直接勾选。"
               actions={
                 local ? (
                   <button
                     type="button"
                     className="primary"
-                    disabled={busy}
+                    disabled={busy || !controller}
                     onClick={() => {
                       setGrant({
-                        connectionId: connections[0]?.id ?? "",
+                        connectionId: "",
                         operations: "",
                         resources: "",
                         expiresAt: "",
@@ -861,7 +639,11 @@ export function WorkCenter({ snapshot }: { snapshot: Snapshot }) {
               {ownGrants.map((g) => (
                 <div className="work-row" key={g.id}>
                   <div>
-                    <strong>{g.operations.join("、")}</strong>
+                    <strong>
+                      {g.operations
+                        .map((operation) => permissionNames[operation] ?? operation)
+                        .join("、")}
+                    </strong>
                     <p>{g.resources.join("、")}</p>
                     <small>
                       {g.applicationId
@@ -912,10 +694,22 @@ export function WorkCenter({ snapshot }: { snapshot: Snapshot }) {
                       )
                     }
                   >
+                    {error && (
+                      <p className="form-error" role="alert">
+                        {error}
+                      </p>
+                    )}
                     <Field label="授权的应用连接">
                       <select
                         value={grant.connectionId}
-                        onChange={(e) => setGrant({ ...grant, connectionId: e.target.value })}
+                        onChange={(e) =>
+                          setGrant({
+                            ...grant,
+                            connectionId: e.target.value,
+                            operations: "",
+                            resources: "",
+                          })
+                        }
                       >
                         <option value="">主对话工具（计划 / 浏览器）</option>
                         {connections
@@ -927,15 +721,52 @@ export function WorkCenter({ snapshot }: { snapshot: Snapshot }) {
                           ))}
                       </select>
                     </Field>
-                    <Field label="允许的操作（每行一个）">
-                      <textarea
-                        required
-                        rows={2}
-                        value={grant.operations}
-                        placeholder="automation.execute"
-                        onChange={(e) => setGrant({ ...grant, operations: e.target.value })}
-                      />
-                    </Field>
+                    <fieldset className="work-permissions">
+                      <legend>允许主对话做什么</legend>
+                      {grantOperations.map((operation) => (
+                        <label className="work-check" key={operation}>
+                          <input
+                            type="checkbox"
+                            checked={words(grant.operations).includes(operation)}
+                            onChange={(e) => {
+                              const operations = words(grant.operations).filter(
+                                (v) => v !== operation,
+                              );
+                              if (e.target.checked) operations.push(operation);
+                              setGrant({
+                                ...grant,
+                                operations: operations.join("\n"),
+                                resources:
+                                  operation === "automation.execute" &&
+                                  e.target.checked &&
+                                  !grant.resources
+                                    ? `session:${controller}`
+                                    : grant.resources,
+                              });
+                            }}
+                          />
+                          {permissionNames[operation] ?? operation}
+                        </label>
+                      ))}
+                    </fieldset>
+                    <p className="work-hint">
+                      {selectedConnection?.applicationId === "github"
+                        ? "资源填写仓库名，例如 owner/repo。"
+                        : selectedConnection?.applicationId === "slack"
+                          ? "资源填写允许访问的 Slack 频道 ID。"
+                          : "定时任务会自动填写当前主对话范围；网页权限填写允许访问的网站，例如 https://example.com。"}
+                    </p>
+                    <details className="work-details">
+                      <summary>高级：手动填写操作名称</summary>
+                      <Field label="允许的操作（每行一个）">
+                        <textarea
+                          rows={2}
+                          value={grant.operations}
+                          placeholder="automation.execute"
+                          onChange={(e) => setGrant({ ...grant, operations: e.target.value })}
+                        />
+                      </Field>
+                    </details>
                     <Field label="允许的资源（每行一个，精确匹配）">
                       <textarea
                         required
@@ -958,7 +789,10 @@ export function WorkCenter({ snapshot }: { snapshot: Snapshot }) {
                       <button type="button" onClick={() => setGrantModalOpen(false)}>
                         取消
                       </button>
-                      <button className="primary" disabled={busy || !controller}>
+                      <button
+                        className="primary"
+                        disabled={busy || !controller || !words(grant.operations).length}
+                      >
                         授予以上范围
                       </button>
                     </div>
@@ -967,13 +801,15 @@ export function WorkCenter({ snapshot }: { snapshot: Snapshot }) {
               )}
             </SettingsSection>
             {local && (
-              <SettingsSection title="GitHub 事件入口">
+              <details className="work-details">
+                <summary>高级：GitHub 事件触发</summary>
+                <p>需要在 Issue 等事件发生时触发工作，再配置 Webhook。定时计划无需配置。</p>
                 <PayloadForm
                   title="配置 GitHub Webhook"
                   initial={{
                     requestId: "",
                     name: "GitHub",
-                    automationId: plans.find((p) => p.trigger.kind === "webhook")?.id ?? "",
+                    automationId: plans.find((p: Row) => p.trigger.kind === "webhook")?.id ?? "",
                     secret: "",
                     repositories: [],
                     actors: [],
@@ -999,280 +835,237 @@ export function WorkCenter({ snapshot }: { snapshot: Snapshot }) {
                   查看事件入口
                 </button>
                 {detail && <pre className="work-json">{JSON.stringify(detail, null, 2)}</pre>}
-              </SettingsSection>
+              </details>
             )}
           </>
         )}
-        {tab === "memory" && (
-          <SettingsSection
-            title={projectId ? "项目约定与记忆" : "全局约定与记忆"}
-            actions={
-              <button
-                type="button"
-                className="primary"
-                disabled={busy}
-                onClick={() => {
-                  remember();
-                  setMemoryModalOpen(true);
-                }}
-              >
-                <Plus size={14} />
-                <span>新建记忆</span>
-              </button>
-            }
-          >
-            {!(data.memory ?? []).length && <Empty>暂无记忆。</Empty>}
-            {(data.memory ?? [])
-              .filter((m: MemoryEntry) => m.status !== "deleted")
-              .map((m: MemoryEntry) => (
-                <div className="work-row" key={m.id}>
-                  <div>
-                    <strong>{m.subject}</strong>
-                    <p>{m.content}</p>
-                    <small>
-                      {state(m.status)} · 修订 {m.revision} · 来源 {m.sourceRefs.join("、")}
-                    </small>
-                  </div>
-                  <div className="work-actions">
-                    {m.status === "proposed" && (
-                      <button
-                        disabled={busy}
-                        onClick={() => void perform(() => saveMemory("confirmed", m), "记忆已确认")}
-                      >
-                        确认记忆
-                      </button>
-                    )}
-                    <button
-                      onClick={() => {
-                        remember(m);
-                        setMemoryModalOpen(true);
-                      }}
-                    >
-                      纠正
-                    </button>
-                    <button
-                      disabled={busy}
-                      onClick={() =>
-                        void perform(() => saveMemory("deleted", m), "记忆已删除，下轮不再使用")
-                      }
-                    >
-                      删除
-                    </button>
-                  </div>
-                </div>
-              ))}
-            {memoryModalOpen && (
-              <Modal
-                title={memory.id ? "纠正记忆" : "新建记忆"}
-                onClose={() => setMemoryModalOpen(false)}
-              >
-                <form
-                  className="work-form work-modal-form"
-                  onSubmit={(e) =>
-                    submit(
-                      e,
-                      async () => {
-                        await saveMemory();
-                        remember();
-                        setMemoryModalOpen(false);
-                      },
-                      "记忆已保存，下轮生效",
-                    )
-                  }
-                >
-                  <Field label="记忆主题">
-                    <input
-                      required
-                      maxLength={200}
-                      value={memory.subject}
-                      onChange={(e) => setMemory({ ...memory, subject: e.target.value })}
-                    />
-                  </Field>
-                  <Field label="约定内容">
-                    <textarea
-                      required
-                      rows={4}
-                      value={memory.content}
-                      onChange={(e) => setMemory({ ...memory, content: e.target.value })}
-                    />
-                  </Field>
-                  <Field label="来源引用（每行一个）">
-                    <textarea
-                      required
-                      rows={2}
-                      value={memory.sourceRefs}
-                      onChange={(e) => setMemory({ ...memory, sourceRefs: e.target.value })}
-                    />
-                  </Field>
-                  <div className="work-actions modal-footer-actions">
-                    <button type="button" onClick={() => setMemoryModalOpen(false)}>
-                      取消
-                    </button>
-                    <button className="primary" disabled={busy}>
-                      保存已确认记忆
-                    </button>
-                  </div>
-                </form>
-              </Modal>
-            )}
-          </SettingsSection>
-        )}
         {tab === "environments" && (
           <>
-            <SettingsSection title="受管浏览器">
-              {!data.browsers?.available && (
-                <Empty>
-                  尚未安装 Chromium。请在 Host 运行 npx playwright install chromium，或设置
-                  KOOYU_CHROMIUM_PATH。
-                </Empty>
-              )}
-              {(data.browsers?.environments ?? [])
-                .filter((b: Row) => b.controllerSessionId === controller)
-                .map((b: Row) => (
-                  <div className="work-row" key={b.id}>
-                    <div>
-                      <strong>{b.name}</strong>
-                      <p>{b.origins.join("、")}</p>
-                      <small>
-                        {b.lease?.owner === "user"
-                          ? "用户控制"
-                          : b.lease
-                            ? "Agent 租约至 " + stamp(new Date(b.lease.expiresAt).toISOString())
-                            : "无有效租约"}{" "}
-                        · 代次 {b.generation}
-                      </small>
-                    </div>
-                    <div className="work-actions">
-                      <button
-                        disabled={!local || busy || !data.browsers?.available}
-                        onClick={() =>
-                          void perform(
-                            () =>
-                              api("/browsers/" + b.id + "/control", "POST", {
-                                expectedGeneration: b.generation,
-                              }),
-                            "已暂停 Agent 浏览器写入，请在 Host 浏览器窗口登录",
-                          )
-                        }
-                      >
-                        手动登录 / 接管
-                      </button>
-                      <button
-                        disabled={!local || busy || b.lease?.owner !== "user"}
-                        onClick={() =>
-                          void perform(
-                            () =>
-                              api("/browsers/" + b.id + "/return", "POST", {
-                                expectedGeneration: b.generation,
-                              }),
-                            "浏览器已交还 Agent",
-                          )
-                        }
-                      >
-                        交还控制权
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              {local && (
-                <form
-                  className="work-form"
-                  onSubmit={(e) => {
-                    const f = new FormData(e.currentTarget);
-                    submit(
-                      e,
-                      () =>
-                        api("/browsers", "POST", {
-                          name: f.get("name"),
-                          controllerSessionId: controller,
-                          origins: words(String(f.get("origins"))),
-                        }),
-                      "浏览器环境已创建，请授予 browser.read / browser.write 与站点范围",
-                    );
-                  }}
-                >
-                  <Field label="浏览器环境名称">
-                    <input required name="name" maxLength={100} />
-                  </Field>
-                  <Field label="允许的站点 origin（每行一个）">
-                    <textarea required name="origins" rows={3} placeholder="https://example.com" />
-                  </Field>
-                  <button disabled={busy || !controller}>创建浏览器环境</button>
-                  <p className="detail-empty-note">
-                    手动登录需 Host 有图形桌面；无桌面服务器请先在同一运行环境配置显示服务。
-                  </p>
-                </form>
-              )}
-            </SettingsSection>
-            <SettingsSection title="执行节点">
-              {(data.executors ?? []).map((e: Row) => (
-                <div className="work-row" key={e.id}>
-                  <div>
-                    <strong>{e.name}</strong>
+            <div className="work-runtime-default">
+              <StatusDot tone="ok">默认在本机执行</StatusDot>
+              <p>本机聊天和计划使用现有引擎与项目目录，无需新增节点。</p>
+            </div>
+            <details className="work-details">
+              <summary>网页自动操作（可选）</summary>
+              <p>独立浏览器用于让主对话访问指定网站。需要登录时可手动接管，再交还给主对话。</p>
+              <SettingsSection title="受管浏览器">
+                {!data.browsers?.available && (
+                  <details className="work-details">
+                    <summary>浏览器组件尚未就绪 · 查看安装说明</summary>
                     <p>
-                      {state(e.status)} · {e.kind} ·{" "}
-                      {e.capabilities.join("、") || "等待节点上报能力"}
+                      尚未安装 Chromium。请在 Host 运行 npx playwright install chromium，或设置
+                      KOOYU_CHROMIUM_PATH。
                     </p>
-                    <small>{e.id}</small>
-                  </div>
-                  {e.id !== "local" && (
-                    <button
-                      disabled={!local || busy || !e.enabled}
-                      onClick={() =>
-                        void perform(
-                          () => api("/executors/" + e.id + "/revoke", "POST", {}),
-                          "执行节点已撤销",
-                        )
-                      }
-                    >
-                      撤销节点
-                    </button>
-                  )}
-                </div>
-              ))}
-              {local && (
-                <>
+                  </details>
+                )}
+                {(data.browsers?.environments ?? [])
+                  .filter((b: Row) => b.controllerSessionId === controller)
+                  .map((b: Row) => (
+                    <div className="work-row" key={b.id}>
+                      <div>
+                        <strong>{b.name}</strong>
+                        <p>{b.origins.join("、")}</p>
+                        <small>
+                          {b.lease?.owner === "user"
+                            ? "用户控制"
+                            : b.lease
+                              ? "Agent 租约至 " + stamp(new Date(b.lease.expiresAt).toISOString())
+                              : "无有效租约"}{" "}
+                          · 代次 {b.generation}
+                        </small>
+                      </div>
+                      <div className="work-actions">
+                        <button
+                          disabled={!local || busy || !data.browsers?.available}
+                          onClick={() =>
+                            void perform(
+                              () =>
+                                api("/browsers/" + b.id + "/control", "POST", {
+                                  expectedGeneration: b.generation,
+                                }),
+                              "已暂停 Agent 浏览器写入，请在 Host 浏览器窗口登录",
+                            )
+                          }
+                        >
+                          手动登录 / 接管
+                        </button>
+                        <button
+                          disabled={!local || busy || b.lease?.owner !== "user"}
+                          onClick={() =>
+                            void perform(
+                              () =>
+                                api("/browsers/" + b.id + "/return", "POST", {
+                                  expectedGeneration: b.generation,
+                                }),
+                              "浏览器已交还 Agent",
+                            )
+                          }
+                        >
+                          交还控制权
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                {local && (
                   <form
                     className="work-form"
                     onSubmit={(e) => {
                       const f = new FormData(e.currentTarget);
                       submit(
                         e,
-                        async () =>
-                          setToken(await api<Row>("/executors", "POST", { name: f.get("name") })),
-                        "已生成独立节点凭据，请保存到节点私有 token 文件",
+                        () =>
+                          api("/browsers", "POST", {
+                            name: String(f.get("name")).trim() || "网页任务浏览器",
+                            controllerSessionId: controller,
+                            origins: words(String(f.get("origins"))).map(
+                              (value) => new URL(value).origin,
+                            ),
+                          }),
+                        "浏览器环境已创建，请授予 browser.read / browser.write 与站点范围",
                       );
                     }}
                   >
-                    <Field label="新节点名称">
-                      <input name="name" required maxLength={100} />
+                    <Field label="浏览器环境名称（可选）">
+                      <input name="name" maxLength={100} placeholder="网页任务浏览器" />
                     </Field>
-                    <button disabled={busy}>生成节点凭据</button>
+                    <Field label="允许访问的网站（每行一个）">
+                      <textarea
+                        required
+                        name="origins"
+                        rows={3}
+                        placeholder="https://example.com"
+                      />
+                    </Field>
+                    <button disabled={busy || !controller || !data.browsers?.available}>
+                      创建浏览器环境
+                    </button>
+                    {!controller && (
+                      <p className="work-hint">先在上方选择或创建主对话，再添加网页环境。</p>
+                    )}
+                    <p className="detail-empty-note">
+                      手动登录需 Host 有图形桌面；无桌面服务器请先在同一运行环境配置显示服务。
+                    </p>
                   </form>
-                  {token && (
-                    <div className="work-secret">
-                      <p>仅在本次页面显示。保存后关闭。</p>
-                      <pre>
-                        {JSON.stringify({ executorId: token.id, token: token.token }, null, 2)}
-                      </pre>
-                      <button onClick={() => setToken(null)}>关闭凭据</button>
+                )}
+              </SettingsSection>
+            </details>
+            <details className="work-details">
+              <summary>在其他电脑执行（可选）</summary>
+              <p>将任务交给另一台电脑或服务器。仅使用本机时可以跳过。</p>
+              <SettingsSection title="执行节点">
+                {(data.executors ?? []).map((e: Row) => (
+                  <div className="work-row" key={e.id}>
+                    <div>
+                      <strong>{e.name}</strong>
+                      <p>
+                        {state(e.status)} · {e.kind === "local" ? "本机" : "远程电脑"} ·{" "}
+                        {e.capabilities.join("、") || "等待节点上报能力"}
+                      </p>
                     </div>
-                  )}
-                  <PayloadForm
-                    title="添加节点工作目录"
-                    initial={{ executorId: "", projectId: projectId, rootPath: "" }}
-                    disabled={busy}
-                    onSubmit={({ executorId, ...v }) =>
-                      perform(() => api("/executors/" + executorId + "/workspace", "POST", v))
-                    }
-                  />
-                </>
-              )}
-            </SettingsSection>
+                    {e.id !== "local" && (
+                      <button
+                        disabled={!local || busy || !e.enabled}
+                        onClick={() =>
+                          void perform(
+                            () => api("/executors/" + e.id + "/revoke", "POST", {}),
+                            "执行节点已撤销",
+                          )
+                        }
+                      >
+                        撤销节点
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {local && (
+                  <>
+                    <form
+                      className="work-form"
+                      onSubmit={(e) => {
+                        const f = new FormData(e.currentTarget);
+                        submit(
+                          e,
+                          async () =>
+                            setToken(await api<Row>("/executors", "POST", { name: f.get("name") })),
+                          "已生成独立节点凭据，请保存到节点私有 token 文件",
+                        );
+                      }}
+                    >
+                      <Field label="新节点名称">
+                        <input name="name" required maxLength={100} />
+                      </Field>
+                      <button disabled={busy}>生成节点凭据</button>
+                    </form>
+                    {token && (
+                      <div className="work-secret">
+                        <p>仅在本次页面显示。保存后关闭。</p>
+                        <pre>
+                          {JSON.stringify({ executorId: token.id, token: token.token }, null, 2)}
+                        </pre>
+                        <button onClick={() => setToken(null)}>关闭凭据</button>
+                      </div>
+                    )}
+                    <details className="work-details">
+                      <summary>添加节点工作目录</summary>
+                      <form
+                        onSubmit={(e) => {
+                          const f = new FormData(e.currentTarget);
+                          submit(
+                            e,
+                            () =>
+                              api(`/executors/${f.get("executorId")}/workspace`, "POST", {
+                                projectId: f.get("projectId") || null,
+                                rootPath: String(f.get("rootPath")).trim(),
+                              }),
+                            "节点工作目录已登记",
+                          );
+                        }}
+                      >
+                        <Field label="执行电脑">
+                          <select required name="executorId" defaultValue="">
+                            <option value="" disabled>
+                              请选择已连接的远程电脑
+                            </option>
+                            {(data.executors ?? [])
+                              .filter((e: Row) => e.id !== "local" && e.enabled)
+                              .map((e: Row) => (
+                                <option key={e.id} value={e.id}>
+                                  {e.name}
+                                </option>
+                              ))}
+                          </select>
+                        </Field>
+                        <Field label="所属项目">
+                          <select name="projectId" defaultValue={session?.projectId ?? ""}>
+                            <option value="">不关联项目</option>
+                            {snapshot.projects.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.name}
+                              </option>
+                            ))}
+                          </select>
+                        </Field>
+                        <Field label="该电脑上的文件夹路径">
+                          <input
+                            required
+                            name="rootPath"
+                            placeholder="例如：D:\\projects\\my-app 或 /srv/my-app"
+                          />
+                        </Field>
+                        <button disabled={busy}>保存工作目录</button>
+                      </form>
+                    </details>
+                  </>
+                )}
+              </SettingsSection>
+            </details>
           </>
         )}
         {tab === "notifications" && (
-          <SettingsSection title="结果提醒">
+          <SettingsSection
+            title="结果提醒"
+            description="桌面通知需要 Kooyu 界面保持运行并获得系统通知权限。页面内的待处理记录始终可以查看。"
+          >
             {(data.channels ?? []).map((c: Row) => (
               <div className="work-row" key={c.id}>
                 <div>
@@ -1338,27 +1131,46 @@ export function WorkCenter({ snapshot }: { snapshot: Snapshot }) {
               }}
             >
               <Field label="通知通道">
-                <select name="kind">
+                <select
+                  name="kind"
+                  value={notificationKind}
+                  onChange={(e) => setNotificationKind(e.target.value)}
+                >
                   <option value="client">客户端系统通知（需保持客户端运行）</option>
                   <option value="bark">Bark</option>
                 </select>
               </Field>
-              <Field label="Bark 地址（仅 Bark 必填）">
-                <input
-                  name="endpoint"
-                  type="password"
-                  placeholder="https://api.day.app/设备密钥"
-                  autoComplete="new-password"
-                />
-              </Field>
+              {notificationKind === "bark" ? (
+                <>
+                  <p className="work-hint">
+                    在手机 Bark
+                    应用中复制推送地址并粘贴到下方。发送手机提醒时，推送服务会接收通知内容。
+                  </p>
+                  <Field label="Bark 推送地址">
+                    <input
+                      required
+                      name="endpoint"
+                      type="password"
+                      placeholder="https://api.day.app/设备密钥"
+                      autoComplete="new-password"
+                    />
+                  </Field>
+                </>
+              ) : (
+                <p className="work-hint">无需填写地址。点击下方按钮后，允许系统通知即可。</p>
+              )}
               <label className="work-check">
                 <input name="preview" type="checkbox" />
-                允许锁屏显示正文预览
+                允许通知显示正文预览
               </label>
               <button disabled={busy}>启用结果提醒</button>
             </form>
             <details className="work-details">
               <summary>iOS APNs 服务</summary>
+              <p>
+                自部署 iOS 推送服务时使用，需 Apple 开发者账号和推送密钥。桌面通知和 Bark
+                无需配置此项。
+              </p>
               <p>
                 {data.apns?.enabled ? "Host 推送服务已启用" : "Host 推送服务未启用"} · 配置修订{" "}
                 {data.apns?.revision ?? 0}

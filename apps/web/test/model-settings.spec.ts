@@ -56,11 +56,13 @@ test("desktop and phone persist model/effort changes without opening or replacin
       path: "../../output/playwright/model-settings-mobile.png",
       animations: "disabled",
     });
-    const harnessRect = await page.locator(".composer-harness").boundingBox();
+    const plusRect = await page
+      .getByRole("button", { name: "添加附件、权限或模板", exact: true })
+      .boundingBox();
     const modelRect = await page
       .getByRole("button", { name: "模型配置", exact: true })
       .boundingBox();
-    expect(modelRect!.x).toBeGreaterThanOrEqual(harnessRect!.x + harnessRect!.width);
+    expect(modelRect!.x).toBeGreaterThanOrEqual(plusRect!.x + plusRect!.width);
     expect(
       (await page.locator(".composer-model-button__label").boundingBox())!.width,
     ).toBeGreaterThan(25);
@@ -112,10 +114,13 @@ test("unknown model capabilities stay read-only and do not offer handwritten eff
       await page.getByRole("button", { name: "模型配置", exact: true }).click();
       const form = page.locator(".ms-popover");
       await expect(form.getByLabel("模型自动参数")).toContainText("参数未确认");
-      await page.getByRole("button", { name: "思考强度", exact: true }).click();
-      const reasoningPopover = page.locator(".ms-popover--reasoning");
-      await expect(reasoningPopover.getByLabel("会话思考强度")).toBeDisabled();
-      await expect(reasoningPopover.locator(".reasoning-slider__scale")).toHaveText("原生");
+      if (viewport.width >= 761) {
+        await page.getByRole("button", { name: "思考强度", exact: true }).click();
+      }
+      const reasoningContainer =
+        viewport.width >= 761 ? page.locator(".ms-popover--reasoning") : form;
+      await expect(reasoningContainer.getByLabel("会话思考强度")).toBeDisabled();
+      await expect(reasoningContainer.locator(".reasoning-slider__scale")).toHaveText("原生");
       const response = await page.request.post(`/api/sessions/${session.id}/settings`, {
         data: {
           requestId: crypto.randomUUID(),
@@ -365,7 +370,11 @@ test("OpenCode exposes tool rules in new and existing conversations", async ({ p
       })
       .toBe("opencode-ask");
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.getByRole("button", { name: "会话权限" }).click();
+    await page.getByRole("button", { name: "添加附件、权限或模板", exact: true }).click();
+    await page
+      .getByRole("dialog", { name: "添加与设置" })
+      .getByRole("button", { name: "会话权限" })
+      .click();
     await expect(page.getByRole("button", { name: /原生代理规则/ })).toBeVisible();
     await page.screenshot({
       path: "../../output/playwright/opencode-permissions-mobile.png",

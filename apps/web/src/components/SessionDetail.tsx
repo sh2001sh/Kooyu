@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { FolderPlus, X } from "lucide-react";
 import type {
   Command,
@@ -12,6 +12,7 @@ import type {
 import { GoalPanel } from "./GoalPanel";
 import { SessionOverview } from "./SessionInsights";
 import { api } from "../lib/host-client";
+import { formatWorkspaceLabel } from "../lib/harnesses";
 import { HarnessBadge } from "./KodoBrand";
 import { NativeRecovery } from "./NativeRecovery";
 import { WorkspacePanel } from "./WorkspacePanel";
@@ -53,6 +54,9 @@ export function SessionDetail({
 }: SessionDetailProps) {
   const tab = detail === "manage" ? "timeline" : detail;
   const native = !["files", "changes", "timeline", "manage", "goals"].includes(detail);
+  const [customWidth, setCustomWidth] = useState<number | null>(null);
+  const [resizing, setResizing] = useState(false);
+  const paneRef = useRef<HTMLElement>(null);
   const tabs = [
     ...(session.kind === "supervisor" ? ([["goals", "目标"]] as const) : []),
     ["files", "文件"],
@@ -68,13 +72,50 @@ export function SessionDetail({
     document.addEventListener("keydown", escape);
     return () => document.removeEventListener("keydown", escape);
   }, [onClose]);
+
+  const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0 || !paneRef.current) return;
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = paneRef.current.getBoundingClientRect().width;
+    setResizing(true);
+    const onMove = (ev: PointerEvent) => {
+      const next = Math.max(280, Math.min(720, Math.round(startW + (startX - ev.clientX))));
+      setCustomWidth(next);
+    };
+    const onUp = () => {
+      setResizing(false);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
   return (
     <aside
+      ref={paneRef}
+      style={
+        customWidth
+          ? ({ "--inspector-custom-width": `${customWidth}px` } as CSSProperties)
+          : undefined
+      }
       className={
-        "detail-pane" + (["files", "changes"].includes(tab) ? " detail-pane--workspace" : "")
+        "detail-pane" +
+        (["files", "changes"].includes(tab) ? " detail-pane--workspace" : "") +
+        (resizing ? " is-resizing" : "")
       }
       aria-label="会话检查器"
     >
+      <div
+        className="detail-pane__resizer"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="调整检查器宽度"
+        title="拖拽调整宽度（双击重置）"
+        onPointerDown={startResize}
+        onDoubleClick={() => setCustomWidth(null)}
+      />
       <div className="detail-pane__header">
         <div className="detail-pane__identity">
           <HarnessBadge harnessId={session.harnessId} size="xs" tone="tinted" />
@@ -252,7 +293,7 @@ function ManagePanel({
                 <option value="">未绑定</option>
                 {snapshot.workspaces.map((w) => (
                   <option key={w.id} value={w.id}>
-                    {w.rootPath}
+                    {formatWorkspaceLabel(w.rootPath) || w.rootPath}
                   </option>
                 ))}
               </select>

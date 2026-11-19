@@ -3,12 +3,14 @@ import type {
   ClientMutationReceipt,
   GlobalMemorySettings as MemorySettings,
   MemoryEntry,
+  Snapshot,
 } from "@kodo/protocol";
 import { api, apiPath, HostError } from "../../lib/host-client";
 import { SettingsPage, SettingsSection, SettingsRow, Toggle } from "./SettingsKit";
 
-export function GlobalMemorySettings({ hostId }: { hostId: string }) {
+export function GlobalMemorySettings({ hostId, snapshot }: { hostId: string; snapshot: Snapshot }) {
   const [settings, setSettings] = useState<MemorySettings>();
+  const [projectId, setProjectId] = useState("");
   const [entries, setEntries] = useState<MemoryEntry[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -22,17 +24,25 @@ export function GlobalMemorySettings({ hostId }: { hostId: string }) {
     }
   }, [editing]);
   const [subject, setSubject] = useState(""),
-    [content, setContent] = useState("");
+    [content, setContent] = useState(""),
+    [sourceRefsText, setSourceRefsText] = useState("");
   const key = `kooyu.memory.receipt:${apiPath("")}:${hostId}`;
   const [pending, setPending] = useState<string | null>(() => localStorage.getItem(key));
   const reload = useCallback(async () => {
     const [config, memories] = await Promise.all([
       api<MemorySettings>("/memory/settings"),
-      api<MemoryEntry[]>("/memory"),
+      api<MemoryEntry[]>(
+        "/memory" + (projectId ? "?projectId=" + encodeURIComponent(projectId) : ""),
+      ),
     ]);
     setSettings(config);
-    setEntries(memories.filter((e) => e.scope === "user"));
-  }, []);
+    setEntries(
+      memories.filter(
+        (e) =>
+          e.status !== "deleted" && (projectId ? e.projectId === projectId : e.scope === "user"),
+      ),
+    );
+  }, [projectId]);
   useEffect(() => {
     void reload().catch((e) => setError((e as Error).message));
   }, [reload]);
@@ -92,23 +102,22 @@ export function GlobalMemorySettings({ hostId }: { hostId: string }) {
     setEditing(entry);
     setSubject(entry?.subject ?? "");
     setContent(entry?.content ?? "");
+    setSourceRefsText(entry?.sourceRefs.join("\n") ?? "");
   };
   const saveEntry = (entry: MemoryEntry, status: "confirmed" | "deleted") =>
     mutate(`/memory/${entry.id}`, "PATCH", {
       expectedRevision: entry.revision,
-      scope: "user",
-      projectId: null,
+      scope: entry.scope,
+      projectId: entry.projectId,
       subject: entry.subject,
       content: entry.content,
       sourceRefs: entry.sourceRefs,
       status,
     });
+  const selectedProject = snapshot.projects.find((p) => p.id === projectId);
   const disabled = busy || !!pending;
   return (
-    <SettingsPage
-      title="全局记忆"
-      description="Kooyu 主对话记住稳定偏好与长期约定，同一设备的桌面和已配对手机共用。"
-    >
+    <SettingsPage title="记忆与约定">
       <div role="status" aria-live="polite">
         {notice}
       </div>
@@ -117,6 +126,27 @@ export function GlobalMemorySettings({ hostId }: { hostId: string }) {
           {error}
         </p>
       )}
+      <SettingsSection title="记忆适用范围">
+        <SettingsRow label="适用范围" htmlFor="memory-scope-select">
+          <select
+            id="memory-scope-select"
+            value={projectId}
+            onChange={(e) => {
+              setProjectId(e.target.value);
+              setEditing(undefined);
+              setError("");
+              setNotice("");
+            }}
+          >
+            <option value="">全局 · 所有项目</option>
+            {snapshot.projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </SettingsRow>
+      </SettingsSection>
       {pending && (
         <SettingsSection title="待核对的保存操作">
           <SettingsRow label="保存结果待确认" description="请先核对回执，不会自动重发。">
@@ -135,10 +165,7 @@ export function GlobalMemorySettings({ hostId }: { hostId: string }) {
           </SettingsRow>
         </SettingsSection>
       )}
-      <SettingsSection
-        title="记忆偏好"
-        description="设置立即保存；关闭后保留已有记忆，可随时重新启用。"
-      >
+      <SettingsSection title="记忆偏好">
         {!settings ? (
           <SettingsRow label="正在读取配置">
             <button onClick={() => void reload().catch((e) => setError((e as Error).message))}>
@@ -147,10 +174,7 @@ export function GlobalMemorySettings({ hostId }: { hostId: string }) {
           </SettingsRow>
         ) : (
           <>
-            <SettingsRow
-              label="启用全局记忆"
-              description="在 Kooyu 主对话中使用并形成跨项目的用户偏好。关闭后不再读取或形成新记忆。"
-            >
+            <SettingsRow label="启用全局记忆">
               <Toggle
                 label="启用全局记忆"
                 checked={settings.enabled}
@@ -164,10 +188,7 @@ export function GlobalMemorySettings({ hostId }: { hostId: string }) {
                 }
               />
             </SettingsRow>
-            <SettingsRow
-              label="自动保存对话记忆"
-              description="自动提炼稳定偏好并保存；关闭后，新记忆仅作为待确认建议。"
-            >
+            <SettingsRow label="自动保存对话记忆">
               <Toggle
                 label="自动保存对话记忆"
                 checked={settings.automaticSaving}
@@ -185,27 +206,23 @@ export function GlobalMemorySettings({ hostId }: { hostId: string }) {
         )}
       </SettingsSection>
       <SettingsSection
-        title="已保存的全局记忆"
-        description="可在对话中说“记住我偏好……”或“忘记……”。项目资料保存在项目约定，临时任务进度不进入全局记忆。"
+        title={selectedProject ? `${selectedProject.name} · 项目约定` : "已保存的全局记忆"}
         actions={
           <div className="actions">
             <button
               disabled={busy}
               onClick={() => void reload().catch((e) => setError((e as Error).message))}
             >
-              刷新全局记忆
+              刷新记忆
             </button>
             <button disabled={disabled} onClick={() => edit(null)}>
-              新增记忆
+              {selectedProject ? "新增约定" : "新增记忆"}
             </button>
           </div>
         }
       >
         {settings && !entries.length && (
-          <SettingsRow
-            label="还没有全局记忆"
-            description="告诉 Kooyu 你的稳定偏好，或在这里手动添加。"
-          />
+          <SettingsRow label={selectedProject ? "还没有项目约定" : "还没有全局记忆"} />
         )}
         {entries.map((entry) => (
           <SettingsRow
@@ -252,12 +269,20 @@ export function GlobalMemorySettings({ hostId }: { hostId: string }) {
           ref={editor}
           onSubmit={(e) => {
             e.preventDefault();
+            const parsedSources = sourceRefsText
+              .split(/\n+/)
+              .map((line) => line.trim())
+              .filter(Boolean);
+            const resolvedSubject =
+              subject.trim() || content.trim().split(/\n/)[0]?.slice(0, 200) || "长期约定";
             void mutate(editing ? `/memory/${editing.id}` : "/memory", editing ? "PATCH" : "POST", {
-              scope: "user",
-              projectId: null,
-              subject,
+              scope: editing ? editing.scope : projectId ? "project" : "user",
+              projectId: editing ? editing.projectId : projectId || null,
+              subject: resolvedSubject,
               content,
-              sourceRefs: editing?.sourceRefs ?? ["user:settings"],
+              sourceRefs: parsedSources.length
+                ? parsedSources
+                : (editing?.sourceRefs ?? ["user:settings"]),
               status: "confirmed",
               ...(editing ? { expectedRevision: editing.revision } : {}),
             }).then((ok) => {
@@ -265,17 +290,27 @@ export function GlobalMemorySettings({ hostId }: { hostId: string }) {
             });
           }}
         >
-          <SettingsSection title={editing ? "编辑记忆" : "新增记忆"}>
-            <SettingsRow label="记忆主题" htmlFor="global-memory-subject">
+          <SettingsSection
+            title={
+              editing
+                ? editing.scope === "project"
+                  ? "编辑项目约定"
+                  : "编辑记忆"
+                : selectedProject
+                  ? "新增项目约定"
+                  : "新增记忆"
+            }
+          >
+            <SettingsRow label="主题（可选）" htmlFor="global-memory-subject">
               <input
                 id="global-memory-subject"
-                required
                 maxLength={200}
+                placeholder="留空则自动截取正文首行"
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
               />
             </SettingsRow>
-            <SettingsRow label="记忆内容" htmlFor="global-memory-content" stacked>
+            <SettingsRow label="约定内容" htmlFor="global-memory-content" stacked>
               <textarea
                 id="global-memory-content"
                 required
@@ -285,11 +320,22 @@ export function GlobalMemorySettings({ hostId }: { hostId: string }) {
                 onChange={(e) => setContent(e.target.value)}
               />
             </SettingsRow>
+            <SettingsRow label="来源依据（可选）" stacked>
+              <details>
+                <summary>展开编辑补充来源（每行一条）</summary>
+                <textarea
+                  rows={2}
+                  placeholder="例如：AGENTS.md 或对话来源说明"
+                  value={sourceRefsText}
+                  onChange={(e) => setSourceRefsText(e.target.value)}
+                />
+              </details>
+            </SettingsRow>
             <SettingsRow label="保存后下轮生效">
               <button type="button" onClick={() => setEditing(undefined)}>
                 取消
               </button>
-              <button type="submit" disabled={disabled || !subject.trim() || !content.trim()}>
+              <button type="submit" disabled={disabled || !content.trim()}>
                 保存并确认
               </button>
             </SettingsRow>

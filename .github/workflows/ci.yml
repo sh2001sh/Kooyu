@@ -21,9 +21,9 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: node --test scripts/platform.test.mjs
+      - run: npx playwright install --with-deps chromium
       - run: npm test
       - run: npm run test:relay
-      - run: npx playwright install --with-deps chromium
       - run: npm run test:ui
       - uses: actions/upload-artifact@v4
         if: failure()

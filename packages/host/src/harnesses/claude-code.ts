@@ -178,7 +178,7 @@ export function claudeAdapterWithQuery(runQuery: typeof query = query): HarnessA
       const taskAgents = new Map<string, string>();
       const toolOwners = new Map<string, string>();
       let started = Boolean(session.nativeSessionId),
-        active: Query | undefined;
+        active: { query: Query; cancellation?: Promise<void> } | undefined;
       const reported = new Map<string, ReturnType<typeof nativeParameters>>();
       const readHistory = async () => {
         const history = (await claudeHistory(ctx, nativeId)) as ClaudeHistory;
@@ -350,6 +350,20 @@ export function claudeAdapterWithQuery(runQuery: typeof query = query): HarnessA
           else if (ctx.launch.command !== "claude-sdk")
             options.pathToClaudeCodeExecutable = ctx.launch.command;
           let outcome = "unknown";
+          let execution: typeof active;
+          const cancellationConfirmed = async () =>
+            execution?.cancellation
+              ? execution.cancellation.then(
+                  () => true,
+                  () => false,
+                )
+              : false;
+          const cancelledResult = async (event: Wire) =>
+            (await cancellationConfirmed()) &&
+            !event.startup_failure_reason &&
+            (!event.is_error ||
+              (event.subtype === "error_during_execution" &&
+                (event.errors ?? []).every((error: unknown) => claudeInterruptError(error))));
           try {
             const images = input?.images ?? [];
             // Images go as Messages API image blocks in one streamed user message.
@@ -376,8 +390,9 @@ export function claudeAdapterWithQuery(runQuery: typeof query = query): HarnessA
                   };
                 })()
               : text;
-            active = runQuery({ prompt, options });
-            for await (const value of active) {
+            execution = { query: runQuery({ prompt, options }) };
+            active = execution;
+            for await (const value of execution.query) {
               const e = value as Wire;
               if (
                 e.type === "system" &&
@@ -423,7 +438,13 @@ export function claudeAdapterWithQuery(runQuery: typeof query = query): HarnessA
                 children.emit(
                   childId,
                   "turn-ended",
-                  { outcome: e.is_error ? "failed" : "completed" },
+                  {
+                    outcome: (await cancelledResult(e))
+                      ? "cancelled"
+                      : e.is_error
+                        ? "failed"
+                        : "completed",
+                  },
                   e.uuid,
                 );
                 continue;
@@ -467,13 +488,31 @@ export function claudeAdapterWithQuery(runQuery: typeof query = query): HarnessA
                     );
                   }
               } else if (e.type === "user") {
-                emit("tool", e.message, e.uuid);
+                const results = (e.message.content ?? []).filter(
+                  (block: Wire) => block.type === "tool_result",
+                );
+                if (!results.length) emit("tool", e.message, e.uuid);
+                for (const block of results)
+                  emit(
+                    "tool",
+                    {
+                      ...block,
+                      toolCallId: block.tool_use_id,
+                      lifecycle: "completed",
+                      status: block.is_error ? "failed" : "completed",
+                    },
+                    `${e.uuid}:result:${block.tool_use_id}`,
+                  );
                 for (const block of e.message.content ?? [])
                   if (block.type === "tool_result" && children.has(block.tool_use_id)) {
                     children.emit(block.tool_use_id, "tool", block, e.uuid);
                   }
               } else if (e.type === "result") {
-                outcome = e.is_error ? "failed" : "completed";
+                outcome = (await cancelledResult(e))
+                  ? "cancelled"
+                  : e.is_error
+                    ? "failed"
+                    : "completed";
                 for (const [id, usage] of Object.entries(e.modelUsage ?? {})) {
                   const value = usage as Wire;
                   reported.set(
@@ -496,6 +535,11 @@ export function claudeAdapterWithQuery(runQuery: typeof query = query): HarnessA
                     ...e.usage,
                     costUsd: ctx.configuration?.binding ? null : e.total_cost_usd,
                     modelUsage: e.modelUsage,
+                    ...(typeof e.duration_ms === "number" &&
+                    Number.isFinite(e.duration_ms) &&
+                    e.duration_ms >= 0
+                      ? { durationMs: Math.round(e.duration_ms) }
+                      : {}),
                     scope: "turn",
                     sourceId: e.uuid,
                   },
@@ -503,27 +547,61 @@ export function claudeAdapterWithQuery(runQuery: typeof query = query): HarnessA
                 );
                 ctx.emit(
                   "turn-ended",
-                  { outcome, subtype: e.subtype, backgroundState: "unknown" },
+                  {
+                    outcome,
+                    subtype: e.subtype,
+                    errors: e.errors,
+                    backgroundState: "unknown",
+                    commandId,
+                  },
                   `result:${commandId}`,
                 );
               } else emit("state", e, e.uuid);
             }
+            if (outcome === "unknown" && (await cancellationConfirmed())) {
+              outcome = "cancelled";
+              ctx.emit(
+                "turn-ended",
+                { outcome, commandId, backgroundState: "unknown" },
+                `result:${commandId}`,
+              );
+            }
             if (outcome === "unknown")
               throw new Error("Claude SDK 流结束但未收到原生 result，执行状态未知。");
           } catch (error) {
-            ctx.emit("disconnected", {
-              message: error instanceof Error ? error.message : "Claude SDK 连接中断。",
-            });
-            throw error;
+            if (
+              outcome !== "failed" &&
+              (await cancellationConfirmed()) &&
+              claudeInterruptError(error)
+            ) {
+              if (outcome !== "cancelled") {
+                outcome = "cancelled";
+                ctx.emit(
+                  "turn-ended",
+                  { outcome, commandId, backgroundState: "unknown" },
+                  `result:${commandId}`,
+                );
+              }
+            } else if (outcome === "unknown") {
+              ctx.emit("disconnected", {
+                message: error instanceof Error ? error.message : "Claude SDK 连接中断。",
+              });
+              throw error;
+            }
           } finally {
-            active = undefined;
+            if (active === execution) active = undefined;
           }
+          if (outcome === "cancelled") ctx.emit("state", { stopped: true, commandId });
           return { nativeRunId: null };
         },
         async cancel() {
           if (!active) unsupported("没有活动的 Claude SDK 请求，未发送取消。");
           try {
-            await active.interrupt();
+            const execution = active;
+            execution.cancellation ??= Promise.resolve()
+              .then(() => execution.query.interrupt())
+              .then(() => {});
+            await execution.cancellation;
           } catch (error) {
             ctx.emit("disconnected", {
               message: error instanceof Error ? error.message : "Claude SDK 取消结果未知。",
@@ -539,7 +617,7 @@ export function claudeAdapterWithQuery(runQuery: typeof query = query): HarnessA
         },
         async close() {
           try {
-            active?.close();
+            active?.query.close();
           } finally {
             ctx.emit("disconnected", { reason: "closed" });
           }
@@ -549,3 +627,17 @@ export function claudeAdapterWithQuery(runQuery: typeof query = query): HarnessA
   };
 }
 export const claudeCodeAdapter = claudeAdapterWithQuery();
+
+/** Only interruption signatures following an acknowledged local interrupt are cancellation. */
+function claudeInterruptError(value: unknown): boolean {
+  if (value instanceof Error && value.name === "AbortError") return true;
+  const message = value instanceof Error ? value.message : typeof value === "string" ? value : "";
+  return (
+    /^(?:Claude Code returned an error result: )?\[ede_diagnostic\] result_type=user last_content_type=n\/a stop_reason=null\s*$/.test(
+      message,
+    ) ||
+    /^(?:request |operation |query |the operation was )?(?:interrupted|aborted)(?: by (?:the )?user)?[.!]?$/i.test(
+      message,
+    )
+  );
+}

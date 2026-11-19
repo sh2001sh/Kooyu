@@ -136,47 +136,95 @@ for (const mobile of [false, true])
     await page.route(`**/api/sessions/${session.id}?*`, (route) =>
       route.fulfill({ json: { session, events, commands: [], olderCursor: null } }),
     );
+    const agents = [
+      { agentId: "child-a", name: "代码检查与结果整理", status: "completed" },
+      { agentId: "child-b", name: "运行测试", status: "failed" },
+      { agentId: "empty-child", status: "running" },
+    ].map((a) => ({ ...a, updatedAt: new Date().toISOString() }));
+    await page.route(`**/api/sessions/${session.id}/activity`, (route) =>
+      route.fulfill({ json: { sessionId: session.id, cursor: events.length, agents } }),
+    );
+    await page.route(`**/api/sessions/${session.id}/agents/*`, (route) => {
+      const id = new URL(route.request().url()).pathname.split("/").at(-1);
+      const childEvents = events
+        .filter(
+          (e) =>
+            e.type === "subagent" && (e.payload as any).agentId === id && (e.payload as any).event,
+        )
+        .map((e) => ({ ...e, ...(e.payload as any).event }));
+      return route.fulfill({
+        json: {
+          agent: agents.find((a) => a.agentId === id),
+          events: childEvents,
+          olderCursor: null,
+        },
+      });
+    });
     await page.addInitScript((id) => localStorage.setItem("kodo.session", id), session.id);
     try {
       await page.goto("/");
-      const a = page.locator('[data-agent-id="child-a"]');
-      const b = page.locator('[data-agent-id="child-b"]');
-      await expect(a).toBeVisible();
-      await expect(a.locator("summary").first()).toContainText("完成");
-      await expect(b.locator("summary").first()).toContainText("失败");
       await expect(page.getByText("子代理 A 的完整输出", { exact: true })).toHaveCount(0);
-      await a.locator("summary").first().click();
-      await expect(a).toContainText("子代理 A 的完整输出");
-      await expect(a).not.toContainText("子代理 B 的独立输出");
-      await expect(a.locator(".thinking-block")).toHaveCount(1);
-      await expect(a.locator(".thinking-block")).toContainText("历史思考完整内容");
-      await expect(a.locator(".assistant-turn")).not.toContainText("历史思考完整内容");
-      await a.locator(".tool-card > summary").click();
-      await expect(a).toContainText("Read marker.txt");
-      await expect(a.locator("pre")).toHaveText("原生工具嵌套结果");
-      await page.evaluate(() => {
-        Object.defineProperty(navigator, "clipboard", {
-          configurable: true,
-          value: { writeText: async (text: string) => localStorage.setItem("copied-child", text) },
-        });
-      });
-      await a.getByRole("button", { name: "复制子代理输出", exact: true }).click();
-      expect(await page.evaluate(() => localStorage.getItem("copied-child"))).toBe(
-        "历史思考完整内容\n子代理 A 的完整输出\n原生工具嵌套结果",
-      );
-      await b.locator("summary").first().click();
-      await expect(b).toContainText("仅子代理失败");
-      await expect(b).toContainText("子代理本轮失败");
-      await expect(b).not.toContainText("pi 本轮失败");
+      if (mobile) {
+        const pill = page.getByRole("button", { name: /3 子代理/ });
+        await expect(pill).toBeVisible();
+        await pill.click();
+        const sheet = page.getByRole("dialog", { name: "子代理切换" });
+        await sheet.getByRole("button", { name: /代码检查与结果整理/ }).click();
+      } else {
+        const a = page.locator('[data-agent-id="child-a"]');
+        const b = page.locator('[data-agent-id="child-b"]');
+        await expect(a).toBeVisible();
+        await expect(a.locator("button").first()).toContainText("完成");
+        await expect(b.locator("button").first()).toContainText("失败");
+        await a.locator("button").first().click();
+      }
+      const panel = page.getByRole("tabpanel");
+      await expect(panel).toContainText("子代理 A 的完整输出");
+      await expect(panel).not.toContainText("子代理 B 的独立输出");
+      await expect(panel.locator(".thinking-block")).toHaveCount(1);
+      await expect(panel.locator(".thinking-block")).toContainText("历史思考完整内容");
+      await expect(panel.locator(".assistant-turn")).not.toContainText("历史思考完整内容");
+      await panel.locator(".tool-card > summary").click();
+      await expect(panel).toContainText("Read marker.txt");
+      await expect(panel.locator("pre")).toHaveText("原生工具嵌套结果");
+      if (mobile) {
+        await page.getByRole("button", { name: "切换", exact: true }).click();
+        await page
+          .getByRole("dialog", { name: "子代理切换" })
+          .getByRole("button", { name: /运行测试/ })
+          .click();
+      } else {
+        await page
+          .getByRole("combobox", { name: "全部子代理", exact: true })
+          .selectOption("child-b");
+      }
+      await expect(panel).toContainText("仅子代理失败");
+      await expect(panel).toContainText("子代理本轮失败");
+      await expect(panel).not.toContainText("pi 本轮失败");
+      if (mobile) {
+        await page
+          .locator(".mobile-subagent-banner")
+          .getByRole("button", { name: "返回主对话" })
+          .click();
+      } else {
+        await panel.getByRole("button", { name: "返回主对话", exact: true }).click();
+      }
       await expect(page.getByText("主代理未被子代理结束事件终止", { exact: true })).toBeVisible();
-      await page.locator('[data-agent-id="empty-child"] > summary').click();
+      if (mobile) {
+        await page.getByRole("button", { name: /3 子代理/ }).click();
+        await page
+          .getByRole("dialog", { name: "子代理切换" })
+          .getByRole("button", { name: /empty-child/ })
+          .click();
+      } else {
+        await page.locator('[data-agent-id="empty-child"] > button').click();
+      }
       await expect(
-        page.getByText("尚未收到原生子代理输出；当前仅有状态通知。", { exact: true }),
+        page.getByText("尚未收到子代理的对话记录，当前仅有状态通知。", { exact: true }),
       ).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,
       );
-      await a.scrollIntoViewIfNeeded();
       await page.screenshot({
         path: `../../.local/verification/subagents-${mobile ? "mobile" : "desktop"}.png`,
       });

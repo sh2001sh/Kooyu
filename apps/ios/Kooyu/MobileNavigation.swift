@@ -2,37 +2,71 @@ import SwiftUI
 
 struct NativeSettingsView: View {
     @Bindable var model: Workbench
+    var inboxCount: Int = 0
+    var onOpenInbox: (() -> Void)? = nil
+    private var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.2.1"
+    }
     var body: some View {
+        let _ = LanguageStore.shared.revision
         Form {
-            Section("远程连接") {
+            Section(kooyuT("settings.section.remote")) {
                 if let c = model.connection {
-                    LabeledContent("当前设备", value: c.displayName)
-                    LabeledContent("连接状态", value: model.online ? "在线" : "离线 · 正在重连")
+                    LabeledContent(kooyuT("settings.currentDevice"), value: c.displayName)
+                    LabeledContent(kooyuT("settings.connectionStatus"), value: model.online ? kooyuT("settings.online") : kooyuT("settings.offline"))
                 }
             }
             DevicesView(model: model)
-            Section("偏好与配置") {
-                NavigationLink("通用与外观") { SettingsDetailView(model: model, section: "general") }
-                NavigationLink("全局记忆") { GlobalMemorySettingsView(model: model) }
-                NavigationLink("执行引擎") { SettingsDetailView(model: model, section: "engines") }
-                NavigationLink("会话托管") { HostControlsView(model: model) }
-                NavigationLink("后台提醒") {
+            Section(kooyuT("settings.section.workspace")) {
+                NavigationLink(kooyuT("settings.engines")) { SettingsDetailView(model: model, section: "engines") }
+                NavigationLink(kooyuT("settings.providers")) { ModelConfigurationView(model: model) }
+                NavigationLink(kooyuT("settings.import")) { ImportSessionsView(model: model) }
+                NavigationLink(kooyuT("settings.memory")) { GlobalMemorySettingsView(model: model) }
+                NavigationLink(kooyuT("settings.usage")) { UsageView(model: model) }
+                NavigationLink(kooyuT("settings.projects")) { ProjectsView(model: model) }
+            }
+            Section(kooyuT("settings.section.preferences")) {
+                NavigationLink {
+                    SettingsDetailView(model: model, section: "general")
+                } label: {
+                    LabeledContent(kooyuT("settings.general"), value: kooyuLanguageLabel(LanguageStore.shared.setting))
+                }
+                NavigationLink(kooyuT("settings.host")) { HostControlsView(model: model) }
+                NavigationLink(kooyuT("settings.notifications")) {
                     Form {
                         if let c = model.connection {
                             Button("注册后台提醒") { Task { await model.push.enable(c) } }.disabled(model.push.working || !model.online)
                             Button("关闭后台提醒", role: .destructive) { Task { await model.push.disable(c) } }.disabled(model.push.working || !model.online)
                             if model.push.working { ProgressView() }
                         }
-                    }.navigationTitle("后台提醒")
+                    }.navigationTitle(kooyuT("settings.notifications"))
                 }
             }
-        }.navigationTitle("设置")
+            Section(kooyuT("settings.section.about")) {
+                NavigationLink {
+                    AppUpdateView(model: model)
+                } label: {
+                    LabeledContent(kooyuT("update.title"), value: "V\(appVersion)")
+                }
+                LabeledContent(kooyuT("settings.version"), value: "V\(appVersion)")
+            }
+        }
+        .navigationTitle(kooyuT("settings.title"))
+        .toolbar {
+            if let onOpenInbox {
+                ToolbarItem(placement: .topBarTrailing) {
+                    InboxToolbarButton(count: inboxCount, action: onOpenInbox)
+                }
+            }
+        }
     }
 }
 
 struct InboxView: View {
     @Bindable var model: Workbench
+    var embedded = false
     @Environment(\.dismiss) private var dismiss
+    @State private var filter = "pending"
     @State private var notices: [JSONValue] = []
     @State private var cursor = 0
     @State private var more = false
@@ -45,40 +79,121 @@ struct InboxView: View {
             cursor = Int(page["cursor"].number ?? 0); more = next.count == 100
         }
     }
+    private func openSession(_ id: String) {
+        Task {
+            await model.select(id)
+            model.selectedTab = "sessions"
+            if !embedded { dismiss() }
+        }
+    }
     var body: some View {
-        NavigationStack {
+        if embedded {
+            inboxContent
+        } else {
+            NavigationStack {
+                inboxContent
+            }
+        }
+    }
+
+    private var inboxContent: some View {
+        let items = model.snapshot?.inbox.filter { !$0.resolved } ?? []
+        let anomalySessions = (model.snapshot?.sessions ?? []).filter { !$0.archived && ["error", "unknown"].contains($0.runState) }
+        let recentNotices = notices.reversed().filter { notice in !items.contains { $0.id == notice["inboxItemId"].string } }
+
+        return VStack(spacing: 0) {
+            KooyuSegmentedControl(
+                options: [
+                    SegmentOption(value: "pending", label: "待处理 (\(items.count))"),
+                    SegmentOption(value: "errors", label: "运行异常 (\(anomalySessions.count))"),
+                    SegmentOption(value: "recent", label: "最近动态 (\(recentNotices.count))")
+                ],
+                selection: $filter
+            )
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            Divider()
+
             List {
-                let items = model.snapshot?.inbox.filter { !$0.resolved } ?? []
-                if items.isEmpty && notices.isEmpty && !loading { ContentUnavailableView("暂无待处理事项", systemImage: "tray") }
-                ForEach(items) { item in
-                    Button {
-                        Task { await model.select(item.sessionId); model.selectedTab = "sessions"; dismiss() }
-                    } label: {
-                        HStack {
-                            Image(systemName: "tray")
-                            VStack(alignment: .leading, spacing: 5) {
-                                Text(model.snapshot?.sessions.first { $0.id == item.sessionId }?.title ?? "对话通知").foregroundStyle(KY.text)
-                                Text(nativeQuestionForm(item.payload) == nil ? "等待确认 · 点击进入对话处理" : "Harness 正在等待你的回答").font(.caption).foregroundStyle(KY.textSecondary)
+                if filter == "pending" {
+                    if items.isEmpty && !loading {
+                        ContentUnavailableView("暂无待处理审批或问题", systemImage: "checkmark.circle")
+                    }
+                    ForEach(items) { item in
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack {
+                                Text(model.snapshot?.sessions.first { $0.id == item.sessionId }?.title ?? "对话通知")
+                                    .font(KYFont.rowTitle).foregroundStyle(KY.text)
+                                Spacer()
+                                Button("进入对话 →") { openSession(item.sessionId) }
+                                    .font(KYFont.caption).foregroundStyle(KY.coralInk)
+                                    .buttonStyle(.plain)
                             }
-                            Spacer(); Image(systemName: "chevron.right").foregroundStyle(KY.textTertiary)
-                        }.frame(minHeight: 48)
-                    }.buttonStyle(.plain)
-                }
-                ForEach(Array(notices.reversed().filter { notice in !items.contains { $0.id == notice["inboxItemId"].string } }.enumerated()), id: \.offset) { _, notice in
-                    Button {
-                        Task {
-                            if let target = NotificationTarget(hostId: model.connection?.hostId ?? "", notificationId: notice["id"].string), await model.openNotification(target) { dismiss() }
+                            InteractionView(item: item, model: model)
                         }
-                    } label: {
-                        VStack(alignment: .leading) { Text(notice["title"].string); Text(model.snapshot?.sessions.first { $0.id == notice["sessionId"].string }?.title ?? notice["createdAt"].string).font(.caption).foregroundStyle(.secondary) }
-                    }.frame(minHeight: 48)
+                        .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                    }
+                } else if filter == "errors" {
+                    if anomalySessions.isEmpty {
+                        ContentUnavailableView("运行状态正常", systemImage: "checkmark.shield")
+                    }
+                    ForEach(anomalySessions) { session in
+                        Button { openSession(session.id) } label: {
+                            HStack(spacing: 10) {
+                                EngineBadge(harnessId: session.harnessId, size: 28, circle: false)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(session.title.isEmpty ? "未命名对话" : session.title).font(KYFont.rowTitle).foregroundStyle(KY.text)
+                                    StatusBadge(status: sessionStatus(session))
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right").foregroundStyle(KY.textTertiary)
+                            }
+                            .frame(minHeight: 48)
+                        }.buttonStyle(.plain)
+                    }
+                } else {
+                    if recentNotices.isEmpty && !loading {
+                        ContentUnavailableView("暂无最近动态", systemImage: "bell")
+                    }
+                    ForEach(Array(recentNotices.enumerated()), id: \.offset) { _, notice in
+                        Button {
+                            Task {
+                                if let target = NotificationTarget(hostId: model.connection?.hostId ?? "", notificationId: notice["id"].string),
+                                   await model.openNotification(target), !embedded {
+                                    dismiss()
+                                }
+                            }
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(notice["title"].string).font(KYFont.rowTitle).foregroundStyle(KY.text)
+                                Text(model.snapshot?.sessions.first { $0.id == notice["sessionId"].string }?.title ?? notice["createdAt"].string)
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                        }.frame(minHeight: 48)
+                    }
+                    if more { Button("加载更多通知") { Task { await load(cursor) } }.disabled(loading) }
                 }
                 if loading { ProgressView() }
-                if more { Button("加载更多通知") { Task { await load(cursor) } }.disabled(loading) }
-            }.navigationTitle("收件箱").refreshable { await model.refresh() }
-                .toolbar { Button("完成") { dismiss() } }
-                .task(id: model.connection?.hostId) { await load(0) }
+            }
+            .listStyle(.plain)
+            .refreshable {
+                await model.refresh()
+                await load(0)
+            }
         }
+        .background(KY.paper)
+        .navigationTitle("待办")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if !embedded {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("完成") { dismiss() }
+                }
+            }
+        }
+        .task(id: model.connection?.hostId) { await load(0) }
     }
 }
 

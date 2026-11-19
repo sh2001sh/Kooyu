@@ -6,7 +6,7 @@ test.use({ locale: "zh-CN" });
 
 const approvedMark = readFileSync(resolve("../../brand/assets/svg/kooyu-mark.svg"), "utf8");
 const contour = approvedMark.split('<path d="')[1]!.split('"')[0]!;
-const approvedIcon = readFileSync(resolve("../../brand/assets/icons/kooyu-app.svg"), "utf8");
+const approvedIcon = readFileSync(resolve("../../brand/assets/icons/kooyu-favicon.svg"), "utf8");
 
 for (const width of [1440, 390]) {
   test(

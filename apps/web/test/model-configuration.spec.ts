@@ -35,8 +35,10 @@ for (const width of [1440, 390])
     expect(modelResponse.ok()).toBe(true);
     const model = await modelResponse.json();
     await page.goto("/");
-    if (width < 600) await page.getByRole("button", { name: "打开导航", exact: true }).click();
-    await page.getByRole("button", { name: "设置", exact: true }).click();
+    await page
+      .getByRole("navigation", { name: width < 600 ? "移动端标签导航" : "系统工具", exact: true })
+      .getByRole("button", { name: "设置", exact: true })
+      .click();
     await page
       .getByRole("navigation", { name: width < 600 ? "配置页面" : "配置导航" })
       .getByRole("button", { name: "模型来源", exact: true })

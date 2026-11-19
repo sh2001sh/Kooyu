@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { electronEnvironment } from "./electron-environment.mjs";
 import { resolveElectronRuntime } from "./electron-runtime.mjs";
+import assert from "node:assert/strict";
 const data = resolve(`.local/verification/electron-${Date.now()}`);
 mkdirSync(data, { recursive: true });
 const port = "4322",
@@ -106,6 +107,17 @@ try {
     ({ nativeImage }, path) => (nativeImage.createFromPath(path).isEmpty() ? "empty" : "loaded"),
     resolve("apps/desktop/assets/tray.png"),
   );
+  assert.deepEqual(
+    readFileSync(resolve("apps/desktop/assets/tray.png")),
+    readFileSync(resolve("brand/icons/kooyu-app-32.png")),
+    "Tray must use the approved Kooyu brand, not the legacy K icon",
+  );
+  assert.deepEqual(
+    readFileSync(resolve("apps/desktop/assets/app.png")),
+    readFileSync(resolve("brand/icons/kooyu-app-256.png")),
+    "Window asset must use the approved Kooyu icon",
+  );
+  report.approvedBrandIcons = true;
   if (process.argv.includes("--provider-bindings")) {
     // Explicitly synthetic metadata only. This walkthrough never sends a model prompt.
     const p = await api("/providers", {

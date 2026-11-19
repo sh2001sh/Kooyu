@@ -1,5 +1,12 @@
 package app.kooyu.android
 
+import app.kooyu.android.ui.*
+import app.kooyu.android.ui.theme.*
+import app.kooyu.android.ui.components.*
+import app.kooyu.android.ui.home.*
+import app.kooyu.android.ui.conversation.*
+import app.kooyu.android.ui.screens.*
+
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -44,4 +51,24 @@ fun messageText(value: Any?): String {
 data class Connection(val url: String, val hostId: String, val deviceId: String, val token: String, val expiresAt: String, val pending: JSONObject? = null, val name: String = "我的设备") {
     fun json(): JSONObject = JSONObject().put("url", url).put("hostId", hostId).put("deviceId", deviceId).put("token", token).put("expiresAt", expiresAt).put("pending", pending).put("name", name)
     companion object { fun parse(o: JSONObject) = Connection(o.getString("url"), o.getString("hostId"), o.getString("deviceId"), o.getString("token"), o.getString("expiresAt"), o.optJSONObject("pending"), o.optString("name", "我的设备").ifBlank { "我的设备" }.let { if (it == "我的电脑") "我的设备" else if (Regex("^电脑\\s*\\d+$").matches(it)) "设备" + it.removePrefix("电脑") else it }) }
+}
+
+/**
+ * Collapse native filesystem paths (including Windows drive prefixes and home dirs)
+ * into a concise workspace label such as `parent/repo` for compact headers and cards.
+ */
+fun formatWorkspaceLabel(path: String?): String {
+    val trimmed = path?.trim().orEmpty()
+    if (trimmed.isEmpty()) return ""
+    val cleaned = trimmed
+        .replace('\\', '/')
+        .replace(Regex("/+$"), "")
+        .replace(Regex("^[a-zA-Z]:"), "")
+        .replace(Regex("^/(?:Users|home)/[^/]+", RegexOption.IGNORE_CASE), "")
+    val parts = cleaned.split('/').filter { it.isNotEmpty() }
+    return when {
+        parts.isEmpty() -> if (trimmed == "/") "/" else ""
+        parts.size == 1 -> parts[0]
+        else -> "${parts[parts.size - 2]}/${parts[parts.size - 1]}"
+    }
 }

@@ -33,13 +33,98 @@ for (const width of [1440, 390]) {
         nativeRunId: null,
         payload: { role: "assistant", text: "测试助手回复" },
       },
+      {
+        id: "fixture-stopped",
+        sequence: 3,
+        sessionId: source.id,
+        type: "turn-ended",
+        createdAt: at,
+        source: "native",
+        nativeRunId: null,
+        payload: { outcome: "cancelled" },
+      },
     ];
+    let activeEvents = events;
     await page.route(`**/api/sessions/${source.id}?*`, (route) =>
-      route.fulfill({ json: { session: source, events, commands: [], olderCursor: null } }),
+      route.fulfill({
+        json: { session: source, events: activeEvents, commands: [], olderCursor: null },
+      }),
     );
     const requests: { eventId: string; edit?: boolean }[] = [];
+    let failEdit = true;
+    await page.route("**/api/snapshot", async (route) => {
+      const response = await route.fetch();
+      const snapshot = await response.json();
+      snapshot.sessions = snapshot.sessions.map((item: { id: string }) =>
+        item.id === source.id ? source : item,
+      );
+      await route.fulfill({ json: snapshot });
+    });
+    await page.route(`**/api/sessions/${source.id}/message-branches`, async (route) => {
+      const input = route.request().postDataJSON();
+      requests.push(input);
+      if (input.action === "edit" && failEdit) {
+        failEdit = false;
+        return route.fulfill({
+          status: 503,
+          json: { error: { code: "UNAVAILABLE", message: "合成保存失败" } },
+        });
+      }
+      if (input.action === "edit") {
+        source.conversation = {
+          activeId: input.requestId,
+          branches: [
+            {
+              id: input.requestId,
+              rootEventId: "fixture-user",
+              userEventId: "fixture-edited",
+              originalBranchId: "root",
+              prefixEventIds: [],
+            },
+          ],
+        };
+        activeEvents = [
+          {
+            ...events[0]!,
+            id: "fixture-edited",
+            sequence: 4,
+            conversationBranchId: input.requestId,
+            payload: { role: "user", text: input.text },
+          },
+          {
+            ...events[1]!,
+            id: "fixture-new-answer",
+            sequence: 5,
+            conversationBranchId: input.requestId,
+            payload: { role: "assistant", text: "修改后的回复" },
+          },
+        ] as typeof events;
+      } else {
+        source.conversation.activeId = input.branchId;
+        activeEvents =
+          input.branchId === "root"
+            ? events
+            : ([
+                {
+                  ...events[0]!,
+                  id: "fixture-edited",
+                  sequence: 4,
+                  conversationBranchId: input.branchId,
+                  payload: { role: "user", text: "修改后的消息" },
+                },
+              ] as typeof events);
+      }
+      await route.fulfill({ json: source });
+    });
     await page.route(`**/api/sessions/${source.id}/branch`, async (route) => {
       requests.push(route.request().postDataJSON());
+      if (route.request().postDataJSON().edit && failEdit) {
+        failEdit = false;
+        return route.fulfill({
+          status: 503,
+          json: { error: { code: "UNAVAILABLE", message: "合成保存失败" } },
+        });
+      }
       const next = await (
         await request.post("/api/sessions", {
           data: { title: `分支草稿 ${width}`, harnessId: "codex", kind: "direct" },
@@ -49,11 +134,20 @@ for (const width of [1440, 390]) {
     });
     await page.addInitScript((id) => localStorage.setItem("kodo.session", id), source.id);
     await page.goto("/");
-    await expect(page.locator(".user-turn time")).toBeVisible();
+    await expect(page.locator(".user-message time")).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole("status").filter({ hasText: "已停止" })).toBeVisible();
+    await expect(page.locator(".turn-error")).toHaveCount(0);
     await expect(
-      page.locator(".user-turn").getByRole("button", { name: "复制消息", exact: true }),
+      page
+        .locator(".user-message > .message-actions")
+        .getByRole("button", { name: "复制消息", exact: true }),
     ).toBeVisible();
-    await page.getByLabel("更多消息操作").click();
+    await expect(page.locator(".user-turn .message-actions")).toHaveCount(0);
+    await expect(page.getByLabel("更多消息操作")).toHaveCount(0);
+    const reply = page.locator(".assistant-turn");
+    const contentBox = await reply.locator(".markdown").boundingBox();
+    const copyBox = await reply.getByRole("button", { name: "复制", exact: true }).boundingBox();
+    expect(copyBox!.y).toBeGreaterThanOrEqual(contentBox!.y + contentBox!.height);
     await expect(page.getByRole("button", { name: "分支到新聊天", exact: true })).toBeVisible();
     const branchBox = await page
       .getByRole("button", { name: "分支到新聊天", exact: true })
@@ -70,11 +164,43 @@ for (const width of [1440, 390]) {
     await page.evaluate((id) => localStorage.setItem("kodo.session", id), source.id);
     await page.reload();
     await page.getByRole("button", { name: "编辑消息", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "编辑消息", exact: true })).toHaveCount(0);
+    await expect(page.locator(".user-turn").getByRole("textbox", { name: "消息内容" })).toHaveValue(
+      "测试消息内容",
+    );
+    await page.getByRole("textbox", { name: "消息内容" }).fill("取消的修改");
+    await page.getByRole("textbox", { name: "消息内容" }).press("Escape");
+    await expect(page.locator(".user-turn")).toContainText("测试消息内容");
+    await page.getByRole("button", { name: "编辑消息", exact: true }).click();
     await page.getByRole("textbox", { name: "消息内容" }).fill("修改后的消息");
-    await page.getByRole("button", { name: "保存到新聊天草稿" }).click();
+    await page.screenshot({ path: info.outputPath(`inline-edit-${width}.png`), fullPage: true });
+    await page.getByRole("button", { name: "保存并继续", exact: true }).click();
     await expect.poll(() => requests.length).toBe(2);
-    expect(requests[1]).toMatchObject({ eventId: "fixture-user", edit: true });
-    await expect(page.locator(".composer textarea")).toHaveValue("修改后的消息");
+    await expect(page.getByRole("textbox", { name: "消息内容" })).toHaveValue("修改后的消息");
+    await expect(page.getByText("合成保存失败", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "保存并继续", exact: true }).click();
+    await expect.poll(() => requests.length).toBe(3);
+    expect(requests[1]).toMatchObject({
+      eventId: "fixture-user",
+      action: "edit",
+      text: "修改后的消息",
+    });
+    await expect(page.locator(".user-message")).toContainText("修改后的消息");
+    await expect(page.locator(".assistant-turn")).toContainText("修改后的回复");
+    await expect(page.locator(".message-variants")).toContainText("2 / 2");
+    await expect(page.locator(".composer textarea")).toHaveValue("");
+    await page.getByRole("button", { name: "上一个消息分支", exact: true }).click();
+    await expect(page.locator(".user-message")).toContainText("测试消息内容");
+    await expect(page.locator(".assistant-turn")).toContainText("测试助手回复");
+    await expect(page.locator(".message-variants")).toContainText("1 / 2");
+    await page.getByRole("button", { name: "下一个消息分支", exact: true }).click();
+    await expect(page.locator(".user-message")).toContainText("修改后的消息");
+    await page.reload();
+    await expect(page.locator(".message-variants")).toContainText("2 / 2");
+    await page.screenshot({
+      path: info.outputPath(`message-variants-${width}.png`),
+      fullPage: true,
+    });
   });
 
   test(`model modality manual override and automatic restore at ${width}px`, async ({
@@ -103,9 +229,8 @@ for (const width of [1440, 390]) {
       })
     ).json();
     await page.goto("/");
-    if (width < 600) await page.getByRole("button", { name: "打开导航", exact: true }).click();
     await page
-      .getByRole("navigation", { name: "系统工具", exact: true })
+      .getByRole("navigation", { name: width < 600 ? "移动端标签导航" : "系统工具", exact: true })
       .getByRole("button", { name: /^(设置|Harness 与配置)$/ })
       .click();
     await page

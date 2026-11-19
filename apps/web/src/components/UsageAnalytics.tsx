@@ -1,5 +1,5 @@
 import { useMemo, useState, type CSSProperties } from "react";
-import { Activity, Flame, Layers, Sparkles, TrendingUp } from "lucide-react";
+import { Activity, Clock, Flame, Layers, Sparkles, TrendingUp, Zap } from "lucide-react";
 import { HARNESS_IDS } from "@kodo/protocol/client";
 import type { HarnessId, Snapshot, Usage } from "@kodo/protocol";
 import { api } from "../lib/host-client";
@@ -11,7 +11,9 @@ import {
   providerLabel,
   shortModelLabel,
 } from "../lib/harnesses";
+import { useT } from "../lib/i18n";
 import { HarnessBadge } from "./KodoBrand";
+import { SegmentedControl } from "./SegmentedControl";
 
 type Wire = Record<string, any>;
 type Action = (work: () => Promise<unknown>) => Promise<void>;
@@ -47,6 +49,27 @@ function formatUsd(n: number): string {
   if (n >= 100) return `$${n.toFixed(2)}`;
   if (n >= 1) return `$${n.toFixed(3)}`;
   return `$${n.toFixed(4)}`;
+}
+
+function formatDurationMs(ms?: number | null): string {
+  if (ms === null || ms === undefined || !Number.isFinite(ms) || ms < 0) return "—";
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  if (ms < 10_000) return `${(ms / 1000).toFixed(2)}s`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  const totalSec = Math.round(ms / 1000);
+  const mins = Math.floor(totalSec / 60);
+  const secs = totalSec % 60;
+  if (mins < 60) return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  const remMins = mins % 60;
+  return remMins > 0 ? `${hours}h ${remMins}m` : `${hours}h`;
+}
+
+function ttftTone(ms?: number | null): "fast" | "normal" | "slow" | "empty" {
+  if (ms === null || ms === undefined || !Number.isFinite(ms) || ms < 0) return "empty";
+  if (ms <= 1500) return "fast";
+  if (ms <= 5000) return "normal";
+  return "slow";
 }
 
 function localDayKey(iso: string | Date): string {
@@ -773,15 +796,41 @@ export function UsagePage({
   }, [records, snapshot.sessions, snapshot.bindings]);
   const maxProviderTokens = Math.max(1, ...byProvider.map((p) => p.tokens));
 
+  const t = useT();
   const PAGE_SIZE = 20;
   const [logPage, setLogPage] = useState(0);
   const sortedRecords = useMemo(
     () => [...records].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
     [records],
   );
+  const latencySummary = useMemo(() => {
+    let ttftSum = 0;
+    let ttftCount = 0;
+    let durSum = 0;
+    let durCount = 0;
+    for (const r of records) {
+      if (
+        typeof r.firstTokenMs === "number" &&
+        Number.isFinite(r.firstTokenMs) &&
+        r.firstTokenMs >= 0
+      ) {
+        ttftSum += r.firstTokenMs;
+        ttftCount += 1;
+      }
+      if (typeof r.durationMs === "number" && Number.isFinite(r.durationMs) && r.durationMs >= 0) {
+        durSum += r.durationMs;
+        durCount += 1;
+      }
+    }
+    return {
+      avgFirstTokenMs: ttftCount > 0 ? ttftSum / ttftCount : null,
+      avgDurationMs: durCount > 0 ? durSum / durCount : null,
+    };
+  }, [records]);
   const pageCount = Math.max(1, Math.ceil(sortedRecords.length / PAGE_SIZE));
   const currentPage = Math.min(logPage, pageCount - 1);
-  const pageRecords = sortedRecords.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+  const pageStart = currentPage * PAGE_SIZE;
+  const pageRecords = sortedRecords.slice(pageStart, pageStart + PAGE_SIZE);
 
   const peakDay = useMemo(() => {
     let best: DayBucket | null = null;
@@ -869,33 +918,23 @@ export function UsagePage({
         </div>
 
         <div className="usage-toolbar__toggles">
-          <div className="usage-segmented" role="group" aria-label="时间窗口">
-            {RANGE_OPTIONS.map((opt) => (
-              <button
-                key={opt.id}
-                type="button"
-                className={range === opt.id ? "active" : ""}
-                aria-pressed={range === opt.id}
-                onClick={() => setRange(opt.id)}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl<TimeRange>
+            className="usage-segmented"
+            size="sm"
+            ariaLabel="时间窗口"
+            value={range}
+            onChange={setRange}
+            options={RANGE_OPTIONS.map((opt) => ({ value: opt.id, label: opt.label }))}
+          />
 
-          <div className="usage-segmented" role="group" aria-label="图表指标">
-            {METRIC_MODES.map((opt) => (
-              <button
-                key={opt.id}
-                type="button"
-                className={metricMode === opt.id ? "active" : ""}
-                aria-pressed={metricMode === opt.id}
-                onClick={() => setMetricMode(opt.id)}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl<MetricMode>
+            className="usage-segmented"
+            size="sm"
+            ariaLabel="图表指标"
+            value={metricMode}
+            onChange={setMetricMode}
+            options={METRIC_MODES.map((opt) => ({ value: opt.id, label: opt.label }))}
+          />
         </div>
       </div>
 
@@ -1224,10 +1263,30 @@ export function UsagePage({
         </div>
       </section>
 
-      <section>
-        <div className="section-line section-head-space">
-          <h2>使用明细</h2>
-          <span className="mini-pill mini-pill--subtle">{records.length} 条</span>
+      <section className="usage-ledger-section">
+        <div className="usage-ledger-header section-head-space">
+          <div className="usage-ledger-header__title">
+            <h2>{t("usage.ledgerTitle")}</h2>
+            <span className="mini-pill mini-pill--subtle">{records.length} 条</span>
+          </div>
+          {(latencySummary.avgFirstTokenMs !== null || latencySummary.avgDurationMs !== null) && (
+            <div className="usage-ledger-header__stats" aria-label="响应耗时均值">
+              {latencySummary.avgFirstTokenMs !== null && (
+                <span className="usage-latency-chip" title="当前筛选范围内平均首字响应时间">
+                  <Zap size={12} aria-hidden="true" />
+                  <span>{t("usage.avgTtft")}</span>
+                  <strong>{formatDurationMs(latencySummary.avgFirstTokenMs)}</strong>
+                </span>
+              )}
+              {latencySummary.avgDurationMs !== null && (
+                <span className="usage-latency-chip" title="当前筛选范围内平均轮次总耗时">
+                  <Clock size={12} aria-hidden="true" />
+                  <span>{t("usage.avgDuration")}</span>
+                  <strong>{formatDurationMs(latencySummary.avgDurationMs)}</strong>
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {records.length === 0 ? (
@@ -1238,93 +1297,279 @@ export function UsagePage({
             <h3>暂无用量记录</h3>
           </div>
         ) : (
-          <div className="settings-group table-scroll">
-            <table className="usage-table">
-              <thead>
-                <tr>
-                  <th>引擎 / 会话</th>
-                  <th>模型</th>
-                  <th>输入 / 输出 Token</th>
-                  <th>费用 (USD)</th>
-                  <th>范围与时间</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pageRecords.map((u) => {
-                  const harnessId = u.source as HarnessId;
-                  const session = snapshot.sessions.find((s) => s.id === u.sessionId);
-                  return (
-                    <tr key={u.id}>
-                      <td>
-                        <div className="usage-source-cell">
-                          <HarnessBadge harnessId={harnessId} size="xs" tone="mono" />
-                          <div className="usage-source-cell__text">
-                            <strong>{HARNESS_NAMES[harnessId] ?? u.source}</strong>
-                            <span>{session?.title ?? "已移除会话"}</span>
+          <div className="settings-group usage-ledger-card">
+            <div className="table-scroll usage-ledger-desktop">
+              <table className="usage-table">
+                <colgroup>
+                  <col className="usage-col-source" />
+                  <col className="usage-col-model" />
+                  <col className="usage-col-tokens" />
+                  <col className="usage-col-ttft" />
+                  <col className="usage-col-duration" />
+                  <col className="usage-col-cost" />
+                  <col className="usage-col-time" />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>{t("usage.col.engineSession")}</th>
+                    <th>{t("usage.col.model")}</th>
+                    <th className="is-num">{t("usage.col.tokens")}</th>
+                    <th className="is-num">{t("usage.col.ttft")}</th>
+                    <th className="is-num">{t("usage.col.duration")}</th>
+                    <th className="is-num">{t("usage.col.cost")}</th>
+                    <th className="is-num">{t("usage.col.time")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageRecords.map((u) => {
+                    const harnessId = u.source as HarnessId;
+                    const session = snapshot.sessions.find((s) => s.id === u.sessionId);
+                    const rawModel = u.model ?? session?.model ?? null;
+                    const modelText = rawModel ? shortModelLabel(rawModel) : null;
+                    const hasTokens =
+                      (u.input ?? 0) > 0 ||
+                      (u.output ?? 0) > 0 ||
+                      (u.cacheRead ?? 0) > 0 ||
+                      (u.cacheWrite ?? 0) > 0;
+                    const hasCache = (u.cacheRead ?? 0) > 0 || (u.cacheWrite ?? 0) > 0;
+                    const firstTone = ttftTone(u.firstTokenMs);
+                    const tokenTooltip = [
+                      `输入 ${formatTokens(u.input)}`,
+                      `输出 ${formatTokens(u.output)}`,
+                      (u.cacheRead ?? 0) > 0 ? `缓存读 ${formatTokens(u.cacheRead)}` : null,
+                      (u.cacheWrite ?? 0) > 0 ? `缓存写 ${formatTokens(u.cacheWrite)}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ");
+                    return (
+                      <tr key={u.id}>
+                        <td>
+                          <div className="usage-source-cell">
+                            <HarnessBadge harnessId={harnessId} size="sm" tone="tinted" />
+                            <div className="usage-source-cell__text">
+                              <strong>{HARNESS_NAMES[harnessId] ?? u.source}</strong>
+                              <span
+                                className={
+                                  session ? "usage-session-title" : "usage-session-title is-removed"
+                                }
+                                title={session?.title ?? "已移除会话"}
+                              >
+                                {session?.title ?? "已移除会话"}
+                              </span>
+                            </div>
                           </div>
+                        </td>
+                        <td>
+                          {modelText ? (
+                            <span className="usage-model-pill" title={rawModel ?? modelText}>
+                              {modelText}
+                            </span>
+                          ) : (
+                            <span className="usage-empty-dash">未报告</span>
+                          )}
+                        </td>
+                        <td className="is-num" title={tokenTooltip}>
+                          <div className={`usage-token-pair ${hasTokens ? "" : "is-muted"}`}>
+                            <span className="usage-token-pair__item">
+                              <em className="usage-token-dir">入</em>
+                              {u.input !== null ? formatCompactTokens(u.input) : "—"}
+                            </span>
+                            <span className="usage-token-sep" aria-hidden="true">
+                              /
+                            </span>
+                            <span className="usage-token-pair__item">
+                              <em className="usage-token-dir">出</em>
+                              {u.output !== null ? formatCompactTokens(u.output) : "—"}
+                            </span>
+                          </div>
+                          {hasCache && (
+                            <small className="usage-cache-meta">
+                              {(u.cacheRead ?? 0) > 0
+                                ? `读 ${formatCompactTokens(u.cacheRead!)}`
+                                : ""}
+                              {(u.cacheRead ?? 0) > 0 && (u.cacheWrite ?? 0) > 0 ? " · " : ""}
+                              {(u.cacheWrite ?? 0) > 0
+                                ? `写 ${formatCompactTokens(u.cacheWrite!)}`
+                                : ""}
+                            </small>
+                          )}
+                        </td>
+                        <td className="is-num">
+                          {firstTone !== "empty" ? (
+                            <span
+                              className={`usage-latency-pill is-${firstTone}`}
+                              title={`首字响应时间 ${Math.round(u.firstTokenMs!)}ms`}
+                            >
+                              {formatDurationMs(u.firstTokenMs)}
+                            </span>
+                          ) : (
+                            <span className="usage-empty-dash">—</span>
+                          )}
+                        </td>
+                        <td className="is-num">
+                          {u.durationMs !== null &&
+                          u.durationMs !== undefined &&
+                          Number.isFinite(u.durationMs) ? (
+                            <span
+                              className="usage-duration-value"
+                              title={`总耗时 ${Math.round(u.durationMs)}ms`}
+                            >
+                              {formatDurationMs(u.durationMs)}
+                            </span>
+                          ) : (
+                            <span className="usage-empty-dash">—</span>
+                          )}
+                        </td>
+                        <td className="is-num">
+                          {u.costUsd === null ? (
+                            <span className="usage-empty-dash">未知</span>
+                          ) : (
+                            <span className="usage-cost-cell">
+                              <strong className={u.costUsd === 0 ? "is-zero" : ""}>
+                                ${u.costUsd.toFixed(4)}
+                              </strong>
+                              <span
+                                className={`usage-cost-kind ${u.costKind === "actual" ? "is-actual" : "is-estimate"}`}
+                              >
+                                {u.costKind === "estimate" ? "估算" : "实际"}
+                              </span>
+                            </span>
+                          )}
+                        </td>
+                        <td className="is-num">
+                          <div className="usage-time-cell">
+                            <span className="usage-time-primary">{formatDate(u.createdAt)}</span>
+                            <span
+                              className={`usage-scope-pill ${u.scope === "session" ? "is-session" : "is-turn"}`}
+                            >
+                              {u.scope === "session" ? "累计快照" : "本轮增量"}
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="usage-ledger-mobile" role="list" aria-label="使用明细列表">
+              {pageRecords.map((u) => {
+                const harnessId = u.source as HarnessId;
+                const session = snapshot.sessions.find((s) => s.id === u.sessionId);
+                const rawModel = u.model ?? session?.model ?? null;
+                const modelText = rawModel ? shortModelLabel(rawModel) : null;
+                const firstTone = ttftTone(u.firstTokenMs);
+                return (
+                  <article className="usage-mobile-item" role="listitem" key={u.id}>
+                    <div className="usage-mobile-item__top">
+                      <div className="usage-source-cell">
+                        <HarnessBadge harnessId={harnessId} size="sm" tone="tinted" />
+                        <div className="usage-source-cell__text">
+                          <strong>{HARNESS_NAMES[harnessId] ?? u.source}</strong>
+                          <span
+                            className={
+                              session ? "usage-session-title" : "usage-session-title is-removed"
+                            }
+                          >
+                            {session?.title ?? "已移除会话"}
+                          </span>
                         </div>
-                      </td>
-                      <td className="mono-cell">
-                        {(u.model ?? session?.model)
-                          ? shortModelLabel((u.model ?? session?.model)!)
-                          : "未报告模型"}
-                      </td>
-                      <td className="num-cell">
-                        <span>
-                          {formatTokens(u.input)} / {formatTokens(u.output)}
-                        </span>
-                        {((u.cacheRead ?? 0) > 0 || (u.cacheWrite ?? 0) > 0) && (
-                          <small>
-                            {(u.cacheRead ?? 0) > 0
-                              ? `读 ${formatCompactTokens(u.cacheRead!)}`
-                              : ""}
-                            {(u.cacheRead ?? 0) > 0 && (u.cacheWrite ?? 0) > 0 ? " · " : ""}
-                            {(u.cacheWrite ?? 0) > 0
-                              ? `写 ${formatCompactTokens(u.cacheWrite!)}`
-                              : ""}
-                          </small>
-                        )}
-                      </td>
-                      <td className="num-cell">
+                      </div>
+                      <div className="usage-mobile-item__cost">
                         {u.costUsd === null ? (
-                          <span className="muted">未知</span>
+                          <span className="usage-empty-dash">未知</span>
                         ) : (
-                          <span>
-                            ${u.costUsd.toFixed(4)}
-                            <span className="usage-cost-kind">
+                          <>
+                            <strong className={u.costUsd === 0 ? "is-zero" : ""}>
+                              ${u.costUsd.toFixed(4)}
+                            </strong>
+                            <span
+                              className={`usage-cost-kind ${u.costKind === "actual" ? "is-actual" : "is-estimate"}`}
+                            >
                               {u.costKind === "estimate" ? "估算" : "实际"}
                             </span>
-                          </span>
+                          </>
                         )}
-                      </td>
-                      <td>
-                        <span>{u.scope === "session" ? "累计快照" : "本轮增量"}</span>
-                        <small>{formatDate(u.createdAt)}</small>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                      </div>
+                    </div>
+
+                    <div className="usage-mobile-item__meta">
+                      {modelText ? (
+                        <span className="usage-model-pill">{modelText}</span>
+                      ) : (
+                        <span className="usage-empty-dash">未报告模型</span>
+                      )}
+                      <span
+                        className={`usage-scope-pill ${u.scope === "session" ? "is-session" : "is-turn"}`}
+                      >
+                        {u.scope === "session" ? "累计快照" : "本轮增量"}
+                      </span>
+                      <span className="usage-mobile-item__time">{formatDate(u.createdAt)}</span>
+                    </div>
+
+                    <div className="usage-mobile-item__metrics">
+                      <div className="usage-mobile-metric">
+                        <span>Token</span>
+                        <strong
+                          className={
+                            (u.input ?? 0) === 0 && (u.output ?? 0) === 0 ? "is-muted" : ""
+                          }
+                        >
+                          <em className="usage-token-dir">入</em>
+                          {u.input !== null ? formatCompactTokens(u.input) : "—"}{" "}
+                          <span className="usage-token-sep">/</span>{" "}
+                          <em className="usage-token-dir">出</em>
+                          {u.output !== null ? formatCompactTokens(u.output) : "—"}
+                        </strong>
+                      </div>
+                      <div className="usage-mobile-metric">
+                        <span>首字时间</span>
+                        {firstTone !== "empty" ? (
+                          <span className={`usage-latency-pill is-${firstTone}`}>
+                            {formatDurationMs(u.firstTokenMs)}
+                          </span>
+                        ) : (
+                          <strong className="is-muted">—</strong>
+                        )}
+                      </div>
+                      <div className="usage-mobile-metric">
+                        <span>总时间</span>
+                        <strong className={u.durationMs == null ? "is-muted" : ""}>
+                          {formatDurationMs(u.durationMs)}
+                        </strong>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+
             {pageCount > 1 && (
               <div className="usage-pager" role="navigation" aria-label="明细翻页">
-                <button
-                  type="button"
-                  disabled={currentPage === 0}
-                  onClick={() => setLogPage(currentPage - 1)}
-                >
-                  上一页
-                </button>
-                <span>
-                  {currentPage + 1} / {pageCount}
+                <span className="usage-pager__summary">
+                  第 {pageStart + 1}–{Math.min(pageStart + PAGE_SIZE, sortedRecords.length)} 条 · 共{" "}
+                  {sortedRecords.length} 条
                 </span>
-                <button
-                  type="button"
-                  disabled={currentPage >= pageCount - 1}
-                  onClick={() => setLogPage(currentPage + 1)}
-                >
-                  下一页
-                </button>
+                <div className="usage-pager__controls">
+                  <button
+                    type="button"
+                    disabled={currentPage === 0}
+                    onClick={() => setLogPage(currentPage - 1)}
+                  >
+                    上一页
+                  </button>
+                  <span className="usage-pager__page">
+                    {currentPage + 1} / {pageCount}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={currentPage >= pageCount - 1}
+                    onClick={() => setLogPage(currentPage + 1)}
+                  >
+                    下一页
+                  </button>
+                </div>
               </div>
             )}
           </div>

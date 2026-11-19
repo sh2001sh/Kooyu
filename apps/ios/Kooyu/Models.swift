@@ -169,3 +169,17 @@ struct APIError: Error, LocalizedError {
     let status: Int
     var errorDescription: String? { message }
 }
+
+func formatWorkspaceLabel(_ raw: String?) -> String {
+    let normalized = (raw ?? "")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .replacingOccurrences(of: "\\", with: "/")
+        .replacingOccurrences(of: "/+$", with: "", options: .regularExpression)
+    guard !normalized.isEmpty else { return "" }
+    var stripped = normalized.replacingOccurrences(of: "^[A-Za-z]:", with: "", options: .regularExpression)
+    stripped = stripped.replacingOccurrences(of: "^/(?:Users|home)/[^/]+", with: "", options: [.regularExpression, .caseInsensitive])
+    let segments = stripped.split(separator: "/").map(String.init)
+    if segments.count >= 2 { return segments.suffix(2).joined(separator: "/") }
+    if let only = segments.first { return only }
+    return "/"
+}

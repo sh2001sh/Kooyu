@@ -1,17 +1,21 @@
 import { validatePermissionMode } from "./configuration/permissions.js";
+import { sessionActivity, agentTranscript } from "./session-activity.js";
 import { z } from "zod";
 import { homedir } from "node:os";
 import { randomUUID, createHash } from "node:crypto";
 import { nativeStorageEnvironment } from "./harnesses/session-presence.js";
 import { EventEmitter } from "node:events";
-import { existsSync, mkdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { basename, isAbsolute, join, normalize } from "node:path";
 import {
   createProjectSchema,
   createSessionSchema,
   modelSettingsSchema,
+  nativeImportSchema,
   pendingMessageSchema,
   sendSchema,
+  conversationEvents,
+  conversationMessageIndex,
   watchSchema,
   projectGrantSchema,
   bindingDefaultsSchema,
@@ -33,12 +37,21 @@ import {
   type Usage,
   type HarnessId,
   type HarnessModelOption,
+  type NativeImportCandidate,
+  type NativeImportDiscovery,
+  type NativeImportResult,
   type ProjectGrant,
 } from "@kodo/protocol";
+import {
+  extractImportedMessages,
+  normalizeNativeListing,
+  normalizePathKey,
+} from "./native-import.js";
 import { adapters, getAdapter } from "./harnesses/registry.js";
 import type { AdapterContext, HarnessAdapter, NativeRuntime, Wire } from "./harnesses/adapter.js";
 import { executable, RpcRejected } from "./harnesses/rpc.js";
 import { nativeClaudeExecutable } from "./harnesses/claude-code.js";
+import { nativeRetry } from "./harnesses/retry.js";
 import { desktopInstallationGeneration } from "./harnesses/desktop-installations.js";
 import {
   getKodoBuiltinCatalog,
@@ -89,6 +102,7 @@ import { Outbox } from "./messaging/outbox.js";
 import { BrowserService } from "./execution/browser.js";
 import { createSelfHostedTools } from "./kodo/self-hosted-tools.js";
 import { ExecutorService } from "./execution/service.js";
+import { AppUpdater } from "./updater.js";
 type Wake = {
   id: string;
   watchId: string;
@@ -141,10 +155,12 @@ export interface ServiceOptions {
   webAllowPrivateNetwork?: boolean;
 }
 export class SessionService {
+  private readonly branchMutations = new Set<string>();
   readonly notifications = new EventEmitter();
   readonly dataDir: string;
   readonly providers: ProviderService;
   readonly engines: EngineManager;
+  readonly updater: AppUpdater;
   /** Durable notification facts (separate from the in-process event broadcast). */
   readonly feed: NotificationService;
   readonly goals: GoalService;
@@ -186,6 +202,15 @@ export class SessionService {
       timer: ReturnType<typeof setTimeout>;
     }
   >();
+  private turnTimings = new Map<
+    string,
+    {
+      startedAt: number;
+      firstTokenAt: number | null;
+      endedAt: number | null;
+      usageIds: string[];
+    }
+  >();
   private readonly deadlineTimer: ReturnType<typeof setInterval>;
   private readonly maintenanceTimer: ReturnType<typeof setInterval>;
   private readonly nativeSyncTimer: ReturnType<typeof setInterval>;
@@ -209,6 +234,7 @@ export class SessionService {
       fetcher: options.providerFetch,
     });
     this.engines = new EngineManager(store, this.dataDir);
+    this.updater = new AppUpdater(store, this.dataDir, { fetcher: options.providerFetch });
     this.feed = new NotificationService(store, this.notifications);
     this.goals = new GoalService(this, this.feed);
     this.web = new WebService(store, {
@@ -280,6 +306,7 @@ export class SessionService {
     try {
       this.attachOrphanedSessions();
       this.backfillUsageModels();
+      this.backfillUsageTimings();
     } catch (error) {
       console.error(`Session project attachment failed: ${this.errorText(error)}`);
     }
@@ -547,6 +574,137 @@ export class SessionService {
       }
     });
   }
+  /** Backfill first-token and total turn duration from persisted event timestamps for older turn usage records. */
+  private backfillUsageTimings(): void {
+    const bySession = new Map<string, Map<string, Usage>>();
+    for (const u of this.store.records<Usage>("usage")) {
+      if (u.scope !== "turn") continue;
+      if (u.firstTokenMs !== undefined || u.durationMs !== undefined) continue;
+      let map = bySession.get(u.sessionId);
+      if (!map) {
+        map = new Map();
+        bySession.set(u.sessionId, map);
+      }
+      map.set(u.id, u);
+    }
+    if (bySession.size === 0) return;
+    const MAX_BACKFILL_MS = 3_600_000;
+    const validMs = (v: unknown): number | null =>
+      typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= MAX_BACKFILL_MS ? v : null;
+    const stmt = this.store.db.prepare(
+      `SELECT id,
+              json_extract(data,'$.type') AS type,
+              json_extract(data,'$.createdAt') AS createdAt,
+              json_extract(data,'$.payload.role') AS role,
+              json_extract(data,'$.payload.runState') AS runState,
+              json_extract(data,'$.payload.sourceId') AS sourceId,
+              json_extract(data,'$.payload.durationMs') AS durationMs,
+              json_extract(data,'$.payload.duration_ms') AS durationMsSnake,
+              json_extract(data,'$.payload.firstTokenMs') AS firstTokenMs,
+              json_extract(data,'$.payload.ttftMs') AS ttftMs
+       FROM events
+       WHERE session_id=?
+       ORDER BY sequence ASC`,
+    );
+    this.store.transaction(() => {
+      for (const [sessionId, pending] of bySession) {
+        const rows = stmt.all(sessionId) as Array<Record<string, unknown>>;
+        if (rows.length === 0) continue;
+        let turnStartMs: number | null = null;
+        let firstTokenAtMs: number | null = null;
+        let turnEndedAtMs: number | null = null;
+        for (const row of rows) {
+          const type = typeof row.type === "string" ? row.type : "";
+          const parsedAt = typeof row.createdAt === "string" ? Date.parse(row.createdAt) : NaN;
+          const at = Number.isFinite(parsedAt) ? parsedAt : null;
+          if (type === "message" && row.role === "user") {
+            if (at !== null) {
+              turnStartMs = at;
+              firstTokenAtMs = null;
+              turnEndedAtMs = null;
+            }
+          } else if (type === "state" && row.runState === "running") {
+            if (at !== null && (turnStartMs === null || turnEndedAtMs !== null)) {
+              turnStartMs = at;
+              firstTokenAtMs = null;
+              turnEndedAtMs = null;
+            }
+          } else if (
+            turnStartMs !== null &&
+            firstTokenAtMs === null &&
+            turnEndedAtMs === null &&
+            (type === "text-delta" || (type === "message" && row.role === "assistant"))
+          ) {
+            if (at !== null && at >= turnStartMs) firstTokenAtMs = at;
+          } else if (type === "turn-ended" || type === "settled") {
+            if (turnStartMs !== null && turnEndedAtMs === null && at !== null && at >= turnStartMs)
+              turnEndedAtMs = at;
+          } else if (type === "usage") {
+            const sourceId =
+              typeof row.sourceId === "string" && row.sourceId ? row.sourceId : String(row.id);
+            const usageId = `${sessionId}:turn:${sourceId}`;
+            const record = pending.get(usageId);
+            if (!record) continue;
+            const nativeDuration = validMs(row.durationMs) ?? validMs(row.durationMsSnake);
+            const nativeFirst = validMs(row.firstTokenMs) ?? validMs(row.ttftMs);
+            const endAt = turnEndedAtMs ?? at;
+            const derivedDuration =
+              turnStartMs !== null && endAt !== null && endAt >= turnStartMs
+                ? validMs(endAt - turnStartMs)
+                : null;
+            const derivedFirst =
+              turnStartMs !== null && firstTokenAtMs !== null && firstTokenAtMs >= turnStartMs
+                ? validMs(firstTokenAtMs - turnStartMs)
+                : null;
+            const firstTokenMs = nativeFirst ?? derivedFirst;
+            let durationMs = nativeDuration ?? derivedDuration;
+            if (firstTokenMs !== null && durationMs !== null && durationMs < firstTokenMs)
+              durationMs = firstTokenMs;
+            if (firstTokenMs !== null || durationMs !== null) {
+              this.store.put("usage", record.id, {
+                ...record,
+                ...(firstTokenMs !== null ? { firstTokenMs: Math.round(firstTokenMs) } : {}),
+                ...(durationMs !== null ? { durationMs: Math.round(durationMs) } : {}),
+              });
+              pending.delete(usageId);
+              if (pending.size === 0) break;
+            }
+          }
+        }
+      }
+    });
+  }
+  private beginTurnTiming(sessionId: string, force: boolean): void {
+    const existing = this.turnTimings.get(sessionId);
+    if (!force && existing && existing.endedAt === null) return;
+    this.turnTimings.set(sessionId, {
+      startedAt: Date.now(),
+      firstTokenAt: null,
+      endedAt: null,
+      usageIds: [],
+    });
+  }
+  private noteFirstToken(sessionId: string, type: RuntimeEvent["type"], p: Wire): void {
+    const timing = this.turnTimings.get(sessionId);
+    if (!timing || timing.firstTokenAt !== null || timing.endedAt !== null) return;
+    const isAssistantOutput =
+      (type === "text-delta" && typeof p?.text === "string" && p.text.length > 0) ||
+      (type === "message" && p?.role === "assistant");
+    if (isAssistantOutput) timing.firstTokenAt = Date.now();
+  }
+  private finishTurnTiming(sessionId: string): void {
+    const timing = this.turnTimings.get(sessionId);
+    if (!timing || timing.endedAt !== null) return;
+    timing.endedAt = Date.now();
+    const totalMs = Math.max(0, Math.round(timing.endedAt - timing.startedAt));
+    for (const usageId of timing.usageIds) {
+      const existing = this.store.record<Usage>("usage", usageId);
+      if (!existing || existing.scope !== "turn" || existing.durationMs != null) continue;
+      const durationMs =
+        existing.firstTokenMs != null ? Math.max(totalMs, existing.firstTokenMs) : totalMs;
+      this.store.put("usage", usageId, { ...existing, durationMs });
+    }
+  }
   /** Earlier drafts stored the folder without its project; attach them once. */
   private attachOrphanedSessions(): void {
     for (const s of this.store.sessions()) {
@@ -615,13 +773,24 @@ export class SessionService {
     )
       throw new KodoError("UNSUPPORTED", "绑定固定模型身份，切换模型请使用新的绑定会话。");
     if (bindingId && !binding) throw new KodoError("NOT_FOUND", "绑定不存在。");
-    if (binding?.selectionMode === "provider") this.providers.bindingModel(binding, input.model);
     // Per-harness new-chat defaults from settings fill whatever the request left open.
     const preset = appSettings(this.store).harnessDefaults?.[input.harnessId];
-    if (preset && !binding) {
-      if (input.model === undefined && preset.model) input.model = preset.model;
+    if (preset) {
+      if (input.model === undefined && preset.model) {
+        if (!binding) {
+          input.model = preset.model;
+        } else if (binding.selectionMode === "provider") {
+          try {
+            this.providers.bindingModel(binding, preset.model);
+            input.model = preset.model;
+          } catch {
+            // A stale default from a different model source is ignored; fall back to the binding default.
+          }
+        }
+      }
       if (input.reasoning === undefined && preset.reasoning) input.reasoning = preset.reasoning;
     }
+    if (binding?.selectionMode === "provider") this.providers.bindingModel(binding, input.model);
     if (input.permissionMode === undefined && preset?.permissionMode) {
       try {
         this.validatePermissionMode(
@@ -954,6 +1123,7 @@ export class SessionService {
     if (this.disposed || this.failed.has(id)) return;
     try {
       const p = payload as Wire;
+      this.noteFirstToken(id, type, p);
       if (type === "text-delta" && typeof p?.text === "string") {
         if (
           eventId &&
@@ -1082,6 +1252,9 @@ export class SessionService {
     let event: RuntimeEvent | undefined;
     this.store.transaction(() => {
       event = this.store.append({
+        ...(this.store.session(sessionId).conversation
+          ? { conversationBranchId: this.store.session(sessionId).conversation!.activeId }
+          : {}),
         id: nativeEventId ?? randomUUID(),
         sessionId,
         nativeRunId: runId,
@@ -1093,15 +1266,45 @@ export class SessionService {
       if (!event) return;
       const session = this.store.session(sessionId),
         p = (payload ?? {}) as Wire;
+      const terminal = this.store.record<{ commandId: string }>("terminal-command", sessionId);
+      const knownEnded =
+        session.runState === "idle" &&
+        Boolean(terminal) &&
+        !this.store.record<{ running: boolean }>("background", sessionId)?.running;
+      const retry = type === "state" ? nativeRetry(p) : undefined;
+      if (retry) {
+        session.retry = retry;
+        session.runState = "running";
+      } else if (
+        retry === null ||
+        ["text-delta", "tool", "turn-ended", "settled", "disconnected"].includes(type) ||
+        (type === "message" && p.role === "user")
+      )
+        delete session.retry;
+      if (type === "message" && p.role === "user") {
+        this.beginTurnTiming(sessionId, true);
+      } else if (type === "state" && p.runState === "running") {
+        this.beginTurnTiming(sessionId, false);
+      }
+      this.noteFirstToken(sessionId, type, p);
+      if (
+        (type === "message" && p.role === "user" && p.commandId) ||
+        (type === "state" && p.runState === "running")
+      )
+        this.store.remove("terminal-command", sessionId);
       if (type === "disconnected") {
         this.connections.set(sessionId, (this.connections.get(sessionId) ?? 0) + 1);
         this.runtime.delete(sessionId);
-        this.pauseTargetInside(sessionId, "原生连接中断，等待核对", true);
+        this.pauseTargetInside(
+          sessionId,
+          knownEnded ? "本轮已结束，原生连接已关闭" : "原生连接中断，等待核对",
+          !knownEnded,
+        );
         this.pauseControllerInside(sessionId);
         session.ownerEpoch = this.store.session(sessionId).ownerEpoch;
         session.connectionState = "offline";
-        session.runState = "unknown";
-        session.executionState = "unknown";
+        session.runState = knownEnded ? "idle" : "unknown";
+        if (!knownEnded) session.executionState = "unknown";
         for (const [id, pending] of this.interactions)
           if (pending.sessionId === sessionId) {
             pending.resolve({ cancelled: true });
@@ -1156,10 +1359,28 @@ export class SessionService {
         }
       }
       if (type === "error") {
-        session.runState = "unknown";
+        session.runState =
+          p.result === "rejected" && p.mode !== "steer" ? "idle" : knownEnded ? "idle" : "unknown";
         this.inbox(`error:${event.id}`, sessionId, "error", event.payload);
       }
       if (type === "usage") this.usage(session, event, p);
+      if (["turn-ended", "settled", "disconnected"].includes(type)) {
+        this.finishTurnTiming(sessionId);
+      }
+      if (["turn-ended", "settled"].includes(type)) {
+        const commandId =
+          p.commandId ??
+          this.store
+            .commands(sessionId)
+            .filter(
+              (c) =>
+                c.kind === "send" &&
+                c.body.mode !== "steer" &&
+                ["dispatched", "confirmed"].includes(c.status),
+            )
+            .at(-1)?.id;
+        if (commandId) this.store.put("terminal-command", sessionId, { commandId });
+      }
       if (p.backgroundState === "running")
         this.store.put("background", sessionId, { running: true });
       if (type === "settled" || p.backgroundState === "settled")
@@ -1193,6 +1414,12 @@ export class SessionService {
   }
   events(id?: string, after = 0): RuntimeEvent[] {
     return this.store.events(id, after);
+  }
+  activity(id: string) {
+    return sessionActivity(this.store, id);
+  }
+  agentPage(id: string, agentId: string, before?: number) {
+    return agentTranscript(this.store, id, agentId, before);
   }
   /**
    * Compact per-session progress for Kodo reports: last user request, last reply excerpt,
@@ -1285,6 +1512,43 @@ export class SessionService {
   }
   readPage(id: string, before?: number, eventId?: string) {
     const session = this.store.session(id);
+    const userEvents = this.store.db
+      .prepare(
+        "SELECT sequence,data FROM events WHERE session_id=? AND (json_extract(data,'$.type')='message' AND json_extract(data,'$.payload.role')='user' OR json_type(data,'$.payload.replaceEventId')='text') ORDER BY sequence",
+      )
+      .all(id)
+      .map(
+        (row) =>
+          ({ ...JSON.parse(String(row.data)), sequence: Number(row.sequence) }) as RuntimeEvent,
+      );
+    const messageIndex = conversationMessageIndex(userEvents, session.conversation);
+    if (session.conversation && !eventId?.startsWith("native-history:")) {
+      const all = this.store.db
+        .prepare("SELECT sequence,data FROM events WHERE session_id=? ORDER BY sequence")
+        .all(id)
+        .map(
+          (row) =>
+            ({ ...JSON.parse(String(row.data)), sequence: Number(row.sequence) }) as RuntimeEvent,
+        );
+      const path = conversationEvents(all, session.conversation);
+      const anchor = eventId ? path.find((e) => e.id === eventId)?.sequence : undefined;
+      const candidates = path.filter((e) => before === undefined || e.sequence < before);
+      const events =
+        anchor === undefined
+          ? candidates.slice(-300)
+          : path
+              .filter((e) => e.sequence <= anchor)
+              .slice(-150)
+              .concat(path.filter((e) => e.sequence > anchor).slice(0, 150));
+      return {
+        session,
+        messageIndex,
+        events,
+        olderCursor:
+          events.length && path[0]?.sequence !== events[0]?.sequence ? events[0]!.sequence : null,
+        commands: this.store.commands(id),
+      };
+    }
     if (eventId?.startsWith("native-history:")) {
       const history = this.store.record<{ history: unknown; eventId?: string }>(
         "native-history",
@@ -1298,6 +1562,7 @@ export class SessionService {
         throw new KodoError("NOT_FOUND", "原生历史快照已更新或不可用，请重新搜索。");
       return {
         session,
+        messageIndex,
         events: [],
         olderCursor: null,
         commands: this.store.commands(id),
@@ -1306,6 +1571,7 @@ export class SessionService {
     }
     return {
       session,
+      messageIndex,
       ...(eventId ? this.store.eventAround(id, eventId) : this.store.eventPage(id, before)),
       commands: this.store.commands(id),
     };
@@ -1502,10 +1768,7 @@ export class SessionService {
       session.nativeSessionId &&
       !this.runtime.has(id) &&
       !this.opening.has(id) &&
-      (session.runState !== "idle" ||
-        this.store
-          .commands(id)
-          .some((command) => ["dispatched", "unknown"].includes(command.status)))
+      (session.runState !== "idle" || this.deletionHasPendingCommands(id))
     ) {
       await this.syncNativeSessions([id]);
       const reconciled = this.store.record<LocalDeletion>("deleted-session", id);
@@ -1536,8 +1799,7 @@ export class SessionService {
       if (
         (confirmedMissing ? this.nativeInspectionBlocked(s) : s.runState !== "idle") ||
         this.opening.has(id) ||
-        (!confirmedMissing &&
-          this.store.commands(id).some((c) => ["dispatched", "unknown"].includes(c.status)))
+        (!confirmedMissing && this.deletionHasPendingCommands(id))
       )
         throw new KodoError("CONFLICT", "请先停止运行并核对未知命令，再删除会话。");
       this.pauseTargetInside(id, "删除本地会话", true);
@@ -1562,6 +1824,17 @@ export class SessionService {
         console.error(`Deleted session connection close: ${this.errorText(error)}`),
       );
     return this.store.record<LocalDeletion>("deleted-session", id)!;
+  }
+  private deletionHasPendingCommands(id: string): boolean {
+    // An offline stop receipt does not imply an unconfirmed native write.
+    // Keep its audit record, while still blocking a pending stop or unknown input.
+    return this.store
+      .commands(id)
+      .some(
+        (command) =>
+          command.status === "dispatched" ||
+          (command.status === "unknown" && command.kind !== "stop"),
+      );
   }
   search(query: string) {
     return {
@@ -1830,6 +2103,372 @@ export class SessionService {
     if (!runtime.list) throw new KodoError("UNSUPPORTED", "该适配器不提供原生历史列表。");
     return this.scrub(await runtime.list());
   }
+  private async probeInspectionContext(
+    harnessId: HarnessId,
+    cwd: string | null,
+  ): Promise<AdapterContext> {
+    const env = await instanceEnv(harnessId, undefined, this.dataDir);
+    const launch = nativeLaunch(this.dataDir, harnessId);
+    return {
+      cwd,
+      dataDir: this.dataDir,
+      env,
+      launch,
+      emit: () => {},
+      interact: async () => ({}),
+      sdkSessionOwners: () =>
+        Object.fromEntries(
+          this.store
+            .sessions()
+            .filter((item) => item.nativeSessionId && ["kodo", "pi"].includes(item.harnessId))
+            .map((item) => [item.nativeSessionId, item.harnessId]),
+        ),
+    };
+  }
+  async discoverNativeImports(
+    options: {
+      projectId?: string;
+      workspaceId?: string;
+      harnessId?: HarnessId;
+      directory?: string;
+    } = {},
+  ): Promise<NativeImportDiscovery> {
+    const allWorkspaces = this.store.workspaces();
+    const workspaceByKey = new Map<string, Workspace>();
+    for (const w of allWorkspaces) workspaceByKey.set(normalizePathKey(w.rootPath), w);
+
+    let targetWorkspaces: Workspace[] = [];
+    if (options.workspaceId) {
+      const found = allWorkspaces.find((w) => w.id === options.workspaceId);
+      if (!found) throw new KodoError("NOT_FOUND", "找不到指定的工作目录。");
+      targetWorkspaces = [found];
+    } else if (options.projectId) {
+      targetWorkspaces = allWorkspaces.filter((w) => w.projectId === options.projectId);
+    } else {
+      targetWorkspaces = allWorkspaces;
+    }
+
+    const scanCwds: Array<{ cwd: string | null; workspace: Workspace | null }> = options.directory
+      ? [
+          {
+            cwd: options.directory,
+            workspace: workspaceByKey.get(normalizePathKey(options.directory)) ?? null,
+          },
+        ]
+      : targetWorkspaces.length > 0
+        ? targetWorkspaces.map((w) => ({ cwd: w.rootPath, workspace: w }))
+        : [{ cwd: null, workspace: null }];
+
+    const healthMap = this.snapshot().harnesses;
+    const targetHarnesses: HarnessId[] = options.harnessId
+      ? [options.harnessId]
+      : this.implementations
+          .filter((a) => {
+            if (!a.standaloneList) return false;
+            const desc = healthMap.find((h) => h.id === a.descriptor.id);
+            return desc ? Boolean(desc.health?.launchable || desc.health?.installed) : true;
+          })
+          .map((a) => a.descriptor.id);
+
+    const existingMap = new Map<string, string>();
+    for (const s of this.store.sessions()) {
+      if (s.nativeSessionId) existingMap.set(`${s.harnessId}:${s.nativeSessionId}`, s.id);
+    }
+
+    const GLOBAL_LIST_HARNESSES = new Set<HarnessId>(["codex", "deepseek-harness", "kimi-code"]);
+    const withTimeout = <T>(work: Promise<T>, ms = 12000): Promise<T> =>
+      new Promise<T>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("扫描本地会话超时")), ms);
+        timer.unref?.();
+        work.then(
+          (val) => {
+            clearTimeout(timer);
+            resolve(val);
+          },
+          (err) => {
+            clearTimeout(timer);
+            reject(err);
+          },
+        );
+      });
+
+    const warnings: Array<{ harnessId: HarnessId; message: string }> = [];
+    const seen = new Map<string, NativeImportCandidate>();
+    const matchWorkspace = (cwd: string | null, fallback: Workspace | null): Workspace | null => {
+      if (cwd) {
+        const direct = workspaceByKey.get(normalizePathKey(cwd));
+        if (direct) return direct;
+      }
+      return fallback;
+    };
+
+    const runHarness = async (harnessId: HarnessId) => {
+      const adapter = this.adapter(harnessId);
+      if (!adapter.standaloneList) return;
+      const probes = GLOBAL_LIST_HARNESSES.has(harnessId)
+        ? [{ cwd: scanCwds[0]?.cwd ?? null, workspace: scanCwds[0]?.workspace ?? null }]
+        : scanCwds;
+
+      for (const probe of probes) {
+        const dummySession: Session = {
+          id: `probe:${harnessId}`,
+          title: "probe",
+          harnessId,
+          kind: "direct",
+          scope: probe.workspace?.projectId ? "project" : "global",
+          projectId: probe.workspace?.projectId ?? null,
+          workspaceId: probe.workspace?.id ?? null,
+          hostId: this.store.hostId,
+          nativeSessionId: null,
+          phase: "draft",
+          createdAt: new Date().toISOString(),
+          instanceId: `${harnessId}:native`,
+          bindingId: null,
+          bindingRevision: null,
+          ownerEpoch: 0,
+          runState: "idle",
+          executionState: "unknown",
+          connectionState: "offline",
+          archived: false,
+          pinned: false,
+        };
+        try {
+          const ctx = await this.probeInspectionContext(harnessId, probe.cwd);
+          const raw = await withTimeout(adapter.standaloneList(dummySession, ctx));
+          const items = normalizeNativeListing(harnessId, raw, probe.cwd);
+          for (const item of items) {
+            const matchedWs = matchWorkspace(
+              item.cwd,
+              GLOBAL_LIST_HARNESSES.has(harnessId) ? null : probe.workspace,
+            );
+            const resolvedProjectId = matchedWs?.projectId ?? null;
+            const resolvedWorkspaceId = matchedWs?.id ?? null;
+
+            if (options.workspaceId && resolvedWorkspaceId !== options.workspaceId) continue;
+            if (options.projectId && resolvedProjectId !== options.projectId) continue;
+            if (
+              options.directory &&
+              item.cwd &&
+              normalizePathKey(item.cwd) !== normalizePathKey(options.directory)
+            )
+              continue;
+
+            const key = `${harnessId}:${item.nativeSessionId}`;
+            if (seen.has(key)) continue;
+            const existingSessionId = existingMap.get(key) ?? null;
+            seen.set(key, {
+              harnessId,
+              nativeSessionId: item.nativeSessionId,
+              title: item.title,
+              cwd: item.cwd,
+              projectId: resolvedProjectId,
+              workspaceId: resolvedWorkspaceId,
+              createdAt: item.createdAt,
+              updatedAt: item.updatedAt,
+              model: item.model,
+              messageCount: item.messageCount,
+              alreadyImported: existingSessionId !== null,
+              existingSessionId,
+            });
+          }
+        } catch (err) {
+          const msg = this.errorText(err);
+          if (!warnings.some((w) => w.harnessId === harnessId && w.message === msg)) {
+            warnings.push({ harnessId, message: msg });
+          }
+        }
+      }
+    };
+
+    await Promise.allSettled(targetHarnesses.map((h) => runHarness(h)));
+    const candidates = [...seen.values()].sort((a, b) =>
+      String(b.updatedAt ?? b.createdAt ?? "").localeCompare(
+        String(a.updatedAt ?? a.createdAt ?? ""),
+      ),
+    );
+    return { candidates, warnings };
+  }
+  async importNativeSessions(value: unknown): Promise<NativeImportResult> {
+    const parsed = nativeImportSchema.safeParse(value);
+    if (!parsed.success) throw new KodoError("INVALID_INPUT", "请选择至少一个有效的本地会话。");
+    const { items, projectId: defaultProjectId, workspaceId: defaultWorkspaceId } = parsed.data;
+    const imported: Session[] = [];
+    const skipped: NativeImportResult["skipped"] = [];
+    const errors: NativeImportResult["errors"] = [];
+
+    const existingKeys = new Set(
+      this.store
+        .sessions()
+        .filter((s) => s.nativeSessionId)
+        .map((s) => `${s.harnessId}:${s.nativeSessionId}`),
+    );
+
+    const resolveTarget = (item: (typeof items)[number]) => {
+      const workspaces = this.store.workspaces();
+      const explicitWsId = item.workspaceId ?? defaultWorkspaceId ?? null;
+      if (explicitWsId) {
+        const ws = workspaces.find((w) => w.id === explicitWsId);
+        if (ws)
+          return {
+            projectId: item.projectId ?? defaultProjectId ?? ws.projectId,
+            workspaceId: ws.id,
+          };
+      }
+      if (item.cwd) {
+        const key = normalizePathKey(item.cwd);
+        const byPath = workspaces.find((w) => normalizePathKey(w.rootPath) === key);
+        if (byPath) {
+          return {
+            projectId: item.projectId ?? defaultProjectId ?? byPath.projectId,
+            workspaceId: byPath.id,
+          };
+        }
+        const preferredProject = item.projectId ?? defaultProjectId ?? null;
+        if (isAbsolute(item.cwd) && existsSync(item.cwd)) {
+          try {
+            if (statSync(item.cwd).isDirectory()) {
+              const ws = this.addWorkspace(preferredProject, item.cwd);
+              return { projectId: ws.projectId ?? preferredProject, workspaceId: ws.id };
+            }
+          } catch {
+            // Fall through if directory registration fails
+          }
+        }
+      }
+      const fallbackProject = item.projectId ?? defaultProjectId ?? null;
+      if (fallbackProject) {
+        const firstWs = workspaces.find((w) => w.projectId === fallbackProject);
+        return { projectId: fallbackProject, workspaceId: firstWs?.id ?? null };
+      }
+      return { projectId: null, workspaceId: null };
+    };
+
+    for (const item of items) {
+      const dedupKey = `${item.harnessId}:${item.nativeSessionId}`;
+      if (existingKeys.has(dedupKey)) {
+        skipped.push({
+          harnessId: item.harnessId,
+          nativeSessionId: item.nativeSessionId,
+          reason: "该会话已存在于 Kooyu 中",
+        });
+        continue;
+      }
+      try {
+        const target = resolveTarget(item);
+        const now = new Date().toISOString();
+        const sessionId = randomUUID();
+        const session: Session = {
+          id: sessionId,
+          title: item.title?.trim() || `导入会话 ${item.nativeSessionId.slice(0, 8)}`,
+          harnessId: item.harnessId,
+          kind: "direct",
+          scope: target.projectId ? "project" : "global",
+          projectId: target.projectId,
+          workspaceId: target.workspaceId,
+          hostId: this.store.hostId,
+          nativeSessionId: item.nativeSessionId,
+          phase: "native",
+          createdAt: item.createdAt ?? now,
+          instanceId: `${item.harnessId}:native`,
+          bindingId: null,
+          bindingRevision: null,
+          personalInstructions: appSettings(this.store).personalInstructions,
+          model: item.model ?? null,
+          reasoning: null,
+          permissionMode: null,
+          settingsRevision: 0,
+          ownerEpoch: 1,
+          runState: "idle",
+          executionState: "settled",
+          connectionState: "offline",
+          archived: false,
+          pinned: false,
+        };
+
+        // Best-effort read of historical messages before committing so transcript is immediately ready.
+        const adapter = this.adapter(item.harnessId);
+        let rawHistory: unknown = null;
+        if (adapter.standaloneRead) {
+          try {
+            const wsPath =
+              item.cwd ??
+              this.store.workspaces().find((w) => w.id === target.workspaceId)?.rootPath ??
+              null;
+            const ctx = await this.probeInspectionContext(item.harnessId, wsPath);
+            // For SDK harnesses (kodo/pi), record the session file mapping if discoverable.
+            if (["kodo", "pi"].includes(item.harnessId) && adapter.standaloneList) {
+              const listed = await adapter.standaloneList(session, ctx);
+              const found = normalizeNativeListing(item.harnessId, listed, wsPath).find(
+                (c) => c.nativeSessionId === item.nativeSessionId && c.sdkFilePath,
+              );
+              if (found?.sdkFilePath) {
+                const dir = join(this.dataDir, item.harnessId, "sessions");
+                mkdirSync(dir, { recursive: true });
+                writeFileSync(
+                  join(dir, `${sessionId}.json`),
+                  JSON.stringify({ path: found.sdkFilePath }),
+                );
+              }
+            }
+            rawHistory = await new Promise<unknown>((resolve, reject) => {
+              const timer = setTimeout(() => reject(new Error("读取原生历史超时")), 12000);
+              timer.unref?.();
+              adapter.standaloneRead!(session, ctx).then(
+                (val) => {
+                  clearTimeout(timer);
+                  resolve(val);
+                },
+                (err) => {
+                  clearTimeout(timer);
+                  reject(err);
+                },
+              );
+            });
+          } catch {
+            // Even when standalone history read fails, importing the session metadata still allows native resume.
+          }
+        }
+
+        const extracted = rawHistory ? extractImportedMessages(item.harnessId, rawHistory) : [];
+        const scrubbedHistory = rawHistory ? this.scrub(rawHistory) : null;
+        this.store.transaction(() => {
+          this.store.addSession(session);
+          this.store.put("native-storage-seen", session.id, { at: now });
+          for (let idx = 0; idx < extracted.length; idx++) {
+            const msg = extracted[idx]!;
+            this.store.append({
+              id: `import:${session.id}:${idx}`,
+              sessionId: session.id,
+              nativeRunId: null,
+              type: "message",
+              payload: this.scrub({ role: msg.role, text: msg.text, imported: true }),
+              source: session.harnessId,
+              createdAt: msg.createdAt ?? session.createdAt,
+            });
+          }
+          if (scrubbedHistory) {
+            const hash = createHash("sha256").update(JSON.stringify(scrubbedHistory)).digest("hex");
+            this.store.put("native-history", session.id, {
+              sessionId: session.id,
+              eventId: `native-history:${hash}`,
+              history: scrubbedHistory,
+              readAt: now,
+            });
+          }
+        });
+        existingKeys.add(dedupKey);
+        imported.push(session);
+      } catch (err) {
+        errors.push({
+          harnessId: item.harnessId,
+          nativeSessionId: item.nativeSessionId,
+          message: this.errorText(err),
+        });
+      }
+    }
+
+    return { imported, skipped, errors };
+  }
   async quota(id: string) {
     const remote = this.store.session(id);
     if (remote.executorId && remote.executorId !== "local")
@@ -1873,6 +2512,7 @@ export class SessionService {
           ? { nativeSessionId: input.nativeSessionId, phase: "native" as const }
           : {}),
         runState: input.idleConfirmed ? "idle" : "unknown",
+        executionState: input.idleConfirmed ? "settled" : "unknown",
       });
       this.store.put("reconciliation", c.id, {
         commandId: c.id,
@@ -1907,9 +2547,16 @@ export class SessionService {
     return bound;
   }
   acceptSend(sessionId: string, value: unknown, controllerId: string | null = null): Command {
+    if (this.branchMutations.has(sessionId))
+      throw new KodoError("CONFLICT", "正在切换消息分支，请稍后发送。");
     const input = sendSchema.parse(value),
       attachmentIds = input.attachmentIds?.length ? [...new Set(input.attachmentIds)] : undefined,
-      body = { text: input.text, mode: input.mode, ...(attachmentIds ? { attachmentIds } : {}) },
+      body = {
+        text: input.text,
+        mode: input.mode,
+        ...(attachmentIds ? { attachmentIds } : {}),
+        ...(input.replaceEventId ? { replaceEventId: input.replaceEventId } : {}),
+      },
       previous = this.store.command(input.requestId);
     if (previous) {
       if (
@@ -1968,7 +2615,10 @@ export class SessionService {
       this.store.put("send-request", c.id, { body });
       return c;
     });
-    this.ingest(sessionId, "state", { acceptedCommandId: command.id });
+    this.ingest(sessionId, "state", {
+      acceptedCommandId: command.id,
+      ...(input.replaceEventId ? { replaceEventId: input.replaceEventId } : {}),
+    });
     this.schedule(sessionId);
     return command;
   }
@@ -2073,6 +2723,7 @@ export class SessionService {
               origin: c.origin,
               controllerId: c.controllerId,
               commandId: c.id,
+              ...(c.body.replaceEventId ? { replaceEventId: c.body.replaceEventId } : {}),
               ...(c.body.attachments ? { attachments: c.body.attachments } : {}),
             },
             `command:${c.id}`,
@@ -2170,6 +2821,7 @@ export class SessionService {
             origin: c.origin,
             controllerId: c.controllerId,
             commandId: c.id,
+            ...(c.body.replaceEventId ? { replaceEventId: c.body.replaceEventId } : {}),
             ...(c.body.attachments ? { attachments: c.body.attachments } : {}),
           },
           `command:${c.id}`,
@@ -2212,24 +2864,32 @@ export class SessionService {
             )
           : null;
       if (prepared) c = { ...c, body: { ...c.body, attachments: prepared.attachments } };
-      const branch = this.store.record<{
+      const inline = this.store.record<{
+        commandId: string;
         context: string;
         attachments?: import("@kodo/protocol").MessageAttachment[];
-      }>("branch-context", id);
+      }>("inline-context", c.id);
+      const branch =
+        inline ??
+        this.store.record<{
+          context: string;
+          attachments?: import("@kodo/protocol").MessageAttachment[];
+        }>("branch-context", id);
       let instructions = [branch?.context, this.store.session(id).personalInstructions]
         .filter(Boolean)
         .join("\n\n");
       const firstMessage =
         instructions &&
         c.body.mode !== "steer" &&
-        !this.store
-          .commands(id)
-          .some(
-            (command) =>
-              command.id !== c.id &&
-              command.kind === "send" &&
-              ["dispatched", "confirmed", "unknown"].includes(command.status),
-          );
+        (Boolean(inline) ||
+          !this.store
+            .commands(id)
+            .some(
+              (command) =>
+                command.id !== c.id &&
+                command.kind === "send" &&
+                ["dispatched", "confirmed", "unknown"].includes(command.status),
+            ));
       const branchFiles =
         firstMessage && branch?.attachments?.length
           ? await this.files.prepareAttachments(id, branch.attachments, {
@@ -2243,6 +2903,7 @@ export class SessionService {
       if (branchFiles) instructions = branchFiles.compose(instructions);
       const text = prepared ? prepared.compose(String(c.body.text)) : String(c.body.text);
       const images = [...(branchFiles?.images ?? []), ...(prepared?.images ?? [])];
+      if (c.body.mode !== "steer") this.beginTurnTiming(id, false);
       const result = await runtime.send(
         firstMessage ? `用户个人指令：\n${instructions}\n\n本条消息：\n${text}` : text,
         c.id,
@@ -2278,6 +2939,12 @@ export class SessionService {
             .run((c.body.wake as Wire).id);
       });
     } catch (e) {
+      const terminal = this.store.record<{ commandId: string }>("terminal-command", id);
+      if (terminal?.commandId === c.id) {
+        // A terminal native result remains authoritative even if the SDK then rejects its iterator.
+        this.store.saveCommand({ ...c, status: "confirmed" });
+        return;
+      }
       const rejected = e instanceof RpcRejected || e instanceof KodoError;
       this.store.saveCommand({
         ...c,
@@ -2295,6 +2962,7 @@ export class SessionService {
         message: this.errorText(e),
         commandId: c.id,
         result: rejected ? "rejected" : "unknown",
+        mode: c.body.mode,
       });
       return;
     }
@@ -2511,8 +3179,13 @@ export class SessionService {
       return receipt;
     };
     this.ingest(id, "supervision", { action: pause ? "stop-and-pause" : "cancel-turn" });
+    const current = this.store.session(id);
+    if (current.runState === "idle" && current.executionState === "settled")
+      return finish("not running; native execution settled", "confirmed");
     const runtime = this.runtime.get(id);
-    if (!runtime) return finish("unconfirmed: native connection offline", "unknown");
+    // No cancel call was made, so delivery is known to have failed. Preserve the
+    // session's execution uncertainty without letting this stop block future input.
+    if (!runtime) return finish("not delivered: native connection offline", "rejected");
     try {
       await runtime.cancel();
       return finish("requested; await native event", "confirmed");
@@ -2941,6 +3614,33 @@ export class SessionService {
         : (p.model ?? (active?.body.settings as Wire)?.model ?? fallbackModel);
     // Native SDK prices describe their catalog, not an arbitrary bound endpoint's bill.
     const cost = this.binding(s) ? null : number(p.costUsd, total.cost?.total);
+    const timing = this.turnTimings.get(s.id);
+    const nativeFirstTokenMs = number(p.firstTokenMs, p.ttftMs, total.firstTokenMs, total.ttftMs);
+    const nativeDurationMs = number(
+      p.durationMs,
+      p.duration_ms,
+      total.durationMs,
+      total.duration_ms,
+    );
+    const measuredFirstTokenMs =
+      scope === "turn" && timing?.firstTokenAt != null
+        ? Math.max(0, Math.round(timing.firstTokenAt - timing.startedAt))
+        : null;
+    const measuredDurationMs =
+      scope === "turn" && timing
+        ? Math.max(0, Math.round((timing.endedAt ?? Date.now()) - timing.startedAt))
+        : null;
+    const prior = this.store.record<Usage>("usage", id);
+    const firstTokenMs =
+      nativeFirstTokenMs !== null
+        ? Math.round(nativeFirstTokenMs)
+        : (measuredFirstTokenMs ?? prior?.firstTokenMs ?? null);
+    let durationMs =
+      nativeDurationMs !== null
+        ? Math.round(nativeDurationMs)
+        : (measuredDurationMs ?? prior?.durationMs ?? null);
+    if (firstTokenMs !== null && durationMs !== null && durationMs < firstTokenMs)
+      durationMs = firstTokenMs;
     const usage: Usage = {
       id,
       sessionId: s.id,
@@ -2960,13 +3660,17 @@ export class SessionService {
             ? "estimate"
             : "actual",
       model: usedModel,
+      ...(firstTokenMs !== null ? { firstTokenMs } : {}),
+      ...(durationMs !== null ? { durationMs } : {}),
       createdAt: e.createdAt,
     };
-    const prior = this.store.record<Usage>("usage", id);
     if (scope === "session" && prior) {
       for (const key of ["input", "output", "cacheRead", "cacheWrite", "costUsd"] as const)
         if (prior[key] !== null && (usage[key] === null || usage[key]! < prior[key]!))
           usage[key] = prior[key];
+    }
+    if (scope === "turn" && timing && timing.endedAt === null && nativeDurationMs === null) {
+      if (!timing.usageIds.includes(id)) timing.usageIds.push(id);
     }
     // No native price: estimate turn cost from the public catalog list price.
     if (usage.costUsd === null && scope === "turn" && usage.model) {
@@ -3356,6 +4060,177 @@ export class SessionService {
       throw new KodoError("CONFLICT", "ACP 会话未连接，无法核对原生可选模式。");
     return this.updateSession(id, value);
   }
+  async messageBranch(id: string, value: unknown): Promise<Session> {
+    const input = z
+      .discriminatedUnion("action", [
+        z
+          .object({
+            action: z.literal("edit"),
+            requestId: z.string().uuid(),
+            eventId: z.string().min(1),
+            text: z.string().trim().min(1).max(200000),
+          })
+          .strict(),
+        z
+          .object({
+            action: z.literal("select"),
+            requestId: z.string().uuid(),
+            branchId: z.string().min(1),
+          })
+          .strict(),
+      ])
+      .parse(value);
+    this.lifecycle.assertOpen();
+    const fingerprint = JSON.stringify({ id, ...input });
+    const prior = this.store.record<{ fingerprint: string }>(
+      "inline-branch-request",
+      input.requestId,
+    );
+    if (prior) {
+      if (prior.fingerprint !== fingerprint)
+        throw new KodoError("CONFLICT", "请求 ID 已用于不同内容。");
+      return this.store.session(id);
+    }
+    const source = this.store.session(id);
+    if (
+      this.branchMutations.has(id) ||
+      this.opening.has(id) ||
+      this.pumping.has(id) ||
+      source.runState !== "idle" ||
+      this.store.record<{ running: boolean }>("background", id)?.running ||
+      this.store.commands(id).some((c) => ["accepted", "dispatched", "unknown"].includes(c.status))
+    )
+      throw new KodoError("CONFLICT", "请先结束当前回合并处理待发消息，再编辑或切换分支。");
+    const conversation = source.conversation ?? { activeId: "root", branches: [] };
+    const all = this.store.db
+      .prepare("SELECT sequence,data FROM events WHERE session_id=? ORDER BY sequence")
+      .all(id)
+      .map(
+        (row) =>
+          ({ ...JSON.parse(String(row.data)), sequence: Number(row.sequence) }) as RuntimeEvent,
+      );
+    const visible = conversationEvents(all, conversation);
+    const anchor =
+      input.action === "edit" ? visible.find((e) => e.id === input.eventId) : undefined;
+    if (
+      input.action === "edit" &&
+      (!anchor || anchor.type !== "message" || (anchor.payload as Wire).role !== "user")
+    )
+      throw new KodoError("INVALID_INPUT", "只能编辑当前分支中的用户消息。");
+    if (
+      input.action === "select" &&
+      input.branchId !== "root" &&
+      !conversation.branches.some((b) => b.id === input.branchId)
+    )
+      throw new KodoError("NOT_FOUND", "消息分支不存在。");
+    const prefix = anchor ? visible.filter((e) => e.sequence < anchor.sequence) : [];
+    const context = prefix
+      .filter((e) => e.type === "message" && branchMessageRole(e.payload as Wire))
+      .map(
+        (e) =>
+          `${branchMessageRole(e.payload as Wire) === "user" ? "用户" : "助手"}：\n${branchMessageText(e.payload as Wire)}`,
+      )
+      .join("\n\n");
+    if (context.length > 160000 || prefix.length > 10000 || conversation.branches.length >= 1000)
+      throw new KodoError("UNSUPPORTED", "消息分支上下文过长，未创建不完整分支。");
+    const attachments = [
+      ...new Map(
+        [...prefix, ...(anchor ? [anchor] : [])].flatMap((e) =>
+          ((e.payload as Wire).attachments ?? []).map(
+            (a: import("@kodo/protocol").MessageAttachment) => [a.fileId, a] as const,
+          ),
+        ),
+      ).values(),
+    ] as import("@kodo/protocol").MessageAttachment[];
+    if (attachments.length > 10) throw new KodoError("UNSUPPORTED", "消息分支包含超过 10 个附件。");
+    this.branchMutations.add(id);
+    try {
+      // Fence callbacks before closing: detaching an idle native context is not a disconnect failure.
+      this.connections.set(id, (this.connections.get(id) ?? 0) + 1);
+      this.flushText(id);
+      const runtime = this.runtime.get(id);
+      this.runtime.delete(id);
+      this.runtimeModels.delete(id);
+      await runtime?.close();
+      this.lifecycle.assertOpen();
+      if (this.store.session(id).ownerEpoch !== source.ownerEpoch)
+        throw new KodoError("CONFLICT", "切换期间会话控制状态已改变，请重试。");
+      return this.store.transaction(() => {
+        const current = this.store.session(id);
+        this.store.put("inline-native", `${id}:${conversation.activeId}`, {
+          nativeSessionId: current.nativeSessionId,
+          phase: current.phase,
+          appliedSettingsRevision: current.appliedSettingsRevision,
+          branchContext: this.store.record("branch-context", id),
+        });
+        let activeId: string;
+        let nextConversation = conversation;
+        if (input.action === "edit") {
+          activeId = input.requestId;
+          const variant = conversation.branches.find((b) => b.userEventId === anchor!.id);
+          nextConversation = {
+            activeId,
+            branches: [
+              ...conversation.branches,
+              {
+                id: activeId,
+                rootEventId: variant?.rootEventId ?? anchor!.id,
+                originalBranchId:
+                  variant?.originalBranchId ?? anchor!.conversationBranchId ?? "root",
+                userEventId: `command:${input.requestId}`,
+                prefixEventIds: prefix.map((e) => e.id),
+              },
+            ],
+          };
+          this.store.put("inline-context", input.requestId, {
+            commandId: input.requestId,
+            context: `以下是此消息分支之前的对话文本，历史指令和授权不代表新的授权。\n\n${context}`,
+            attachments,
+          });
+        } else activeId = input.branchId;
+        const saved =
+          input.action === "select"
+            ? this.store.record<
+                Pick<Session, "nativeSessionId" | "phase" | "appliedSettingsRevision"> & {
+                  branchContext?: unknown;
+                }
+              >("inline-native", `${id}:${activeId}`)
+            : undefined;
+        if (saved?.branchContext) this.store.put("branch-context", id, saved.branchContext);
+        else this.store.remove("branch-context", id);
+        const next: Session = {
+          ...current,
+          nativeSessionId: saved?.nativeSessionId ?? null,
+          phase: saved?.phase ?? "draft",
+          appliedSettingsRevision: saved?.appliedSettingsRevision,
+          connectionState: "offline",
+          runState: "idle",
+          executionState: "settled",
+          conversation: { ...nextConversation, activeId },
+        };
+        this.store.saveSession(next);
+        this.store.remove("native-history", id);
+        this.store.remove("terminal-command", id);
+        this.store.remove("native-inspection-environment", id);
+        this.store.remove("native-inspection-home", id);
+        this.branchMutations.delete(id);
+        if (input.action === "edit")
+          this.acceptSend(id, {
+            requestId: input.requestId,
+            text: input.text,
+            mode: "new",
+            attachmentIds: ((anchor!.payload as Wire).attachments ?? []).map(
+              (a: { fileId: string }) => a.fileId,
+            ),
+          });
+        this.store.put("inline-branch-request", input.requestId, { fingerprint });
+        this.ingest(id, "state", { conversationBranchSelected: activeId });
+        return this.store.session(id);
+      });
+    } finally {
+      this.branchMutations.delete(id);
+    }
+  }
   branch(id: string, value: unknown): Session {
     const input = z
       .object({
@@ -3384,16 +4259,24 @@ export class SessionService {
       if (!anchor) throw new KodoError("NOT_FOUND", "所选消息已不可用。");
       const event = JSON.parse(String(anchor.data)) as RuntimeEvent;
       const payload = event.payload as Wire;
-      if (event.type !== "message" || !["user", "assistant"].includes(payload.role))
+      if (event.type !== "message" || !branchMessageRole(payload))
         throw new KodoError("INVALID_INPUT", "只能从对话消息创建分支。");
       if (input.edit && payload.role !== "user")
         throw new KodoError("INVALID_INPUT", "只能编辑用户消息。");
-      const records = this.store.db
-        .prepare(
-          "SELECT data FROM events WHERE session_id=? AND sequence<=? AND json_extract(data,'$.type')='message' ORDER BY sequence LIMIT 1001",
-        )
-        .all(id, Number(anchor.sequence))
-        .map((r) => JSON.parse(String(r.data)) as RuntimeEvent);
+      const records = conversationEvents(
+        this.store.db
+          .prepare(
+            "SELECT sequence,data FROM events WHERE session_id=? AND sequence<=? AND json_extract(data,'$.type')='message' ORDER BY sequence",
+          )
+          .all(id, Number(anchor.sequence))
+          .map(
+            (r) =>
+              ({ ...JSON.parse(String(r.data)), sequence: Number(r.sequence) }) as RuntimeEvent,
+          ),
+        source.conversation,
+      );
+      if (!records.some((e) => e.id === input.eventId))
+        throw new KodoError("INVALID_INPUT", "只能从当前消息分支创建新聊天。");
       if (records.length > 1000)
         throw new KodoError("UNSUPPORTED", "对话过长，无法完整创建分支，请选择较早的消息。");
       const history = input.edit ? records.filter((e) => e.id !== event.id) : records;
@@ -3412,10 +4295,10 @@ export class SessionService {
       if (attachments.length > 10)
         throw new KodoError("UNSUPPORTED", "分支包含超过 10 个附件，请选择更早的消息。");
       const context = history
-        .filter((e) => ["user", "assistant"].includes((e.payload as Wire).role))
+        .filter((e) => branchMessageRole(e.payload as Wire))
         .map(
           (e) =>
-            `${(e.payload as Wire).role === "user" ? "用户" : "助手"}：\n${branchMessageText(e.payload as Wire)}`,
+            `${branchMessageRole(e.payload as Wire) === "user" ? "用户" : "助手"}：\n${branchMessageText(e.payload as Wire)}`,
         )
         .join("\n\n");
       if (context.length > 160000)
@@ -3455,12 +4338,12 @@ export class SessionService {
       });
       for (const e of history) {
         const p = e.payload as Wire;
-        if (["user", "assistant"].includes(p.role))
+        if (branchMessageRole(p))
           this.ingest(
             target.id,
             "message",
             {
-              role: p.role,
+              role: branchMessageRole(p),
               text: branchMessageText(p),
               ...(p.attachments ? { attachments: p.attachments } : {}),
               origin: "branch",
@@ -3537,6 +4420,7 @@ export class SessionService {
       }
     }
     this.disposed = true;
+    this.updater.close();
     this.lifecycle.close();
     this.executors.dispose();
     clearInterval(this.workTimer);
@@ -3578,4 +4462,13 @@ function branchMessageText(p: Wire): string {
       .map((c: Wire) => c.text)
       .join("\n");
   return p?.message ? branchMessageText(p.message) : "";
+}
+
+function branchMessageRole(p: Wire): "user" | "assistant" | undefined {
+  if (["thought", "analysis", "reasoning", "thinking"].includes(p.channel ?? p.type)) return;
+  if (p.role === "user" || p.role === "assistant") return p.role;
+  if (p.type === "agentMessage" || p.kind === "assistantText") return "assistant";
+  if (p.message) return branchMessageRole(p.message);
+  // All non-tool message events emitted by native adapters are assistant snapshots.
+  if (typeof p.text === "string" || typeof p.content === "string") return "assistant";
 }

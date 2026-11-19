@@ -115,7 +115,7 @@ struct HostAPI: Sendable {
         if let binary { req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type"); req.httpBody = binary }
         let data: Data
         let response: URLResponse
-        do { (data, response) = try await session.data(for: req) }
+        do { (data, response) = try await readRecoveringConnection(req) }
         catch {
             if Task.isCancelled { throw CancellationError() }
             throw APIError(message: "无法连接此设备，请检查设备是否在线以及网络是否可用。", status: 0)
@@ -127,5 +127,18 @@ struct HostAPI: Sendable {
             throw APIError(message: detail.isEmpty ? "Host 请求失败（\(http.statusCode)），请检查连接。" : detail, status: http.statusCode)
         }
         return try JSONDecoder().decode(T.self, from: data)
+    }
+    static func canRecoverRead(_ method: String?, _ error: Error) -> Bool {
+        guard method == "GET", let network = error as? URLError else { return false }
+        return [.networkConnectionLost, .cannotConnectToHost].contains(network.code)
+    }
+    private static func readRecoveringConnection(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        do { return try await session.data(for: request) }
+        catch {
+            guard !Task.isCancelled, canRecoverRead(request.httpMethod, error) else { throw error }
+            // One recovery only, for reads. Never replay an ambiguous mutation.
+            try await Task.sleep(for: .milliseconds(200))
+            return try await session.data(for: request)
+        }
     }
 }

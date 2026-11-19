@@ -63,10 +63,7 @@ for (const mobile of [false, true])
     await page.goto("/");
     const beforeDefaults = (await (await page.request.get("/api/snapshot")).json()).bindingDefaults;
     await expect(page.getByText("Host 已连接", { exact: true })).toHaveCount(1);
-    await page
-      .getByRole("button", { name: mobile ? "配置" : "设置", exact: true })
-      .first()
-      .click();
+    await page.getByRole("button", { name: "设置", exact: true }).first().click();
     await page
       .getByRole("navigation", { name: mobile ? "配置页面" : "配置导航" })
       .getByRole("button", { name: "模型来源", exact: true })
@@ -83,7 +80,7 @@ for (const mobile of [false, true])
       .locator(".sx-section")
       .filter({ has: page.locator(".sx-provider-name").filter({ hasText: name }) });
     await expect(record.getByText("2 个模型", { exact: true })).toBeVisible();
-    const table = page.getByRole("table", { name: "模型列表", exact: true });
+    const table = record.getByRole("table", { name: "模型列表", exact: true });
     const row = table.locator("tbody tr").filter({ hasText: "ui-synthetic-model" });
     await expect(row).toHaveCount(1);
     await row.getByRole("button", { name: "修改", exact: true }).click();
@@ -95,6 +92,9 @@ for (const mobile of [false, true])
     await editor.getByRole("button", { name: "恢复自动", exact: true }).click();
     await expect(row.getByText("123,456", { exact: true })).toBeVisible();
     const config = page.getByRole("region", { name: "Provider 与模型配置" });
+    if (mobile) {
+      await page.getByRole("button", { name: "返回设置列表", exact: true }).click();
+    }
     await page.getByRole("button", { name: "高级", exact: true }).first().click();
     await config.getByRole("button", { name: "添加 Harness 绑定", exact: true }).click();
     await config.getByLabel("绑定名称", { exact: true }).fill(bindingName);
@@ -157,10 +157,7 @@ for (const mobile of [false, true])
       })
     ).json();
     await page.reload();
-    await page
-      .getByRole("button", { name: mobile ? "配置" : "设置", exact: true })
-      .first()
-      .click();
+    await page.getByRole("button", { name: "设置", exact: true }).first().click();
     await page.getByRole("button", { name: "高级", exact: true }).first().click();
     await config.getByRole("button", { name: "添加 Harness 绑定", exact: true }).click();
     await config.getByLabel("目标 Harness", { exact: true }).selectOption("gemini");
@@ -197,10 +194,7 @@ for (const mobile of [false, true])
       })
     ).json();
     await page.reload();
-    await page
-      .getByRole("button", { name: mobile ? "配置" : "设置", exact: true })
-      .first()
-      .click();
+    await page.getByRole("button", { name: "设置", exact: true }).first().click();
     await page.getByRole("button", { name: "高级", exact: true }).first().click();
     await config.getByRole("button", { name: "添加 Harness 绑定", exact: true }).click();
     await config.getByLabel("目标 Harness", { exact: true }).selectOption("gemini");
@@ -232,14 +226,26 @@ for (const mobile of [false, true])
     ).toBeDisabled();
     await config.getByRole("button", { name: "关闭配置编辑", exact: true }).click();
     if (mobile) {
-      await page.getByRole("button", { name: "会话", exact: true }).click();
+      await page.getByRole("button", { name: "返回设置列表", exact: true }).click();
+      await page
+        .getByRole("navigation", { name: "移动端标签导航", exact: true })
+        .getByRole("button", { name: "对话", exact: true })
+        .click();
     } else {
       await page.getByRole("button", { name: "返回对话", exact: true }).click();
       await expect(page.locator(".session-rows")).toBeVisible();
     }
     await page.getByRole("button", { name: "新建会话", exact: true }).first().click();
-    await page.getByRole("button", { name: "Harness", exact: true }).click();
-    await page.locator('.ios-popover [role="option"][data-value="codex"]').click();
+    if (mobile) {
+      await page.getByRole("button", { name: "切换对话引擎", exact: true }).click();
+      await page
+        .getByRole("dialog", { name: "选择对话引擎" })
+        .locator('[role="option"][data-value="codex"]')
+        .click();
+    } else {
+      await page.getByRole("button", { name: "Harness", exact: true }).click();
+      await page.locator('.ios-popover [role="option"][data-value="codex"]').click();
+    }
     await page.getByRole("button", { name: "模型配置", exact: true }).click();
     await page.getByRole("option").filter({ hasText: bindingName }).click();
     await page.getByRole("button", { name: "模型配置", exact: true }).click();

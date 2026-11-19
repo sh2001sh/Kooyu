@@ -1,5 +1,5 @@
 import type { Command, RuntimeEvent, Session, Snapshot, Usage } from "@kodo/protocol";
-import { HARNESS_NAMES, formatDate, shortModelLabel } from "../lib/harnesses";
+import { HARNESS_NAMES, RUN_STATE_LABELS, formatDate, shortModelLabel } from "../lib/harnesses";
 import { messageText } from "./TurnCard";
 import { toolSummary } from "./TranscriptView";
 
@@ -289,7 +289,7 @@ export function SessionOverview({
         <dd className="session-facts__status">
           <span className={`session-fact-pill is-${s.runState}`}>
             <i aria-hidden="true" />
-            {s.runState === "running" ? "执行中" : s.runState === "idle" ? "空闲" : "运行未知"}
+            {RUN_STATE_LABELS[s.runState]}
           </span>
           <span className={`session-fact-pill ${s.connectionState === "connected" ? "is-ok" : ""}`}>
             {s.connectionState === "connected" ? "已连接" : "未连接"}

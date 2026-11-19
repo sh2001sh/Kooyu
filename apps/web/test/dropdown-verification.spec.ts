@@ -73,7 +73,14 @@ test("verify settings dropdown on mobile", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
 
-  await page.getByRole("button", { name: "配置" }).click();
+  await page
+    .getByRole("navigation", { name: "移动端标签导航", exact: true })
+    .getByRole("button", { name: "设置", exact: true })
+    .click();
+  await page
+    .getByRole("navigation", { name: "配置页面", exact: true })
+    .getByRole("button", { name: "通用", exact: true })
+    .click();
 
   const trigger = page.locator("#pref-harness-btn");
   await expect(trigger).toBeVisible({ timeout: 10000 });

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ChevronRight, Download, ExternalLink, RefreshCw } from "lucide-react";
+import { ChevronRight, Download, ExternalLink, RefreshCw, Server, Sparkles } from "lucide-react";
 import type {
   AppSettings,
   EndpointProtocol,
@@ -15,6 +15,12 @@ import { ConfigFiles } from "./ConfigFiles";
 import { SkillsBlock } from "./SkillsBlock";
 import { api } from "../../lib/host-client";
 import { modelChoiceLabels, shortModelLabel } from "../../lib/harnesses";
+import {
+  CLAUDE_MODEL_MAP_SLOTS,
+  pruneHarnessDefaultsForModels,
+  suggestClaudeModelMap,
+  type ClaudeModelSlot,
+} from "../../lib/model-mapping";
 import { useAppPreferences } from "../../lib/preferences";
 import { HarnessBadge } from "../KodoBrand";
 import { permissionModesFor } from "../PermissionControls";
@@ -133,25 +139,38 @@ function EngineCard({
   const { settings } = useAppPreferences();
   const preset = settings.harnessDefaults?.[h.id];
   const native = h.nativeDefaults;
-  const source = binding
-    ? `模型来源 · ${binding.name}`
-    : h.id === "kodo"
-      ? "Kooyu 独立配置"
-      : "自身登录与配置";
+  const providerRecord = binding
+    ? providers?.providers.find((p) => p.id === binding.providerId)
+    : undefined;
+  const endpointRecord = providerRecord?.endpoints.find((e) => e.id === binding?.endpointId);
+  const providerDisplayName = binding
+    ? providerRecord
+      ? providerRecord.endpoints.length > 1 && endpointRecord
+        ? `${providerRecord.name} · ${endpointRecord.name}`
+        : providerRecord.name
+      : binding.name.replace(new RegExp(`\\s*·\\s*${h.id}$`, "i"), "") || binding.name
+    : null;
   const model = preset?.model ?? binding?.model ?? native?.model;
+  const reasoning = preset?.reasoning ?? binding?.reasoning ?? native?.reasoning;
+  const metaParts = [model ? shortModelLabel(model) : null, reasoning || null].filter(Boolean);
   return (
     <details className="sx-engine" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
       <summary>
         <HarnessBadge harnessId={h.id} size="sm" tone="tinted" />
         <span className="sx-engine__name">
           <strong>{h.name}</strong>
-          <small>
-            {source}
-            {model ? ` · ${shortModelLabel(model)}` : ""}
-            {(preset?.reasoning ?? native?.reasoning)
-              ? ` · ${preset?.reasoning ?? native?.reasoning}`
-              : ""}
-          </small>
+          {metaParts.length > 0 && <small>{metaParts.join(" · ")}</small>}
+        </span>
+        <span
+          className={`sx-engine__provider ${providerDisplayName ? "is-provider" : "is-native"}`}
+          title={
+            providerDisplayName
+              ? `当前使用模型来源：${providerDisplayName}`
+              : "当前使用引擎原生配置与登录"
+          }
+        >
+          {providerDisplayName && <Server size={11} aria-hidden="true" />}
+          <span>{providerDisplayName ?? "原生配置"}</span>
         </span>
         <StatusDot tone={status.tone}>{status.text}</StatusDot>
         <ChevronRight size={15} className="sx-engine__chevron" aria-hidden="true" />
@@ -323,6 +342,7 @@ function ConnectionBlock({
   run: Action;
   onOpenProviders: () => void;
 }) {
+  const { update: updatePreferences } = useAppPreferences();
   const currentId = snapshot.bindingDefaults.harnessBindingIds[h.id];
   const current = snapshot.bindings.find((b) => b.id === currentId);
   const compatible = (protocol: EndpointProtocol) =>
@@ -373,6 +393,30 @@ function ConnectionBlock({
                     expectedDefaultsRevision: snapshot.bindingDefaults.revision,
                     requestId: crypto.randomUUID(),
                   });
+                  const validModels = new Set(
+                    (providers?.models ?? [])
+                      .filter((m) => m.providerId === providerId && m.endpointId === endpointId)
+                      .map((m) => m.model),
+                  );
+                  if (validModels.size > 0) {
+                    await updatePreferences((cur) => {
+                      const existing = cur.harnessDefaults?.[h.id];
+                      const pruned = pruneHarnessDefaultsForModels(existing, validModels);
+                      if (!pruned || pruned === existing) return cur;
+                      const all: AppSettings["harnessDefaults"] = { ...cur.harnessDefaults };
+                      if (
+                        !pruned.model &&
+                        !pruned.reasoning &&
+                        !pruned.permissionMode &&
+                        !Object.keys(pruned.modelMap ?? {}).length
+                      ) {
+                        delete all[h.id];
+                      } else {
+                        all[h.id] = pruned;
+                      }
+                      return { ...cur, harnessDefaults: all };
+                    }).catch(() => {});
+                  }
                 });
               }}
               options={[
@@ -405,7 +449,7 @@ function DefaultsBlock({
   const binding = snapshot.bindings.find(
     (b) => b.id === snapshot.bindingDefaults.harnessBindingIds[h.id],
   );
-  const { settings, save } = useAppPreferences();
+  const { settings, update: updatePreferences } = useAppPreferences();
   const [models, setModels] = useState<ModelsPayload>();
   const [error, setError] = useState("");
   useEffect(() => {
@@ -424,18 +468,26 @@ function DefaultsBlock({
     modelMap: {},
   };
   const update = (patch: Partial<typeof preset>) => {
-    const next = { ...preset, ...patch };
-    const map: AppSettings["harnessDefaults"] = { ...settings.harnessDefaults };
-    if (
-      !next.model &&
-      !next.reasoning &&
-      !next.permissionMode &&
-      !Object.keys(next.modelMap ?? {}).length
-    )
-      delete map[h.id as HarnessId];
-    else map[h.id as HarnessId] = next;
     setError("");
-    void save({ ...settings, harnessDefaults: map }).catch((e: Error) => setError(e.message));
+    void updatePreferences((current) => {
+      const existing = current.harnessDefaults?.[h.id] ?? {
+        model: null,
+        reasoning: null,
+        permissionMode: null,
+        modelMap: {},
+      };
+      const next = { ...existing, ...patch };
+      const map: AppSettings["harnessDefaults"] = { ...current.harnessDefaults };
+      if (
+        !next.model &&
+        !next.reasoning &&
+        !next.permissionMode &&
+        !Object.keys(next.modelMap ?? {}).length
+      )
+        delete map[h.id as HarnessId];
+      else map[h.id as HarnessId] = next;
+      return { ...current, harnessDefaults: map };
+    }).catch((e: Error) => setError(e.message));
   };
   const route = (m: HarnessModelOption) =>
     !binding && m.provider && ["kodo", "pi", "opencode", "zcode", "deepseek-harness"].includes(h.id)
@@ -455,10 +507,11 @@ function DefaultsBlock({
     : (models?.models ?? []).filter((m) => m.source !== "recent").slice(0, 200);
   const labels = modelChoiceLabels(list, route);
   const native = h.nativeDefaults;
+  const fallbackModel = binding?.model ?? native?.model;
   const selected =
     list.find((m) => route(m) === preset.model) ??
-    (native?.model
-      ? list.find((m) => route(m) === native.model || m.id === native.model)
+    (fallbackModel
+      ? list.find((m) => route(m) === fallbackModel || m.id === fallbackModel)
       : undefined);
   const levels = selected?.reasoning ?? [];
   const modes = permissionModesFor(h.id);
@@ -467,6 +520,7 @@ function DefaultsBlock({
     : native?.model
       ? shortModelLabel(native.model)
       : "引擎默认";
+  const defaultReasoningHint = binding?.reasoning ?? native?.reasoning;
   const canPickModel = models?.modelSupport !== "native-only";
   return (
     <>
@@ -515,7 +569,7 @@ function DefaultsBlock({
             options={[
               {
                 value: "",
-                label: `跟随引擎${native?.reasoning ? `（${native.reasoning}）` : ""}`,
+                label: `跟随引擎${defaultReasoningHint ? `（${defaultReasoningHint}）` : ""}`,
               },
               ...levels.map((l) => ({ value: l, label: l })),
             ]}
@@ -561,14 +615,6 @@ const PROTOCOL_LABELS: Partial<Record<EndpointProtocol, string>> = {
   "google-generative-ai": "Gemini",
 };
 
-const CLAUDE_SLOTS = [
-  ["main", "主模型", "对话默认使用（ANTHROPIC_MODEL）"],
-  ["sonnet", "Sonnet 档", "选择 sonnet 时使用"],
-  ["opus", "Opus 档", "选择 opus 或计划模式时使用"],
-  ["haiku", "Haiku 档", "后台与轻量任务使用"],
-  ["fast", "快速模型", "标题生成等小任务（ANTHROPIC_SMALL_FAST_MODEL）"],
-] as const;
-
 /**
  * Claude Code asks for models by role. With a third-party source those names don't
  * exist, so each role is mapped to one of the source's models.
@@ -580,13 +626,13 @@ function ModelMapBlock({
   harness: HarnessDescriptor;
   snapshot: Snapshot;
 }) {
-  const { settings, save } = useAppPreferences();
+  const { settings, update: updatePreferences } = useAppPreferences();
   const [error, setError] = useState("");
   const binding = snapshot.bindings.find(
     (b) => b.id === snapshot.bindingDefaults.harnessBindingIds[h.id],
   );
   if (!binding) return null;
-  const models = (binding.availableModels ?? []).map((m) => m.model).sort();
+  const models = [...new Set((binding.availableModels ?? []).map((m) => m.model))].sort();
   const preset = settings.harnessDefaults?.[h.id] ?? {
     model: null,
     reasoning: null,
@@ -594,36 +640,81 @@ function ModelMapBlock({
     modelMap: {},
   };
   const map = preset.modelMap ?? {};
-  const set = (slot: (typeof CLAUDE_SLOTS)[number][0], value: string) => {
-    const nextMap = { ...map };
-    if (value) nextMap[slot] = value;
-    else delete nextMap[slot];
-    const all: AppSettings["harnessDefaults"] = { ...settings.harnessDefaults };
-    all[h.id as HarnessId] = { ...preset, modelMap: nextMap };
+  const mappedCount = Object.values(map).filter(Boolean).length;
+  const mutateMap = (
+    fn: (
+      prev: Partial<Record<ClaudeModelSlot, string>>,
+    ) => Partial<Record<ClaudeModelSlot, string>>,
+  ) => {
     setError("");
-    void save({ ...settings, harnessDefaults: all }).catch((e: Error) => setError(e.message));
+    void updatePreferences((current) => {
+      const existing = current.harnessDefaults?.[h.id] ?? {
+        model: null,
+        reasoning: null,
+        permissionMode: null,
+        modelMap: {},
+      };
+      const nextMap = fn({ ...(existing.modelMap ?? {}) });
+      const all: AppSettings["harnessDefaults"] = { ...current.harnessDefaults };
+      all[h.id as HarnessId] = { ...existing, modelMap: nextMap };
+      return { ...current, harnessDefaults: all };
+    }).catch((e: Error) => setError(e.message));
   };
   return (
     <>
-      <p className="sx-subhead">模型映射</p>
+      <div className="sx-subhead-row">
+        <p className="sx-subhead">模型映射</p>
+        <div className="sx-subhead-actions">
+          <button
+            type="button"
+            className="sx-apply-mini-btn"
+            disabled={models.length === 0}
+            onClick={() => mutateMap(() => suggestClaudeModelMap(models, binding.model))}
+          >
+            <Sparkles size={11} /> 智能匹配
+          </button>
+          {mappedCount > 0 && (
+            <button
+              type="button"
+              className="sx-apply-mini-btn"
+              onClick={() => mutateMap(() => ({}))}
+            >
+              恢复同主模型
+            </button>
+          )}
+        </div>
+      </div>
       <div className="sx-card">
-        {CLAUDE_SLOTS.map(([slot, label, hint]) => (
-          <SettingsRow key={slot} label={label} description={hint} htmlFor={`map-${slot}`}>
-            <SxSelect
-              id={`map-${slot}`}
-              value={map[slot] ?? ""}
-              onChange={(next) => set(slot, next)}
-              options={[
-                {
-                  value: "",
-                  label:
-                    slot === "main" ? `来源默认（${shortModelLabel(binding.model)}）` : "同主模型",
-                },
-                ...models.map((m) => ({ value: m, label: m })),
-              ]}
-            />
-          </SettingsRow>
-        ))}
+        {CLAUDE_MODEL_MAP_SLOTS.map(({ slot, label, hint }) => {
+          const val = map[slot] ?? "";
+          const isStale = Boolean(val) && !models.includes(val);
+          return (
+            <SettingsRow key={slot} label={label} description={hint} htmlFor={`map-${slot}`}>
+              <SxSelect
+                id={`map-${slot}`}
+                value={val}
+                onChange={(next) =>
+                  mutateMap((prev) => {
+                    if (next) prev[slot] = next;
+                    else delete prev[slot];
+                    return prev;
+                  })
+                }
+                options={[
+                  {
+                    value: "",
+                    label:
+                      slot === "main"
+                        ? `来源默认（${shortModelLabel(binding.model)}）`
+                        : "同主模型",
+                  },
+                  ...(isStale ? [{ value: val, label: `⚠ ${val}（不在当前来源）` }] : []),
+                  ...models.map((m) => ({ value: m, label: m })),
+                ]}
+              />
+            </SettingsRow>
+          );
+        })}
       </div>
       {error && <p className="sx-note is-error">{error}</p>}
     </>

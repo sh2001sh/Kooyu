@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 private struct CapsuleStyle: ViewModifier {
     var tone: ToolStatus?
@@ -6,24 +7,11 @@ private struct CapsuleStyle: ViewModifier {
         let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
         content
             .background(tone == .failed ? KY.destructiveTint : tone == .running ? KY.accentTint : KY.capsule, in: shape)
-            .overlay(shape.strokeBorder(tone == .failed ? KY.destructive.opacity(0.28) : tone == .running ? KY.accent.opacity(0.22) : KY.borderSubtle))
+            .overlay(shape.strokeBorder(tone == .failed ? KY.destructive.opacity(0.28) : tone == .running ? KY.info.opacity(0.28) : KY.borderSubtle))
             .clipShape(shape)
     }
 }
 private extension View { func telemetryCapsule(_ tone: ToolStatus? = nil) -> some View { modifier(CapsuleStyle(tone: tone)) } }
-
-private struct Pulse: ViewModifier {
-    let active: Bool
-    @State private var dim = false
-    func body(content: Content) -> some View {
-        content.opacity(active && dim ? 0.45 : 1)
-            .onAppear { if active { withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) { dim = true } } }
-            .onChange(of: active) { _, on in
-                if on { withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) { dim = true } }
-                else { withAnimation(.default) { dim = false } }
-            }
-    }
-}
 
 struct StatusChip: View {
     let text: String
@@ -32,9 +20,9 @@ struct StatusChip: View {
         Text(text)
             .font(.system(size: 10.5, weight: .medium))
             .lineLimit(1)
-            .foregroundStyle(tone == .failed ? KY.destructive : tone == .running ? KY.text : tone == .done ? KY.doneText : KY.textTertiary)
+            .foregroundStyle(tone == .failed ? KY.destructive : tone == .running ? KY.infoText : tone == .done ? KY.doneText : KY.textTertiary)
             .padding(.horizontal, 7).padding(.vertical, 1.5)
-            .background(tone == .failed ? KY.destructiveTint : tone == .running ? KY.accentTint : tone == .done ? KY.successTint : KY.paper.opacity(0.78),
+            .background(tone == .failed ? KY.destructiveTint : tone == .running ? KY.infoTint : tone == .done ? KY.successTint : KY.paper.opacity(0.78),
                         in: RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
 }
@@ -45,11 +33,11 @@ private struct StatusIcon: View {
     var body: some View {
         Image(systemName: systemName)
             .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(tone == .failed ? KY.destructive : tone == .running ? KY.text : KY.textTertiary)
+            .foregroundStyle(tone == .failed ? KY.destructive : tone == .running ? KY.info : KY.textTertiary)
             .frame(width: 20, height: 20)
-            .background(tone == .failed ? KY.destructiveTint : tone == .running ? KY.accentTint : KY.paper, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .background(tone == .failed ? KY.destructiveTint : tone == .running ? KY.infoTint : KY.paper, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(tone == nil || tone == .done ? KY.borderSubtle : .clear))
-            .modifier(Pulse(active: tone == .running))
+            .kooyuPulse(tone == .running)
     }
 }
 
@@ -60,7 +48,7 @@ private struct Chevron: View {
             .font(.system(size: 11, weight: .semibold))
             .foregroundStyle(KY.textTertiary)
             .rotationEffect(.degrees(open ? 90 : 0))
-            .animation(.snappy, value: open)
+            .animation(KYMotion.base, value: open)
     }
 }
 
@@ -93,7 +81,7 @@ struct ToolCardView: View {
     var body: some View {
         let summary = toolSummary(row.payload)
         let content = VStack(alignment: .leading, spacing: 0) {
-            Button { withAnimation(.snappy) { open.toggle() } } label: {
+            Button { withAnimation(KYMotion.base) { open.toggle() } } label: {
                 HStack(spacing: 8) {
                     StatusIcon(systemName: "wrench.adjustable", tone: summary.status)
                     Text(summary.title).font(.system(size: 12, weight: .semibold)).foregroundStyle(KY.text).lineLimit(1)
@@ -135,7 +123,7 @@ struct ToolGroupView: View {
             let names = summaries.map(\.title).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
             let tone: ToolStatus? = failed > 0 ? .failed : active > 0 ? .running : nil
             VStack(alignment: .leading, spacing: 0) {
-                Button { withAnimation(.snappy) { open.toggle() } } label: {
+                Button { withAnimation(KYMotion.base) { open.toggle() } } label: {
                     HStack(spacing: 8) {
                         StatusIcon(systemName: "wrench.adjustable", tone: tone)
                         Text("\(rows.count) 次工具调用").font(.system(size: 12, weight: .semibold)).foregroundStyle(KY.text).fixedSize()
@@ -168,33 +156,64 @@ struct ToolGroupView: View {
     }
 }
 
+/// Reasoning disclosure (§3.2.3): while thinking, a breathing icon and the latest line; when done it
+/// collapses with the Base spring to `已思考 4.2s · 点击展开`.
 struct ThinkingView: View {
     let row: TranscriptRow
     let live: Bool
-    @State private var open: Bool
-    init(row: TranscriptRow, live: Bool) { self.row = row; self.live = live; _open = State(initialValue: live) }
+    @State private var open = false
+    @State private var startedAt: Date? = nil
+    @State private var elapsed: TimeInterval? = nil
+    init(row: TranscriptRow, live: Bool) {
+        self.row = row; self.live = live
+        _startedAt = State(initialValue: live ? Date() : nil)
+    }
+    private var latestLine: String {
+        row.text.split(whereSeparator: { $0.isNewline }).last.map { String($0).trimmingCharacters(in: .whitespaces) } ?? ""
+    }
+    private var title: String {
+        if live { return "正在思考…" }
+        if let elapsed { return String(format: "已思考 %.1fs", elapsed) }
+        return "已思考"
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Button { withAnimation(.snappy) { open.toggle() } } label: {
+            Button { withAnimation(KYMotion.base) { open.toggle() } } label: {
                 HStack(spacing: 8) {
-                    Image(systemName: "brain").font(.system(size: 12)).foregroundStyle(KY.textTertiary).modifier(Pulse(active: live))
-                    Text(live ? "正在思考…" : "思考过程").font(.system(size: 12)).foregroundStyle(KY.textSecondary)
-                    Spacer()
+                    Image(systemName: "brain").font(.system(size: 12)).foregroundStyle(live ? KY.info : KY.textTertiary).kooyuPulse(live)
+                    Text(title).font(.system(size: 12, weight: .medium)).foregroundStyle(KY.textSecondary).fixedSize()
+                    if !open {
+                        if live && !latestLine.isEmpty {
+                            Text(latestLine).font(.system(size: 12)).foregroundStyle(KY.textTertiary).lineLimit(1).truncationMode(.head)
+                        } else if !live {
+                            Text("· 点击展开").font(.system(size: 12)).foregroundStyle(KY.textTertiary).lineLimit(1)
+                        }
+                    }
+                    Spacer(minLength: 0)
                     Chevron(open: open)
                 }
                 .padding(.horizontal, 10).frame(minHeight: 36).contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(open ? "\(title)，点击收起" : "\(title)，点击展开")
             if open {
                 Text(row.text)
                     .font(.system(size: 13)).lineSpacing(4).foregroundStyle(KY.textSecondary)
                     .textSelection(.enabled)
                     .padding(.horizontal, 12).padding(.bottom, 12)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
         .telemetryCapsule()
-        .onChange(of: live) { _, now in if now { open = true } }
+        .onChange(of: live) { _, now in
+            if now {
+                startedAt = Date()
+            } else {
+                if let startedAt { elapsed = Date().timeIntervalSince(startedAt) }
+                withAnimation(KYMotion.base) { open = false }
+            }
+        }
     }
 }
 
@@ -205,9 +224,9 @@ struct SubagentView: View {
     var body: some View {
         let status = subagentStatusLabels[child.status ?? ""] ?? child.status ?? "状态未知"
         let tone: ToolStatus? = ["进行中", "启动中"].contains(status) ? .running : status == "失败" ? .failed : status == "完成" ? .done : nil
+        let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
         VStack(alignment: .leading, spacing: 0) {
-            Divider().overlay(KY.border)
-            Button { withAnimation(.snappy) { open.toggle() } } label: {
+            Button { withAnimation(KYMotion.base) { open.toggle() } } label: {
                 HStack(spacing: 8) {
                     Chevron(open: open)
                     Image(systemName: "point.3.connected.trianglepath.dotted").font(.system(size: 12)).foregroundStyle(KY.textTertiary)
@@ -215,10 +234,13 @@ struct SubagentView: View {
                     Spacer()
                     StatusChip(text: status, tone: tone)
                 }
-                .frame(minHeight: 40).contentShape(Rectangle())
+                .padding(.horizontal, 12)
+                .frame(minHeight: 42)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             if open {
+                Divider().overlay(KY.borderSubtle)
                 let inner = buildTranscript(child.events)
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
@@ -233,10 +255,11 @@ struct SubagentView: View {
                         TranscriptStack(transcript: inner, harnessId: harnessId, running: tone == .running, subagent: true)
                     }
                 }
-                .padding(.leading, 12).padding(.bottom, 12)
+                .padding(12)
             }
-            Divider().overlay(KY.border)
         }
+        .background(KY.sunken, in: shape)
+        .overlay(shape.strokeBorder(KY.borderSubtle))
     }
 }
 
@@ -291,8 +314,8 @@ struct UserTurnView: View {
             }
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 15).padding(.vertical, 10)
-            .background(KY.bubble, in: UnevenRoundedRectangle(topLeadingRadius: 18, bottomLeadingRadius: 18, bottomTrailingRadius: 6, topTrailingRadius: 18, style: .continuous))
-            .overlay(UnevenRoundedRectangle(topLeadingRadius: 18, bottomLeadingRadius: 18, bottomTrailingRadius: 6, topTrailingRadius: 18, style: .continuous).stroke(KY.borderSubtle, lineWidth: 1))
+            .background(KY.bubble, in: UnevenRoundedRectangle(topLeadingRadius: 20, bottomLeadingRadius: 20, bottomTrailingRadius: 6, topTrailingRadius: 20, style: .continuous))
+            .overlay(UnevenRoundedRectangle(topLeadingRadius: 20, bottomLeadingRadius: 20, bottomTrailingRadius: 6, topTrailingRadius: 20, style: .continuous).stroke(KY.brandCoral.opacity(0.18), lineWidth: 1))
         }
         .sheet(item: $preview) { item in
             NavigationStack {
@@ -310,12 +333,18 @@ struct AssistantTurnView: View {
     let row: TranscriptRow
     let harnessId: String?
     let continuation: Bool
+    var modelName: String? = nil
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if !continuation {
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     EngineBadge(harnessId: harnessId, size: 20)
                     Text(harnessVisual(harnessId).name).font(.system(size: 12, weight: .semibold)).foregroundStyle(KY.textSecondary)
+                    if let modelName, !modelName.isEmpty {
+                        Text("·").font(KYFont.caption).foregroundStyle(KY.textTertiary)
+                        Text(String(modelName.split(separator: "/").last ?? Substring(modelName)))
+                            .font(KYFont.caption).foregroundStyle(KY.textTertiary).lineLimit(1)
+                    }
                     Spacer()
                     CopyButton(text: row.text)
                 }
@@ -345,6 +374,7 @@ struct TranscriptBlockView: View {
     var subagent = false
     var onEdit: ((TranscriptRow) -> Void)? = nil
     var onBranch: ((TranscriptRow) -> Void)? = nil
+    var modelName: String? = nil
     var body: some View {
         switch block {
         case .tools(let rows): ToolGroupView(rows: rows)
@@ -352,9 +382,19 @@ struct TranscriptBlockView: View {
             switch row.role {
             case .thinking: ThinkingView(row: row, live: live)
             case .subagent: if let child = row.child { SubagentView(child: child, harnessId: harnessId) }
-            case .user: UserTurnView(row: row)
+            case .user:
+                UserTurnView(row: row)
+                    .contextMenu {
+                        Button("复制全文", systemImage: "doc.on.doc") { UIPasteboard.general.string = splitAttachments(row.text).text }
+                        if !subagent, row.createdAt != nil, let onBranch {
+                            Button("从此处分叉", systemImage: "arrow.triangle.branch") { onBranch(row) }
+                        }
+                        if !subagent, let onEdit {
+                            Button("编辑重发", systemImage: "pencil") { onEdit(row) }
+                        }
+                    }
             case .error: ErrorTurnView(row: row, title: subagent ? "子代理本轮失败" : "\(harnessVisual(harnessId).name) 本轮失败")
-            default: AssistantTurnView(row: row, harnessId: harnessId, continuation: continuation)
+            default: AssistantTurnView(row: row, harnessId: harnessId, continuation: continuation, modelName: subagent ? nil : modelName)
             }
             if row.role == .user || row.role == .assistant {
                 HStack(spacing: 8) {

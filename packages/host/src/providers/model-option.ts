@@ -24,10 +24,12 @@ export function boundModelOption(value: BindingRuntime | HarnessBinding): Harnes
     "maxInputTokens",
     "maxOutputTokens",
     "reasoning",
+    "pricing",
   ] as const) {
     const origin =
       binding.sources?.[field === "reasoning" ? "reasoningOptions" : field] ??
-      binding.sources?.[field];
+      binding.sources?.[field] ??
+      (field === "reasoning" ? binding.sources?.thinkingLevelMap : undefined);
     if (origin)
       option.parameterSources![field] = {
         kind: origin.kind,

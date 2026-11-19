@@ -79,7 +79,14 @@ export function ContextMenu({
         onClose();
     };
     const dismiss = (event: Event) => {
-      if (!menu.contains(event.target as Node)) onClose();
+      if (event.target instanceof Node && menu.contains(event.target)) return;
+      // A queued scroll event can arrive after focus or tab restoration without
+      // moving the anchor. Unrelated transcript scrolling should not dismiss it.
+      if (event.type === "scroll" && triggerRect && restoreFocus?.isConnected) {
+        const current = restoreFocus.getBoundingClientRect();
+        if (current.left === triggerRect.left && current.top === triggerRect.top) return;
+      }
+      onClose();
     };
 
     document.addEventListener("pointerdown", outside, true);

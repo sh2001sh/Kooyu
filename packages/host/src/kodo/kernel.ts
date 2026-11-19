@@ -341,8 +341,29 @@ export async function createKodoKernel(
     )
       throw new Error(`${agentName} SDK 未恢复默认工具列表。`);
   }
+  let requestStartedAt: number | null = null;
+  let firstTokenAt: number | null = null;
   const unsubscribe = session.subscribe((event) => {
     const e = event as Wire;
+    if (e.type === "agent_start" || e.type === "turn_start" || e.type === "tool_execution_end") {
+      requestStartedAt = Date.now();
+      firstTokenAt = null;
+    } else if (e.type === "message_start" && e.message?.role === "assistant") {
+      if (requestStartedAt === null) {
+        requestStartedAt = Date.now();
+        firstTokenAt = null;
+      }
+    }
+    if (
+      e.type === "message_update" &&
+      requestStartedAt !== null &&
+      firstTokenAt === null &&
+      ["text_delta", "thinking_delta", "toolcall_delta"].includes(e.assistantMessageEvent?.type) &&
+      typeof e.assistantMessageEvent?.delta === "string" &&
+      e.assistantMessageEvent.delta.length > 0
+    ) {
+      firstTokenAt = Date.now();
+    }
     if (e.type === "message_update" && e.assistantMessageEvent?.type === "text_delta")
       ctx.emit("text-delta", { text: e.assistantMessageEvent.delta });
     else if (e.type === "message_update" && e.assistantMessageEvent?.type === "thinking_delta")
@@ -357,6 +378,13 @@ export async function createKodoKernel(
       if (e.message.role === "assistant" && e.message.stopReason === "aborted")
         outcome = "cancelled";
       if (e.message.usage && e.message.role === "assistant") {
+        const now = Date.now();
+        const durationMs =
+          requestStartedAt !== null ? Math.max(0, Math.round(now - requestStartedAt)) : undefined;
+        const firstTokenMs =
+          requestStartedAt !== null && firstTokenAt !== null
+            ? Math.max(0, Math.round(firstTokenAt - requestStartedAt))
+            : undefined;
         const u = e.message.usage as Wire;
         // Some relays stream zero usage; estimate so usage history is not empty.
         const unreported = !u.input && !u.output && !u.cacheRead && !u.cacheWrite;
@@ -374,6 +402,8 @@ export async function createKodoKernel(
         ctx.emit("usage", {
           ...u,
           ...estimated,
+          ...(firstTokenMs !== undefined ? { firstTokenMs } : {}),
+          ...(durationMs !== undefined ? { durationMs } : {}),
           requests: e.message.stopReason === "error" ? undefined : 1,
           model: e.message.provider ? `${e.message.provider}/${e.message.model}` : e.message.model,
           cost:
@@ -384,14 +414,32 @@ export async function createKodoKernel(
           scope: "turn",
         });
       }
+      if (e.message.role === "assistant") {
+        requestStartedAt = null;
+        firstTokenAt = null;
+      }
+    } else if (e.type === "auto_retry_start") {
+      outcome = "completed";
+      active = true;
+      requestStartedAt = Date.now();
+      firstTokenAt = null;
+      ctx.emit("state", e);
+    } else if (e.type === "auto_retry_end") {
+      if (!e.success && e.finalError) outcome = "failed";
+      ctx.emit("state", e);
     } else if (e.type.startsWith("tool_execution")) ctx.emit("tool", e);
     else if (e.type === "agent_start") {
       outcome = "completed";
       active = true;
-    } else if (e.type === "agent_end")
+    } else if (e.type === "agent_end") {
+      requestStartedAt = null;
+      firstTokenAt = null;
       ctx.emit("turn-ended", { outcome, backgroundState: "unknown" });
-    else if (e.type === "agent_settled") {
+    } else if (e.type === "agent_settled") {
       active = false;
+      requestStartedAt = null;
+      firstTokenAt = null;
+      if (e.aborted) outcome = "cancelled";
       ctx.emit("settled", { outcome, backgroundState: "settled" });
     }
   });

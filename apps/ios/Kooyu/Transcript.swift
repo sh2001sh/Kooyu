@@ -301,3 +301,38 @@ func splitAttachments(_ text: String) -> UserMessageParts {
     let rest = regex.stringByReplacingMatches(in: text, range: NSRange(location: 0, length: ns.length), withTemplate: "")
     return UserMessageParts(text: rest.trimmingCharacters(in: .whitespacesAndNewlines), files: files)
 }
+
+struct TranscriptTodoItem: Identifiable, Sendable {
+    let id: String
+    let content: String
+    let status: String
+}
+
+/// Extracts the most recent TodoWrite / update_plan list from tool rows so ConversationView
+/// can pin a single collapsed summary pill above the composer (Phase 4 §5.1-C.3).
+func extractLatestTodos(_ rows: [TranscriptRow]) -> [TranscriptTodoItem] {
+    var latest: [TranscriptTodoItem] = []
+    for row in rows where row.role == .tool {
+        let p = row.payload
+        let name = p.firstText("toolName", "name", "tool", "type").lowercased()
+        let input = ["input", "rawInput", "args", "arguments"].lazy.map { p[$0] }.first { !$0.object.isEmpty }
+            ?? (!p["state"]["input"].object.isEmpty ? p["state"]["input"] : p)
+        let list = !input["todos"].array.isEmpty ? input["todos"].array
+            : (!input["items"].array.isEmpty ? input["items"].array : input["plan"].array)
+        let looksLikeTodo = name.contains("todo") || name.contains("update_plan") || !input["todos"].array.isEmpty
+        guard looksLikeTodo, !list.isEmpty else { continue }
+        latest = list.enumerated().compactMap { index, item in
+            let text = item.firstText("content", "step", "title", "task", "description").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { return nil }
+            let rawStatus = item.firstText("status", "state").lowercased()
+            let status: String
+            switch rawStatus {
+            case "completed", "done", "finished": status = "completed"
+            case "in_progress", "in-progress", "active", "running": status = "in_progress"
+            default: status = "pending"
+            }
+            return TranscriptTodoItem(id: "\(row.id):\(index)", content: text, status: status)
+        }
+    }
+    return latest
+}

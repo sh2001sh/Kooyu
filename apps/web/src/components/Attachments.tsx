@@ -181,10 +181,14 @@ export function AttachmentButton({
   loading,
   disabled,
   onAdd,
+  label,
+  className,
 }: {
   loading: boolean;
   disabled?: boolean;
   onAdd: (files: FileList | null) => void;
+  label?: string;
+  className?: string;
 }) {
   const input = useRef<HTMLInputElement>(null);
   return (
@@ -202,13 +206,14 @@ export function AttachmentButton({
       />
       <button
         type="button"
-        className="attachment-add-button"
-        aria-label="添加附件"
+        className={className ?? "attachment-add-button"}
+        aria-label={label ?? "添加附件"}
         title="添加文件或图片（上传到 Host，随消息发送）"
         disabled={disabled || loading}
         onClick={() => input.current?.click()}
       >
         <Plus size={17} />
+        {label && <span>{label}</span>}
       </button>
     </>
   );

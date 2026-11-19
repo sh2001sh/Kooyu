@@ -2,6 +2,17 @@ import XCTest
 @testable import Kooyu
 
 final class HostAPITests: XCTestCase {
+    func testOnlyReadsRecoverLostConnections() {
+        XCTAssertTrue(HostAPI.canRecoverRead("GET", URLError(.networkConnectionLost)))
+        XCTAssertTrue(HostAPI.canRecoverRead("GET", URLError(.cannotConnectToHost)))
+        for method in ["POST", "PUT", "PATCH", "DELETE"] {
+            XCTAssertFalse(HostAPI.canRecoverRead(method, URLError(.networkConnectionLost)))
+        }
+        let codes: [URLError.Code] = [.cancelled, .timedOut, .serverCertificateUntrusted, .userAuthenticationRequired]
+        for code in codes {
+            XCTAssertFalse(HostAPI.canRecoverRead("GET", URLError(code)))
+        }
+    }
     func testOnlyHTTPSOriginsAreAccepted() throws {
         XCTAssertEqual(try HostAPI.origin("https://example.com").host, "example.com")
         for address in ["http://example.com", "https://user:password@example.com", "https://example.com/api", "https://example.com?token=secret", "https://example.com#fragment"] {

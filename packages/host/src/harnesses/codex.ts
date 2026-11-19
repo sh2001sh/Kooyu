@@ -208,7 +208,9 @@ export const codexAdapter: HarnessAdapter = {
       }
       if (children.has(p.threadId)) {
         const id = p.threadId;
-        if (method === "item/agentMessage/delta")
+        if (method === "turn/plan/updated")
+          children.emit(id, "todo", { items: p.plan, explanation: p.explanation }, p.eventId);
+        else if (method === "item/agentMessage/delta")
           children.emit(id, "text-delta", { text: p.delta, itemId: p.itemId }, p.eventId);
         else if (["item/reasoning/summaryTextDelta", "item/reasoning/textDelta"].includes(method))
           children.emit(
@@ -242,7 +244,9 @@ export const codexAdapter: HarnessAdapter = {
       }
       if (p.threadId && p.threadId !== nativeId) return;
       const eventId = p.eventId ?? undefined;
-      if (method === "turn/started") {
+      if (method === "turn/plan/updated")
+        ctx.emit("todo", { items: p.plan, explanation: p.explanation }, eventId, p.turnId ?? runId);
+      else if (method === "turn/started") {
         runId = p.turn.id;
         emptyHistory = false;
         ctx.emit("state", { runState: "running" }, eventId, runId);

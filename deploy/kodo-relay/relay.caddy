@@ -1,4 +1,9 @@
 relay.kooyu.app {
+    encode gzip {
+        match {
+            header Content-Type application/json*
+        }
+    }
     header {
         -Server
         X-Content-Type-Options nosniff

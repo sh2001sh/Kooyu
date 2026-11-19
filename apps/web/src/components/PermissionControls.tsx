@@ -54,6 +54,16 @@ const kimiModes: { value: PermissionMode | null; label: string; detail: string }
   { value: "kimi:auto", label: "自动判断", detail: "Kimi 原生自动审批模式" },
   { value: "kimi:yolo", label: "跳过审批", detail: "Kimi 原生直接执行模式" },
 ];
+const deepseekModes: { value: PermissionMode | null; label: string; detail: string }[] = [
+  { value: null, label: "原生默认", detail: "保留 DeepSeek Harness 原生审批请求" },
+  { value: "dsh:ask", label: "逐项审批", detail: "需要审批的操作由你确认" },
+  { value: "dsh:allow", label: "自动允许", detail: "自动允许原生工具审批；不提供文件系统沙箱" },
+  {
+    value: "dsh:deny",
+    label: "拒绝需审批的操作",
+    detail: "自动拒绝原生工具审批；仍可执行原生无需审批的操作",
+  },
+];
 type NativeModes = {
   current: PermissionMode | null;
   options: { value: PermissionMode; label: string; detail?: string }[];
@@ -67,6 +77,7 @@ function nativeLabel(harnessId: HarnessId) {
 
 /** Permission modes a harness accepts for a new chat; empty when it has none. */
 export function permissionModesFor(harnessId: HarnessId) {
+  if (harnessId === "deepseek-harness") return deepseekModes;
   return harnessId === "codex"
     ? codexModes
     : harnessId === "kimi-code"
@@ -91,6 +102,7 @@ export function PermissionControls({
   onChange,
   disabled = false,
   nativePermission,
+  ariaLabel = "会话权限",
 }: {
   harnessId: HarnessId;
   /** The harness's own configured permission mode, shown when Kodo does not override it. */
@@ -101,6 +113,7 @@ export function PermissionControls({
   connected?: boolean;
   onChange?: (value: PermissionMode | null) => Promise<void> | void;
   disabled?: boolean;
+  ariaLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -127,24 +140,26 @@ export function PermissionControls({
     };
   }, [open, dynamicModes, sessionId, connected]);
   const modes =
-    harnessId === "codex"
-      ? codexModes
-      : harnessId === "kimi-code"
-        ? (nativeModes?.options ?? (acp ? [] : kimiModes))
-        : harnessId === "claude-code"
-          ? claudeModes
-          : harnessId === "zcode"
-            ? zcodeModes
-            : harnessId === "opencode"
-              ? openCodeModes
-              : harnessId === "pi" || harnessId === "kodo"
-                ? kodoToolModes
-                : dynamicModes
-                  ? (nativeModes?.options ?? []).map((option) => ({
-                      ...option,
-                      detail: option.detail ?? "ACP 原生运行模式",
-                    }))
-                  : [];
+    harnessId === "deepseek-harness"
+      ? deepseekModes
+      : harnessId === "codex"
+        ? codexModes
+        : harnessId === "kimi-code"
+          ? (nativeModes?.options ?? (acp ? [] : kimiModes))
+          : harnessId === "claude-code"
+            ? claudeModes
+            : harnessId === "zcode"
+              ? zcodeModes
+              : harnessId === "opencode"
+                ? openCodeModes
+                : harnessId === "pi" || harnessId === "kodo"
+                  ? kodoToolModes
+                  : dynamicModes
+                    ? (nativeModes?.options ?? []).map((option) => ({
+                        ...option,
+                        detail: option.detail ?? "ACP 原生运行模式",
+                      }))
+                    : [];
   const configurable = modes.length > 0 && Boolean(onChange);
   const activeValue = dynamicModes ? (nativeModes?.current ?? value) : value;
   const chosen = modes.find((mode) => mode.value === activeValue);
@@ -181,8 +196,7 @@ export function PermissionControls({
       open={open}
       onOpenChange={setOpen}
       side="top"
-      align="end"
-      wide
+      align="start"
       role="dialog"
       trigger={(props) => (
         <button
@@ -190,7 +204,7 @@ export function PermissionControls({
           type="button"
           disabled={disabled}
           className="composer-pill-btn composer-pill-btn--ghost permission-trigger"
-          aria-label="会话权限"
+          aria-label={ariaLabel}
           title={`权限 · ${label}`}
         >
           <Shield size={13} aria-hidden="true" />

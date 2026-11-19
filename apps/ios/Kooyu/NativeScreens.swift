@@ -124,6 +124,8 @@ struct UsageView: View {
     @Bindable var model: Workbench
     @Environment(\.scenePhase) private var phase
     var sessionId: String? = nil
+    var inboxCount: Int = 0
+    var onOpenInbox: (() -> Void)? = nil
     @State private var days = 14
     @State private var limit = 50
     @State private var project = ""
@@ -229,26 +231,39 @@ struct UsageView: View {
                     .disabled(!model.canWrite)
                 }
 
-                Section("用量明细流水（\(records.count) 笔）") {
+                Section("使用明细（\(records.count) 条）") {
                     ForEach(Array(records.sorted { $0.createdAt > $1.createdAt }.prefix(limit))) { record in
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(alignment: .firstTextBaseline) {
                                 Text(record.model ?? record.source)
-                                    .font(.subheadline.bold())
+                                    .font(.subheadline.weight(.semibold))
+                                    .lineLimit(1)
                                 Spacer()
                                 Text(usd(record.costUsd))
-                                    .font(.subheadline.bold())
+                                    .font(.subheadline.monospacedDigit().weight(.semibold))
                                     .foregroundStyle(Color.accentColor)
                             }
-                            HStack {
-                                Text(String(record.createdAt.prefix(19)).replacingOccurrences(of: "T", with: " "))
+                            HStack(spacing: 8) {
+                                Text(String(record.createdAt.prefix(16)).replacingOccurrences(of: "T", with: " "))
+                                Text(record.scope == "session" ? "累计快照" : "本轮增量")
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 1)
+                                    .background(.quaternary, in: Capsule())
                                 Spacer()
                                 Text("入 \(record.input.map { $0.formatted() } ?? "—") / 出 \(record.output.map { $0.formatted() } ?? "—")")
+                                    .monospacedDigit()
                             }
                             .font(.caption2)
                             .foregroundStyle(.secondary)
+                            HStack(spacing: 12) {
+                                Text("首字 \(durationLabel(record.firstTokenMs))")
+                                Text("总时间 \(durationLabel(record.durationMs))")
+                                Spacer()
+                            }
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.secondary)
                         }
-                        .padding(.vertical, 2)
+                        .padding(.vertical, 3)
                     }
                     if records.count > limit {
                         Button("加载更多明细…") { limit += 100 }
@@ -258,6 +273,13 @@ struct UsageView: View {
             }
         }
         .navigationTitle(sessionId == nil ? "用量与预算" : "会话用量")
+        .toolbar {
+            if sessionId == nil, let onOpenInbox {
+                ToolbarItem(placement: .topBarTrailing) {
+                    InboxToolbarButton(count: inboxCount, action: onOpenInbox)
+                }
+            }
+        }
         .refreshable { await model.refreshUsage() }
         .task(id: "\(model.connection?.hostId ?? "")-\(phase == .active)") {
             guard phase == .active else { return }
@@ -319,10 +341,25 @@ struct UsageView: View {
             .foregroundStyle(.secondary)
         }
     }
+
+    private func durationLabel(_ ms: Double?) -> String {
+        guard let ms, ms.isFinite, ms >= 0 else { return "—" }
+        if ms < 1000 { return String(format: "%.0fms", ms) }
+        if ms < 10_000 { return String(format: "%.2fs", ms / 1000) }
+        if ms < 60_000 { return String(format: "%.1fs", ms / 1000) }
+        let totalSec = Int((ms / 1000).rounded())
+        let mins = totalSec / 60, secs = totalSec % 60
+        if mins < 60 { return secs > 0 ? "\(mins)m \(secs)s" : "\(mins)m" }
+        let hours = mins / 60, remMins = mins % 60
+        return remMins > 0 ? "\(hours)h \(remMins)m" : "\(hours)h"
+    }
 }
 
 struct ProjectsView: View {
     @Bindable var model: Workbench
+    var inboxCount: Int = 0
+    var onOpenInbox: (() -> Void)? = nil
+    @State private var hubSection = "projects"
     @State private var editor = false
     @State private var editingProject: HostProject?
     @State private var deleting: HostProject?
@@ -332,14 +369,66 @@ struct ProjectsView: View {
     @State private var browsingDirectory = false
 
     var body: some View {
-        List {
-            ForEach(model.snapshot?.projects ?? []) { project in
-                Section {
-                    let workspaces = model.snapshot?.workspaces?.filter { $0.projectId == project.id } ?? []
-                    if workspaces.isEmpty {
-                        Text("未绑定设备工作目录").font(.footnote).foregroundStyle(.secondary)
-                    } else {
-                        ForEach(workspaces) { workspace in
+        VStack(spacing: 0) {
+            KooyuSegmentedControl(
+                options: [
+                    SegmentOption(value: "projects", label: "项目与目录"),
+                    SegmentOption(value: "work", label: "工作与计划"),
+                ],
+                selection: $hubSection
+            )
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(KY.navigator)
+
+            if hubSection == "work" {
+                WorkHubView(model: model, embedded: true)
+            } else {
+                List {
+                    ForEach(model.snapshot?.projects ?? []) { project in
+                        Section {
+                            let workspaces = model.snapshot?.workspaces?.filter { $0.projectId == project.id } ?? []
+                            if workspaces.isEmpty {
+                                Text("未绑定设备工作目录").font(.footnote).foregroundStyle(.secondary)
+                            } else {
+                                ForEach(workspaces) { workspace in
+                                    NavigationLink {
+                                        WorkspaceBrowserView(model: model, workspace: workspace)
+                                    } label: {
+                                        Label(workspace.rootPath, systemImage: "folder")
+                                            .font(.subheadline)
+                                    }
+                                }
+                            }
+
+                            HStack {
+                                Button {
+                                    workspaceProject = project.id; editingProject = nil; path = ""; editor = true
+                                } label: {
+                                    Label("添加目录", systemImage: "plus")
+                                }
+                                Spacer()
+                                Button("重命名") {
+                                    editingProject = project; workspaceProject = nil; name = project.name; editor = true
+                                }
+                                Spacer()
+                                Button("删除", role: .destructive) { deleting = project }
+                            }
+                            .font(.footnote)
+                            .buttonStyle(.borderless)
+                            .disabled(!model.canWrite)
+                        } header: {
+                            HStack {
+                                Text(project.name).font(.headline)
+                                Spacer()
+                                let count = model.snapshot?.sessions.filter { $0.projectId == project.id && !$0.archived }.count ?? 0
+                                Text("\(count) 个会话").font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+
+                    Section("全局工作位置") {
+                        ForEach(model.snapshot?.workspaces?.filter { $0.projectId == nil } ?? []) { workspace in
                             NavigationLink {
                                 WorkspaceBrowserView(model: model, workspace: workspace)
                             } label: {
@@ -347,60 +436,35 @@ struct ProjectsView: View {
                                     .font(.subheadline)
                             }
                         }
-                    }
-
-                    HStack {
                         Button {
-                            workspaceProject = project.id; editingProject = nil; path = ""; editor = true
+                            workspaceProject = ""; editingProject = nil; path = ""; editor = true
                         } label: {
-                            Label("添加目录", systemImage: "plus")
+                            Label("添加全局目录", systemImage: "plus")
                         }
-                        Spacer()
-                        Button("重命名") {
-                            editingProject = project; workspaceProject = nil; name = project.name; editor = true
-                        }
-                        Spacer()
-                        Button("删除", role: .destructive) { deleting = project }
-                    }
-                    .font(.footnote)
-                    .buttonStyle(.borderless)
-                    .disabled(!model.canWrite)
-                } header: {
-                    HStack {
-                        Text(project.name).font(.headline)
-                        Spacer()
-                        let count = model.snapshot?.sessions.filter { $0.projectId == project.id && !$0.archived }.count ?? 0
-                        Text("\(count) 个会话").font(.caption).foregroundStyle(.secondary)
+                        .disabled(!model.canWrite)
                     }
                 }
-            }
-
-            Section("全局工作位置") {
-                ForEach(model.snapshot?.workspaces?.filter { $0.projectId == nil } ?? []) { workspace in
-                    NavigationLink {
-                        WorkspaceBrowserView(model: model, workspace: workspace)
-                    } label: {
-                        Label(workspace.rootPath, systemImage: "folder")
-                            .font(.subheadline)
-                    }
-                }
-                Button {
-                    workspaceProject = ""; editingProject = nil; path = ""; editor = true
-                } label: {
-                    Label("添加全局目录", systemImage: "plus")
-                }
-                .disabled(!model.canWrite)
+                .scrollContentBackground(.hidden)
+                .background(KY.navigator)
+                .refreshable { await model.refresh() }
             }
         }
-        .navigationTitle("项目与目录")
-        .refreshable { await model.refresh() }
+        .background(KY.navigator)
+        .navigationTitle(hubSection == "work" ? "工作与计划" : "项目")
         .toolbar {
-            Button {
-                editingProject = nil; workspaceProject = nil; name = ""; path = ""; editor = true
-            } label: {
-                Image(systemName: "folder.badge.plus")
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                if let onOpenInbox {
+                    InboxToolbarButton(count: inboxCount, action: onOpenInbox)
+                }
+                if hubSection == "projects" {
+                    Button {
+                        editingProject = nil; workspaceProject = nil; name = ""; path = ""; editor = true
+                    } label: {
+                        Image(systemName: "folder.badge.plus")
+                    }
+                    .disabled(!model.canWrite)
+                }
             }
-            .disabled(!model.canWrite)
         }
         .sheet(isPresented: $editor) {
             NavigationStack {
@@ -542,14 +606,33 @@ struct SettingsDetailView: View {
     let section: String
     @State private var instructions = ""
     @State private var harness = "kodo"
+    @State private var language = LanguageStore.shared.setting
     @State private var settings: JSONValue?
     @State private var loadingSettings = false
-    @AppStorage("kooyu.appearance") private var appearance = "system"
+    @State private var loadedGeneral = false
+    @State private var savedNotice = false
 
     var body: some View {
+        let _ = LanguageStore.shared.revision
         Form {
             if section == "general" {
-                Section("外观") { Picker("主题", selection: $appearance) { Text("跟随系统").tag("system"); Text("浅色").tag("light"); Text("深色").tag("dark") } }
+                Section {
+                    Picker(kooyuT("settings.language"), selection: $language) {
+                        ForEach(kooyuLanguageOptions) { opt in
+                            Text(opt.label).tag(opt.code)
+                        }
+                    }
+                    .onChange(of: language) { _, next in
+                        LanguageStore.shared.setting = next
+                        guard loadedGeneral, model.canWrite else { return }
+                        Task { await saveGeneralSettings() }
+                    }
+                } header: {
+                    Text(kooyuT("settings.language"))
+                } footer: {
+                    Text(kooyuT("settings.language.hint"))
+                }
+                AppearanceStudioSection()
             }
             if section == "models" {
                 ModelConfigurationView(model: model)
@@ -570,37 +653,49 @@ struct SettingsDetailView: View {
                 ForEach(model.snapshot?.harnesses ?? []) { engine in
                     Section(engine.name) {
                         let isReady = engine.health?["launchable"].boolean == true
+                        let boundID = model.snapshot?.bindingDefaults?["harnessBindingIds"][engine.id].string.nonEmpty
+                        let activeBinding = boundID.flatMap { id in model.snapshot?.bindings?.first { $0["id"].string == id } }
+                        let providerName = activeBinding?["name"].string.components(separatedBy: " · ").first?.nonEmpty ?? activeBinding?["name"].string.nonEmpty
                         HStack {
                             Text("状态")
                             Spacer()
                             Text(isReady ? "就绪" : engine.health?["error"].string.isEmpty == false ? engine.health!["error"].string : "未就绪")
                                 .foregroundStyle(isReady ? .green : .red)
                         }
-                        LabeledContent("默认模型", value: engine.nativeDefaults?["model"].string.isEmpty == false ? engine.nativeDefaults!["model"].string : "引擎原生")
+                        LabeledContent("模型来源", value: providerName ?? "原生配置")
+                        LabeledContent("默认模型", value: activeBinding?["model"].string.nonEmpty ?? (engine.nativeDefaults?["model"].string.isEmpty == false ? engine.nativeDefaults!["model"].string : "引擎原生"))
                         ForEach(Array((model.snapshot?.bindings?.filter { $0["harnessId"].string == engine.id } ?? []).enumerated()), id: \.offset) { _, binding in
                             Text(binding["name"].string + " · " + binding["model"].string)
                                 .font(.footnote)
                         }
                     }
                 }
-            } else if let settings {
-                Section("默认配置") {
+            } else if settings != nil {
+                Section {
                     Picker("默认引擎", selection: $harness) {
                         ForEach(model.snapshot?.harnesses ?? []) { Text($0.name).tag($0.id) }
                     }
+                    .disabled(!model.canWrite)
+                    .onChange(of: harness) { _, _ in
+                        guard loadedGeneral else { return }
+                        Task { await saveGeneralSettings() }
+                    }
+
                     TextEditor(text: $instructions)
                         .frame(minHeight: 140)
-                    Button("保存配置") {
-                        Task {
-                            var values = settings.object
-                            values["personalInstructions"] = .string(instructions)
-                            values["defaultHarnessId"] = .string(harness)
-                            if await model.execute("/app-settings", method: "PATCH", values: values) != nil {
-                                self.settings = await model.read("/app-settings")
-                            }
+                        .disabled(!model.canWrite)
+                } header: {
+                    HStack {
+                        Text("默认配置")
+                        Spacer()
+                        if savedNotice {
+                            Label("已保存", systemImage: "checkmark.circle.fill")
+                                .font(.caption2)
+                                .foregroundStyle(KY.success)
                         }
                     }
-                    .disabled(!model.canWrite || instructions.count > 16000)
+                } footer: {
+                    Text("默认引擎更改后会自动保存；编辑个人指令后请点击完成或自动同步。")
                 }
             } else if loadingSettings {
                 ProgressView("正在同步…")
@@ -611,16 +706,49 @@ struct SettingsDetailView: View {
             if !model.error.isEmpty { Text(model.error).foregroundStyle(.red) }
         }
         .navigationTitle(section == "general" ? "通用与外观" : section == "engines" ? "执行引擎" : "会话托管")
+        .toolbar {
+            if section == "general" && settings != nil {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存指令") { Task { await saveGeneralSettings() } }
+                        .disabled(!model.canWrite || instructions.count > 16000)
+                }
+            }
+        }
         .task(id: "\(model.connection?.hostId ?? "")-\(section)") {
             if section == "general" { await loadSettings() }
+        }
+        .task(id: instructions) {
+            guard section == "general", loadedGeneral, model.canWrite, instructions.count <= 16000,
+                  instructions != (settings?["personalInstructions"].string ?? "") else { return }
+            try? await Task.sleep(for: .milliseconds(700))
+            if !Task.isCancelled { await saveGeneralSettings() }
         }
     }
 
     private func loadSettings() async {
+        loadedGeneral = false
         loadingSettings = true; defer { loadingSettings = false }
         settings = await model.read("/app-settings")
         instructions = settings?["personalInstructions"].string ?? ""
         harness = settings?["defaultHarnessId"].string ?? "kodo"
+        let hostLang = settings?["language"].string.nonEmpty ?? LanguageStore.shared.setting
+        language = hostLang
+        LanguageStore.shared.syncFromHost(hostLang)
+        loadedGeneral = true
+    }
+
+    private func saveGeneralSettings() async {
+        guard let settings else { return }
+        var values = settings.object
+        values["personalInstructions"] = .string(instructions)
+        values["defaultHarnessId"] = .string(harness)
+        values["language"] = .string(language)
+        if await model.execute("/app-settings", method: "PATCH", values: values) != nil {
+            self.settings = await model.read("/app-settings")
+            savedNotice = true
+            try? await Task.sleep(for: .seconds(1.5))
+            if !Task.isCancelled { savedNotice = false }
+        }
     }
 }
 
@@ -632,6 +760,9 @@ func attachedMessage(_ text: String, _ files: [MobileTextAttachment]) -> String 
 struct NativeSessionDetails: View {
     @Bindable var model: Workbench
     let session: HostSession
+    var onOpenWork: (() -> Void)? = nil
+    var onOpenUsage: (() -> Void)? = nil
+    var onOpenGoal: ((String) -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     @State private var section = "settings"
     @State private var title = ""
@@ -642,6 +773,9 @@ struct NativeSessionDetails: View {
     @State private var permission = ""
     @State private var options: JSONValue?
     @State private var nativePermissions: JSONValue?
+    @State private var ready = false
+    @State private var savedBadge = false
+    @State private var deleting = false
 
     private var permissions: [(String, String)] {
         let values = nativePermissions?["options"].array.map { ($0["value"].string, $0["label"].string) } ?? []
@@ -649,59 +783,134 @@ struct NativeSessionDetails: View {
     }
     private var models: [JSONValue] { options?["models"].array ?? [] }
 
+    private func pulseSaved() {
+        savedBadge = true
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.5))
+            if !Task.isCancelled { savedBadge = false }
+        }
+    }
+
+    private func autoSaveSession(_ values: [String: JSONValue]) async {
+        guard ready, model.canWrite else { return }
+        if await model.updateSession(session.id, values: values) {
+            pulseSaved()
+        }
+    }
+
+    private func autoSaveModel(choice: String, effort: String) async {
+        guard ready, model.canWrite, let options else { return }
+        let revision = options["session"]["settingsRevision"].number ?? Double(session.settingsRevision ?? 0)
+        if await model.execute(
+            "/sessions/\(session.id)/settings",
+            values: [
+                "expectedRevision": .number(revision),
+                "model": choice.isEmpty ? .null : .string(choice),
+                "reasoning": effort.isEmpty ? .null : .string(effort)
+            ]
+        ) != nil {
+            self.options = await model.read("/sessions/\(session.id)/settings")
+            pulseSaved()
+        }
+    }
+
     var body: some View {
         NavigationStack {
             List {
-                Picker("详情分类", selection: $section) {
-                    Text("设置").tag("settings")
-                    Text("事件").tag("tools")
-                    Text("队列").tag("queue")
-                    Text("文件").tag("files")
-                }
-                .pickerStyle(.segmented)
+                KooyuSegmentedControl(options: [SegmentOption(value: "settings", label: "概览与参数"), SegmentOption(value: "tools", label: "工具与事件"),
+                                                SegmentOption(value: "queue", label: "排队"), SegmentOption(value: "files", label: "文件变更")],
+                                      selection: $section)
+                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                    .listRowBackground(Color.clear)
 
                 if section == "settings" {
-                    Section("对话设置") {
+                    Section {
+                        HStack(spacing: 10) {
+                            EngineBadge(harnessId: session.harnessId, size: 28, circle: false)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(harnessVisual(session.harnessId).name).font(KYFont.rowTitle).foregroundStyle(KY.text)
+                                Text(session.model ?? "原生默认模型").font(KYFont.caption).foregroundStyle(KY.textSecondary).lineLimit(1)
+                            }
+                            Spacer(minLength: 0)
+                            StatusBadge(status: sessionStatus(session), capsule: true)
+                        }
+                        if let root = model.snapshot?.workspaces?.first(where: { $0.id == session.workspaceId })?.rootPath {
+                            LabeledContent("工作目录") {
+                                Text(formatWorkspaceLabel(root)).font(KYFont.mono).lineLimit(1).truncationMode(.head).textSelection(.enabled)
+                            }
+                        }
+                        if let effortValue = session.reasoning, !effortValue.isEmpty {
+                            LabeledContent("思考强度", value: effortValue)
+                        }
+                    } header: {
+                        HStack {
+                            Text("概览")
+                            Spacer()
+                            if savedBadge {
+                                Label("已保存", systemImage: "checkmark.circle.fill")
+                                    .font(.caption2)
+                                    .foregroundStyle(KY.success)
+                            }
+                        }
+                    }
+
+                    Section {
                         TextField("会话标题", text: $title)
+                            .onSubmit {
+                                let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+                                guard !trimmed.isEmpty, trimmed.count <= 200 else { return }
+                                Task { await autoSaveSession(["title": .string(trimmed)]) }
+                            }
                         Picker("所属项目", selection: $project) {
                             Text("全局会话").tag("")
                             ForEach(model.snapshot?.projects ?? []) { Text($0.name).tag($0.id) }
                         }
-                        .onChange(of: project) { _, _ in workspace = "" }
+                        .disabled(!model.canWrite)
+                        .onChange(of: project) { _, nextProject in
+                            guard ready else { return }
+                            workspace = ""
+                            Task {
+                                await autoSaveSession([
+                                    "projectId": nextProject.isEmpty ? .null : .string(nextProject),
+                                    "workspaceId": .null
+                                ])
+                            }
+                        }
 
                         Picker("工作目录", selection: $workspace) {
                             Text("未绑定目录").tag("")
                             ForEach(model.snapshot?.workspaces?.filter { project.isEmpty || $0.projectId == project } ?? []) {
-                                Text($0.rootPath).tag($0.id)
+                                let label = formatWorkspaceLabel($0.rootPath)
+                                Text(label.isEmpty ? $0.rootPath : label).tag($0.id)
                             }
                         }
-
-                        Button("保存对话设置") {
+                        .disabled(!model.canWrite)
+                        .onChange(of: workspace) { _, nextWorkspace in
+                            guard ready else { return }
                             Task {
-                                _ = await model.updateSession(
-                                    session.id,
-                                    values: [
-                                        "title": .string(title),
-                                        "projectId": project.isEmpty ? .null : .string(project),
-                                        "workspaceId": workspace.isEmpty ? .null : .string(workspace)
-                                    ]
-                                )
+                                await autoSaveSession([
+                                    "workspaceId": nextWorkspace.isEmpty ? .null : .string(nextWorkspace)
+                                ])
                             }
                         }
-                        .disabled(!model.canWrite || title.isEmpty || title.count > 200)
 
                         if !permissions.isEmpty {
                             Picker("工具权限", selection: $permission) {
                                 Text("引擎默认").tag("")
                                 ForEach(permissions, id: \.0) { Text($0.1).tag($0.0) }
                             }
-                            Button("应用权限") {
+                            .disabled(!model.canWrite || session.runState != "idle")
+                            .onChange(of: permission) { _, nextPerm in
+                                guard ready else { return }
                                 Task {
-                                    _ = await model.updateSession(session.id, values: ["permissionMode": permission.isEmpty ? .null : .string(permission)])
+                                    await autoSaveSession(["permissionMode": nextPerm.isEmpty ? .null : .string(nextPerm)])
                                 }
                             }
-                            .disabled(!model.canWrite || session.runState != "idle")
                         }
+                    } header: {
+                        Text("对话设置")
+                    } footer: {
+                        Text("修改项目、目录与权限将即时保存；修改标题后按回车确认。")
                     }
 
                     Section("模型与思考强度") {
@@ -715,7 +924,12 @@ struct NativeSessionDetails: View {
                                         Text(option["name"].string.isEmpty ? option["id"].string : option["name"].string).tag(nativeModelID(session.harnessId, option))
                                     }
                                 }
-                                .onChange(of: chosenModel) { _, _ in reasoning = "" }
+                                .disabled(!model.canWrite)
+                                .onChange(of: chosenModel) { _, nextModel in
+                                    guard ready else { return }
+                                    reasoning = ""
+                                    Task { await autoSaveModel(choice: nextModel, effort: "") }
+                                }
 
                                 let levels = models.first { nativeModelID(session.harnessId, $0) == chosenModel || $0["id"].string == chosenModel }?["reasoning"].array.map(\.string) ?? []
                                 if !levels.isEmpty {
@@ -723,30 +937,61 @@ struct NativeSessionDetails: View {
                                         Text("默认").tag("")
                                         ForEach(levels, id: \.self) { Text($0).tag($0) }
                                     }
-                                }
-
-                                Button("应用模型设置") {
-                                    Task {
-                                        let revision = options["session"]["settingsRevision"].number ?? Double(session.settingsRevision ?? 0)
-                                        if await model.execute(
-                                            "/sessions/\(session.id)/settings",
-                                            values: [
-                                                "expectedRevision": .number(revision),
-                                                "model": chosenModel.isEmpty ? .null : .string(chosenModel),
-                                                "reasoning": reasoning.isEmpty ? .null : .string(reasoning)
-                                            ]
-                                        ) != nil {
-                                            self.options = await model.read("/sessions/\(session.id)/settings")
-                                        }
+                                    .disabled(!model.canWrite)
+                                    .onChange(of: reasoning) { _, nextEffort in
+                                        guard ready else { return }
+                                        Task { await autoSaveModel(choice: chosenModel, effort: nextEffort) }
                                     }
                                 }
-                                .disabled(!model.canWrite)
                             }
                         } else {
                             Button("读取模型选项") {
                                 Task { options = await model.read("/sessions/\(session.id)/settings") }
                             }
                         }
+                    }
+
+                    if onOpenWork != nil || onOpenUsage != nil || model.snapshot?.goals?.contains(where: { $0.controllerSessionId == session.id || $0.sessionIds?.contains(session.id) == true }) == true {
+                        Section("关联详情") {
+                            if let goal = model.snapshot?.goals?.first(where: { $0.controllerSessionId == session.id || $0.sessionIds?.contains(session.id) == true }),
+                               let onOpenGoal {
+                                Button {
+                                    dismiss()
+                                    onOpenGoal(goal.id)
+                                } label: {
+                                    Label("关联目标：\(goal.title)", systemImage: "target")
+                                }
+                            }
+                            if let onOpenWork {
+                                Button {
+                                    dismiss()
+                                    onOpenWork()
+                                } label: {
+                                    Label("项目工作与成果", systemImage: "square.stack.3d.up")
+                                }
+                            }
+                            if let onOpenUsage {
+                                Button {
+                                    dismiss()
+                                    onOpenUsage()
+                                } label: {
+                                    Label("当前会话用量", systemImage: "chart.bar")
+                                }
+                            }
+                        }
+                    }
+
+                    Section("会话管理") {
+                        Button(session.archived ? "恢复会话" : "归档会话") {
+                            Task {
+                                if await model.updateSession(session.id, values: ["archived": .bool(!session.archived)]) {
+                                    dismiss()
+                                }
+                            }
+                        }.disabled(!model.canWrite)
+
+                        Button("删除会话", role: .destructive) { deleting = true }
+                            .disabled(!model.canWrite)
                     }
                 } else if section == "tools" {
                     let events = model.page?.events.filter { !["message", "text-delta"].contains($0.type) } ?? []
@@ -785,10 +1030,11 @@ struct NativeSessionDetails: View {
 
                 if !model.error.isEmpty { Text(model.error).foregroundStyle(.red) }
             }
-            .navigationTitle("对话详情")
+            .navigationTitle("会话检查器")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { Button("完成") { dismiss() } }
             .task(id: session.id) {
+                ready = false
                 title = session.title
                 project = session.projectId ?? ""
                 workspace = session.workspaceId ?? ""
@@ -797,6 +1043,15 @@ struct NativeSessionDetails: View {
                 permission = session.permissionMode ?? ""
                 options = await model.read("/sessions/\(session.id)/settings")
                 nativePermissions = await model.read("/sessions/\(session.id)/permissions")
+                ready = true
+            }
+            .confirmationDialog("删除会话记录？此操作不可撤回。", isPresented: $deleting, titleVisibility: .visible) {
+                Button("删除会话", role: .destructive) {
+                    Task {
+                        await model.deleteSession(session.id)
+                        dismiss()
+                    }
+                }
             }
         }
     }

@@ -15,7 +15,7 @@ import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { createServer } from "node:net";
 import { randomUUID } from "node:crypto";
 import { NativeSubagents } from "./subagents.js";
-import { launch } from "./rpc.js";
+import { launch, RpcRejected } from "./rpc.js";
 import { boundNativeModel } from "../providers/native-config.js";
 import { NativeInteractions } from "./native-interactions.js";
 import { kimiInteractionResponse } from "./kimi-interactions.js";
@@ -103,7 +103,8 @@ async function freePort(): Promise<number> {
   });
 }
 function apiData(value: Wire, path: string): Wire {
-  if (value.code !== 0) throw new Error(`Kimi Server ${path}: ${String(value.msg ?? value.code)}`);
+  if (value.code !== 0)
+    throw new RpcRejected(`Kimi Server ${path}: ${String(value.msg ?? value.code)}`);
   return value.data ?? {};
 }
 async function connectKimiServer(session: Session, ctx: AdapterContext): Promise<NativeRuntime> {
@@ -144,8 +145,8 @@ async function connectKimiServer(session: Session, ctx: AdapterContext): Promise
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: AbortSignal.any([abort.signal, AbortSignal.timeout(30000)]),
     });
+    if (!response.ok) throw new RpcRejected(`Kimi Server ${path}: HTTP ${response.status}`);
     const value = (await response.json()) as Wire;
-    if (!response.ok) throw new Error(`Kimi Server ${path}: HTTP ${response.status}`);
     return apiData(value, path);
   };
   let startupError: Error | undefined;
@@ -616,7 +617,11 @@ async function connectKimiServer(session: Session, ctx: AdapterContext): Promise
             {
               prompt_ids: [submittedPromptId],
             },
-          );
+          ).catch((error) => {
+            throw new Error(
+              `Kimi 已接收输入但 steer 未确认，请核对原生队列：${error instanceof Error ? error.message : String(error)}`,
+            );
+          });
           if (result.steered !== true)
             throw new Error("Kimi 已接收输入但未确认 steer；请核对原生队列，未重发。");
         }

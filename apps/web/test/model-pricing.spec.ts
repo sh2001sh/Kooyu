@@ -40,9 +40,8 @@ for (const width of [1440, 390])
     page.on("pageerror", (error) => errors.push(error.message));
     const openSettings = async () => {
       await page.goto("/");
-      if (width < 600) await page.getByRole("button", { name: "打开导航", exact: true }).click();
       await page
-        .getByRole("navigation", { name: "系统工具", exact: true })
+        .getByRole("navigation", { name: width < 600 ? "移动端标签导航" : "系统工具", exact: true })
         .getByRole("button", { name: /^(设置|Harness 与配置)$/ })
         .click();
       await page
@@ -52,7 +51,7 @@ for (const width of [1440, 390])
     };
     const section = page
       .locator("section.sx-section")
-      .filter({ has: page.getByRole("heading", { name: "模型", exact: true }) });
+      .filter({ has: page.locator(".sx-provider-name").filter({ hasText: provider.name }) });
     const row = section.locator("tbody tr").filter({ hasText: modelName });
     const editor = section.locator("form.sx-model-editor");
     const savedPricing = async () => {

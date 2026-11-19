@@ -12,7 +12,9 @@ export class OpenCodeEvents {
     this.error = undefined;
   }
   accept(type: string, p: Wire): boolean {
-    if (type === "message.updated") {
+    if (type === "todo.updated") {
+      this.emit("todo", { items: p.todos });
+    } else if (type === "message.updated") {
       const info = p.info;
       if (!info?.id || !info.role) return true;
       this.roles.set(info.id, info.role);
@@ -20,6 +22,12 @@ export class OpenCodeEvents {
       this.pending.delete(info.id);
       if (info.role === "assistant") {
         if (info.error) this.error = info.error;
+        const durationMs =
+          typeof info.time?.created === "number" &&
+          typeof info.time?.completed === "number" &&
+          info.time.completed >= info.time.created
+            ? Math.round(info.time.completed - info.time.created)
+            : undefined;
         this.emit(
           "usage",
           {
@@ -29,6 +37,7 @@ export class OpenCodeEvents {
             cacheWrite: info.tokens?.cache?.write,
             costUsd: info.cost,
             model: info.modelID,
+            ...(durationMs !== undefined ? { durationMs } : {}),
             scope: "turn",
             sourceId: info.id,
           },
@@ -44,6 +53,9 @@ export class OpenCodeEvents {
         queue.push({ type, payload: p });
         this.pending.set(id, queue);
       } else this.part(type, p);
+    } else if (type === "session.status") {
+      if (p.status?.type === "retry") this.emit("state", { retry: p.status });
+      else if (p.status?.type === "busy") this.emit("state", { retry: null, runState: "running" });
     } else if (type === "session.error") {
       this.error = p.error ?? p;
       this.emit("error", p);

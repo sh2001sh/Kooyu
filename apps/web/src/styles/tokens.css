@@ -1,0 +1,429 @@
+/* ==========================================================================
+   Kooyu Unified Design System Tokens (Single Source of Truth)
+   Philosophy: Warm Precision, Native Fluidity (Warm Daylight & Obsidian Carbon)
+   Aligned 1:1 with Android KooyuColors (apps/android/.../Theme.kt)
+   ========================================================================== */
+
+:root {
+  color-scheme: light;
+
+  /* 1 ── Surfaces (Clean Apple Monochrome Daylight) */
+  --surface-navigator: #f5f5f7;
+  --surface-paper: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-sunken: #eff0f3;
+  --surface-floating: rgba(255, 255, 255, 0.95);
+  --surface-glass: rgba(255, 255, 255, 0.86);
+  --surface-input: var(--surface-sunken);
+  --scrim: rgba(17, 19, 23, 0.24);
+
+  /* 2 ── Typography & Ink */
+  --fg-base: #141518;
+  --text: #141518;
+  --text-secondary: #52555c;
+  --text-tertiary: #80848e;
+  --text-disabled: #aeb2bc;
+  --border-control: #9498a2;
+
+  /* 3 ── Brand Micro-Accent & Monochrome Control Ink */
+  --brand-coral: #e6533c;
+  --brand-coral-hover: #d4442e;
+  --brand-coral-tint: rgba(230, 83, 60, 0.1);
+  --brand-coral-tint-strong: rgba(230, 83, 60, 0.18);
+  --accent-brand: #e6533c;
+  --accent-solid: #141518;
+  --accent-solid-hover: #2a2c32;
+  --accent-text: #141518;
+  --accent-raw: #141518;
+  --accent-ink: #141518;
+  --on-accent: #ffffff;
+  --focus-ring: rgba(20, 21, 24, 0.14);
+
+  /* 3b ── Control Ink (primary monochrome emphasis). */
+  --control-solid: #141518;
+  --control-solid-hover: #2a2c32;
+  --on-control: #ffffff;
+  --control-text: #141518;
+  --control-tint: rgba(20, 21, 24, 0.06);
+  --control-tint-strong: rgba(20, 21, 24, 0.11);
+
+  /* 4 ── Interactive Fills & Hairline Borders */
+  --fill-hover: rgba(20, 21, 24, 0.045);
+  --fill-pressed: rgba(20, 21, 24, 0.08);
+  --fill-selected: rgba(20, 21, 24, 0.065);
+  --fill-bubble: #f2f3f6;
+  --border-subtle: rgba(20, 21, 24, 0.065);
+  --border: rgba(20, 21, 24, 0.1);
+  --border-strong: rgba(20, 21, 24, 0.18);
+  --accent-tint: rgba(20, 21, 24, 0.06);
+  --accent-tint-strong: rgba(20, 21, 24, 0.12);
+  --selection: rgba(20, 21, 24, 0.14);
+
+  /* 5 ── Semantic Status Roles ("The State Has Words Rule") */
+  --success-raw: #16a34a;
+  --success-text: #15803d;
+  --success-solid: #16a34a;
+  --success-tint: rgba(22, 163, 74, 0.11);
+  --info-raw: #d97706;
+  --info-text: #b45309;
+  --info-solid: #d97706;
+  --info-tint: rgba(217, 119, 6, 0.11);
+  --destructive-raw: #dc2626;
+  --destructive-text: #b91c1c;
+  --destructive-solid: #dc2626;
+  --destructive-tint: rgba(220, 38, 38, 0.1);
+  --on-info: #ffffff;
+  --on-success: #ffffff;
+  --on-destructive: #ffffff;
+  --git-merged: #8250df; /* GitHub's merged-PR purple: a fixed meaning, not a theme role */
+  --diff-text: var(--text);
+
+  /* 6 ── Font Families & Radii */
+  --font-display:
+    "Segoe UI Variable Display", "SF Pro Display", "PingFang SC", "HarmonyOS Sans SC", "MiSans",
+    "Noto Sans SC", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-sans:
+    "Inter", "SF Pro Text", "Segoe UI Variable Text", "PingFang SC", "HarmonyOS Sans SC", "MiSans",
+    "Noto Sans SC", "Hiragino Sans GB", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono:
+    "JetBrains Mono", "Cascadia Code", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+
+  --radius-control: 9px;
+  --radius-row: 10px;
+  --radius-card: 14px;
+  --radius-sheet: 20px;
+  --radius-pill: 999px;
+
+  /* 7 ── Layered Elevation */
+  --elev-card: 0 1px 2px rgba(26, 25, 23, 0.03), 0 4px 12px -4px rgba(26, 25, 23, 0.05);
+  --elev-composer: 0 2px 10px -3px rgba(26, 25, 23, 0.05), 0 12px 30px -12px rgba(26, 25, 23, 0.08);
+  --elev-sheet: 0 16px 42px -10px rgba(26, 25, 23, 0.16), 0 0 0 1px var(--border);
+  /* Craft ring elevations: --elev-1 is the paper island's hairline + soft lift. */
+  --elev-0: 0 0 0 1px var(--border);
+  --elev-1: 0 0 0 1px var(--border), 0 1px 2px rgb(0 0 0 / 0.04), 0 2px 8px -2px rgb(0 0 0 / 0.06);
+  --elev-2:
+    0 0 0 1px var(--border), 0 1px 1px rgb(0 0 0 / 0.03), 0 4px 8px -4px rgb(0 0 0 / 0.08),
+    0 16px 32px -8px rgb(0 0 0 / 0.14);
+  --elev-3:
+    0 0 0 1px var(--border), 0 2px 4px rgb(0 0 0 / 0.04), 0 12px 24px -6px rgb(0 0 0 / 0.12),
+    0 32px 64px -12px rgb(0 0 0 / 0.22);
+  --focus-shadow: 0 0 0 2px var(--surface-paper), 0 0 0 4px var(--focus-ring);
+
+  /* 8 ── Motion System 2.0 ("Fluid, Inevitable, Unnoticed").
+     Calibrated Hooke's law springs as 29-point CSS linear() curves (zero rubbery overshoot;
+     exits ≈ 0.5× entrances via --ease-exit). Aligned 1:1 with Android Motion.kt & iOS Motion.swift. */
+  --dur-instant: 0ms; /* keyboard and high-frequency: ⌘K, J/K, session switch, hover-in, theme swap */
+  --dur-micro: 100ms; /* color, press, hover-out */
+  --dur-fast: 150ms; /* menus, popovers, tooltips, block insert */
+  --dur-base: 200ms; /* dialogs, expand in place, toasts */
+  --dur-slow: 300ms; /* panels, shared elements — the UI maximum */
+  --dur-exit: 155ms; /* fast, clean dismissal (no spring on exit) */
+  --ease-exit: cubic-bezier(0.32, 0, 0.67, 0);
+  /* Snap: ζ=1.0, k=780 — micro-controls, switches, press release, checkmarks */
+  --spring-snap: linear(
+    0,
+    0.0208,
+    0.0723,
+    0.1415,
+    0.2194,
+    0.2999,
+    0.3791,
+    0.4542,
+    0.5238,
+    0.5872,
+    0.6441,
+    0.6946,
+    0.739,
+    0.7777,
+    0.8114,
+    0.8404,
+    0.8653,
+    0.8866,
+    0.9047,
+    0.9201,
+    0.9331,
+    0.9441,
+    0.9533,
+    0.9611,
+    0.9677,
+    0.9731,
+    0.9777,
+    0.9815,
+    1
+  );
+  --spring-snap-dur: 220ms;
+  /* Glide: ζ=0.90, k=540 — segmented pill, dock thumb, swipe actions */
+  --spring-glide: linear(
+    0,
+    0.0267,
+    0.0921,
+    0.1791,
+    0.2754,
+    0.373,
+    0.4664,
+    0.5527,
+    0.63,
+    0.6978,
+    0.7561,
+    0.8055,
+    0.8467,
+    0.8806,
+    0.9083,
+    0.9305,
+    0.9481,
+    0.9619,
+    0.9727,
+    0.9809,
+    0.9871,
+    0.9917,
+    0.9951,
+    0.9974,
+    0.9991,
+    1.0002,
+    1.0009,
+    1.0013,
+    1
+  );
+  --spring-glide-dur: 300ms;
+  /* Base: ζ=0.94, k=460 — popovers, menus, content expand/collapse */
+  --spring-base: linear(
+    0,
+    0.0229,
+    0.0794,
+    0.1555,
+    0.2409,
+    0.3287,
+    0.4144,
+    0.4951,
+    0.569,
+    0.6353,
+    0.694,
+    0.7451,
+    0.7892,
+    0.8268,
+    0.8587,
+    0.8853,
+    0.9076,
+    0.9259,
+    0.941,
+    0.9533,
+    0.9633,
+    0.9714,
+    0.9778,
+    0.983,
+    0.987,
+    0.9902,
+    0.9927,
+    0.9946,
+    1
+  );
+  --spring-base-dur: 300ms;
+  /* Panel: ζ=0.96, k=360 — bottom sheets, drawers, page push, inspector */
+  --spring-panel: linear(
+    0,
+    0.0255,
+    0.0875,
+    0.1695,
+    0.2601,
+    0.3518,
+    0.4398,
+    0.5214,
+    0.5951,
+    0.6604,
+    0.7174,
+    0.7664,
+    0.8081,
+    0.8433,
+    0.8727,
+    0.8972,
+    0.9173,
+    0.9339,
+    0.9474,
+    0.9583,
+    0.9671,
+    0.9742,
+    0.9798,
+    0.9843,
+    0.9879,
+    0.9907,
+    0.9928,
+    0.9946,
+    1
+  );
+  --spring-panel-dur: 360ms;
+  --motion-scale: 1; /* 0 under reduced motion: multiplies every translate/scale distance */
+  --stagger: 25ms;
+  /* Pop/Morph: ζ=0.80, k=620 — composer send ↔ stop morph (subtle ~1.5% crisp settle) */
+  --spring-pop: linear(
+    0,
+    0.0271,
+    0.0948,
+    0.1863,
+    0.2892,
+    0.3944,
+    0.4958,
+    0.5896,
+    0.6734,
+    0.7463,
+    0.8082,
+    0.8595,
+    0.901,
+    0.934,
+    0.9595,
+    0.9786,
+    0.9926,
+    1.0023,
+    1.0088,
+    1.0126,
+    1.0146,
+    1.0152,
+    1.0148,
+    1.0138,
+    1.0124,
+    1.0108,
+    1.0092,
+    1.0077,
+    1
+  );
+  --spring-pop-dur: 280ms;
+  --dur-pulse: 1400ms;
+  --press-scale: 0.97;
+  --ease-spring: var(--spring-base);
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1); /* colour/opacity fades only, never movement */
+  --glass-blur: 20px;
+
+  /* 9 ── Typography scale (§2.2) */
+  --type-page-title: 700 20px/28px var(--font-display);
+  --type-section: 600 12px/16px var(--font-sans);
+  --type-row-title: 600 13.5px/18px var(--font-sans);
+  --type-body: 400 15px/24px var(--font-sans);
+  --type-label: 500 13px/18px var(--font-sans);
+  --type-caption: 500 11px/14px var(--font-sans);
+  --type-mono: 400 12.5px/18px var(--font-mono);
+}
+
+.dark {
+  color-scheme: dark;
+
+  /* 1 ── Surfaces (Neutral Obsidian Carbon) */
+  --surface-navigator: #0b0c0e;
+  --surface-paper: #121316;
+  --surface-raised: #181a1f;
+  --surface-sunken: #0f1115;
+  --surface-floating: rgba(24, 26, 31, 0.95);
+  --surface-glass: rgba(18, 19, 22, 0.84);
+  --surface-input: var(--surface-sunken);
+  --scrim: rgba(0, 0, 0, 0.58);
+
+  /* 2 ── Typography & Ink */
+  --fg-base: #f3f4f6;
+  --text: #f3f4f6;
+  --text-secondary: #a6aab3;
+  --text-tertiary: #737882;
+  --text-disabled: #4d515a;
+  --border-control: #646873;
+
+  /* 3 ── Brand Micro-Accent & Monochrome Control Ink */
+  --brand-coral: #f17561;
+  --brand-coral-hover: #ff8673;
+  --brand-coral-tint: rgba(241, 117, 97, 0.14);
+  --brand-coral-tint-strong: rgba(241, 117, 97, 0.24);
+  --accent-brand: #f17561;
+  --accent-solid: #f3f4f6;
+  --accent-solid-hover: #ffffff;
+  --accent-text: #f3f4f6;
+  --accent-raw: #f3f4f6;
+  --accent-ink: #f3f4f6;
+  --on-accent: #121316;
+  --focus-ring: rgba(243, 244, 246, 0.18);
+
+  --control-solid: #f3f4f6;
+  --control-solid-hover: #ffffff;
+  --on-control: #121316;
+  --control-text: #f3f4f6;
+  --control-tint: rgba(243, 244, 246, 0.08);
+  --control-tint-strong: rgba(243, 244, 246, 0.14);
+
+  /* 4 ── Interactive Fills & Hairline Borders */
+  --fill-hover: rgba(243, 244, 246, 0.055);
+  --fill-pressed: rgba(243, 244, 246, 0.095);
+  --fill-selected: rgba(243, 244, 246, 0.085);
+  --fill-bubble: #20232b;
+  --border-subtle: rgba(243, 244, 246, 0.065);
+  --border: rgba(243, 244, 246, 0.105);
+  --border-strong: rgba(243, 244, 246, 0.19);
+  --accent-tint: rgba(243, 244, 246, 0.08);
+  --accent-tint-strong: rgba(243, 244, 246, 0.14);
+  --selection: rgba(243, 244, 246, 0.22);
+
+  /* 5 ── Semantic Status Roles */
+  --success-raw: #34d399;
+  --success-text: #4ade80;
+  --success-solid: #16a34a;
+  --success-tint: rgba(52, 211, 153, 0.14);
+  --info-raw: #f59e0b;
+  --info-text: #fbbf24;
+  --info-solid: #d97706;
+  --info-tint: rgba(245, 158, 11, 0.14);
+  --destructive-raw: #f87171;
+  --destructive-text: #f87171;
+  --destructive-solid: #dc2626;
+  --destructive-tint: rgba(248, 113, 113, 0.15);
+  --on-info: #0d0e11;
+  --git-merged: #a371f7;
+
+  /* 7 ── Layered Elevation */
+  --elev-card: 0 1px 2px rgba(0, 0, 0, 0.35), 0 0 0 1px var(--border-subtle);
+  --elev-composer: 0 6px 24px -8px rgba(0, 0, 0, 0.48), 0 0 0 1px var(--border);
+  --elev-sheet: 0 20px 56px -10px rgba(0, 0, 0, 0.65), 0 0 0 1px var(--border-strong);
+  --elev-0: 0 0 0 1px var(--border);
+  --elev-1: 0 0 0 1px var(--border), 0 1px 2px rgb(0 0 0 / 0.3);
+  --elev-2:
+    0 0 0 1px var(--border-strong),
+    inset 0 1px 0 color-mix(in srgb, var(--fg-base) 5%, transparent), 0 2px 6px rgb(0 0 0 / 0.3),
+    0 12px 32px -6px rgb(0 0 0 / 0.5);
+  --elev-3:
+    0 0 0 1px var(--border-strong),
+    inset 0 1px 0 color-mix(in srgb, var(--fg-base) 6%, transparent), 0 4px 12px rgb(0 0 0 / 0.35),
+    0 32px 72px -12px rgb(0 0 0 / 0.65);
+}
+
+/* Derived alpha roles. Declared on both scopes so a nested `.dark` re-resolves them. */
+:root,
+.dark {
+  --info-border: color-mix(in srgb, var(--info-raw) 32%, transparent);
+  --success-border: color-mix(in srgb, var(--success-raw) 32%, transparent);
+  --destructive-border: color-mix(in srgb, var(--destructive-raw) 32%, transparent);
+  --diff-add: color-mix(in srgb, var(--success-raw) 13%, transparent);
+  --diff-add-word: color-mix(in srgb, var(--success-raw) 28%, transparent);
+  --diff-del: color-mix(in srgb, var(--destructive-raw) 13%, transparent);
+  --diff-del-word: color-mix(in srgb, var(--destructive-raw) 28%, transparent);
+  --focus-shadow: 0 0 0 2px var(--surface-paper), 0 0 0 4px var(--focus-ring);
+}
+
+/* Reduced motion = opacity-first, not zero: distances collapse, crossfades stay short.
+   The OS query and the saved in-app preference (html[data-reduce-motion]) both apply. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-scale: 0;
+    --press-scale: 1;
+    --dur-base: 150ms;
+    --dur-slow: 150ms;
+    --dur-exit: 1ms;
+    --spring-snap-dur: 1ms;
+    --spring-glide-dur: 1ms;
+    --spring-base-dur: 1ms;
+    --spring-panel-dur: 1ms;
+    --spring-pop-dur: 1ms;
+  }
+}
+html[data-reduce-motion="true"] {
+  --motion-scale: 0;
+  --press-scale: 1;
+  --dur-exit: 1ms;
+  --spring-snap-dur: 1ms;
+  --spring-glide-dur: 1ms;
+  --spring-base-dur: 1ms;
+  --spring-panel-dur: 1ms;
+  --spring-pop-dur: 1ms;
+}

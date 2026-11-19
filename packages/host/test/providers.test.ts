@@ -27,6 +27,7 @@ import { SessionService } from "../src/session-service.js";
 import { createKodoKernel } from "../src/kodo/kernel.js";
 import { parsePublicCatalog } from "../src/providers/catalog.js";
 import { officialModelReasoning } from "../src/providers/model-reasoning.js";
+import { boundModelOption } from "../src/providers/model-option.js";
 
 // Isolated synthetic metadata and in-memory credentials; these are not native chat proofs.
 const payload = (context = 123456) => ({
@@ -347,6 +348,54 @@ async function setup(f: ReturnType<typeof fixture>, protocol = "openai-responses
   });
   return { p, m };
 }
+
+test("fixed and Provider model options preserve frozen per-model parameter provenance, including zero prices", async () => {
+  const f = fixture();
+  try {
+    const { p, m } = await setup(f);
+    const priced = await f.providers.saveModel({
+      ...identity(m),
+      overrides: {
+        contextWindow: 1048576,
+        maxOutputTokens: 32768,
+        pricing: { input: 0, output: 10 },
+      },
+    });
+    const other = await f.providers.saveModel({
+      providerId: p.id,
+      endpointId: p.endpoints[0]!.id,
+      model: "other-exact-model",
+      overrides: {
+        contextWindow: 64000,
+        maxOutputTokens: 4000,
+        thinkingLevelMap: { low: "low", high: "high" },
+      },
+    });
+    const binding = f.providers.saveBinding({
+      name: "Frozen options",
+      harnessId: "pi",
+      modelId: priced.id,
+    });
+    const frozen = { ...binding, availableModels: [priced, other] };
+    const fixed = boundModelOption(binding);
+    const options = f.providers.providerModelOptions(frozen);
+    assert.equal(options[0]!.contextWindow, 1048576);
+    assert.deepEqual(options[0]!.parameterSources, fixed.parameterSources);
+    assert.equal(options[0]!.parameterSources?.contextWindow?.kind, "user");
+    assert.equal(options[0]!.parameterSources?.reasoning?.kind, "remote-catalog");
+    assert.equal(options[0]!.parameterSources?.pricing?.kind, "user");
+    assert.equal(options[0]!.pricing?.input, 0);
+    assert.equal(options[1]!.contextWindow, 64000);
+    assert.equal(options[1]!.parameterSources?.reasoning?.kind, "user");
+    assert.equal(options[1]!.pricing, undefined);
+    assert.equal(options[1]!.parameterSources?.pricing, undefined);
+    await f.providers.saveModel({ ...identity(priced), overrides: { contextWindow: 200000 } });
+    assert.deepEqual(f.providers.providerModelOptions(frozen), options);
+    assert.deepEqual(boundModelOption(binding), fixed);
+  } finally {
+    await f.close();
+  }
+});
 
 test("public model route limits override canonical fallback; no fuzzy model alias matching", () => {
   const entries = parsePublicCatalog(payload());

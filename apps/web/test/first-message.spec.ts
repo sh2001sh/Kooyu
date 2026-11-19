@@ -49,6 +49,7 @@ test("a late snapshot captured before creation cannot remove the new conversatio
   let holdSnapshot = false;
   let snapshotCaptured = false;
   let sendStarted = false;
+  let stops = 0;
   let releaseSnapshot!: () => void;
   let releaseSend!: () => void;
   const snapshotGate = new Promise<void>((resolve) => {
@@ -79,6 +80,11 @@ test("a late snapshot captured before creation cannot remove the new conversatio
       json: receipt(session!.id, route.request().postDataJSON()),
     });
   });
+  await page.route("**/api/sessions/*/stop", async (route) => {
+    stops++;
+    expect(route.request().postDataJSON().pause).toBe(false);
+    await route.fulfill({ json: { status: "active", cancel: "requested; await native event" } });
+  });
   try {
     await page.goto("/");
     await expect(page.getByText("Host 已连接", { exact: true })).toHaveCount(1);
@@ -104,8 +110,13 @@ test("a late snapshot captured before creation cannot remove the new conversatio
       page.locator(".user-turn").filter({ hasText: "旧快照不能清掉新会话" }),
     ).toHaveCount(1);
     await expect(page.locator(".draft-composer-wrap")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "中断当前回合", exact: true })).toBeEnabled();
+    await page.getByRole("button", { name: "中断当前回合", exact: true }).click();
+    await expect.poll(() => stops).toBe(1);
+    await expect(
+      page.getByRole("status").filter({ hasText: "已请求中断当前回合。" }),
+    ).toBeVisible();
     releaseSend();
-    await expect(page.getByRole("button", { name: "停止并暂停托管", exact: true })).toBeEnabled();
   } finally {
     releaseSnapshot();
     releaseSend();
@@ -222,7 +233,7 @@ test("failed creation preserves the draft and rapid Enter creates only one retry
     await composer.press("Enter");
     await page.keyboard.press("Enter");
     await expect.poll(() => sends).toBe(1);
-    await expect(page.getByRole("button", { name: "停止并暂停托管", exact: true })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "中断当前回合", exact: true })).toBeEnabled();
     expect(creates).toBe(2);
     expect(sends).toBe(1);
     await expect(
@@ -340,7 +351,7 @@ test("history delivery reconciles the optimistic first message before its send r
       page.locator(".user-turn").filter({ hasText: "历史先到也只显示一次" }),
     ).toHaveCount(1);
     finish();
-    await expect(page.getByRole("button", { name: "停止并暂停托管", exact: true })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "中断当前回合", exact: true })).toBeEnabled();
     await expect(
       page.locator(".user-turn").filter({ hasText: "历史先到也只显示一次" }),
     ).toHaveCount(1);

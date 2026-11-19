@@ -91,7 +91,12 @@ async function api(path, body) {
   return response.json();
 }
 async function launchUI() {
-  app = await electron.launch({ executablePath: executable, env, timeout: 30000 });
+  app = await electron.launch({
+    executablePath: executable,
+    args: [`--user-data-dir=${join(data, "ui-profile")}`],
+    env,
+    timeout: 30000,
+  });
   const page = await app.firstWindow({ timeout: 20000 });
   if (automaticPort) {
     url = JSON.parse(readFileSync(join(data, "host.json"), "utf8")).url;
@@ -100,7 +105,14 @@ async function launchUI() {
   // A new isolated Host correctly shows first-run setup before the workbench.
   // Exercise its explicit skip action without adding credentials or providers.
   if ((await api("/onboarding")).status === "active") {
-    await page.getByRole("button", { name: "跳过引导", exact: true }).click({ timeout: 20000 });
+    const [saved] = await Promise.all([
+      page.waitForResponse(
+        (response) =>
+          response.url().endsWith("/api/onboarding") && response.request().method() === "PATCH",
+      ),
+      page.getByRole("button", { name: "跳过引导", exact: true }).click({ timeout: 20000 }),
+    ]);
+    assert.equal(saved.ok(), true);
     assert.equal((await api("/onboarding")).status, "skipped");
     report.firstRunShownAndSkipped = true;
   }
@@ -129,6 +141,28 @@ try {
   assert.equal(report.node.platform, process.platform);
   assert.equal(report.node.arch, process.arch);
   const page = await launchUI();
+  report.approvedBrandIcons = await app.evaluate(
+    ({ nativeImage }, icons) =>
+      icons.every(({ actual, expected }) => {
+        const image = nativeImage.createFromPath(actual);
+        return (
+          !image.isEmpty() &&
+          image.toBitmap().toString("base64") ===
+            nativeImage
+              .createFromBuffer(Buffer.from(expected, "base64"))
+              .toBitmap()
+              .toString("base64")
+        );
+      }),
+    [
+      [32, "tray.png"],
+      [256, "app.png"],
+    ].map(([size, name]) => ({
+      actual: join(resources, "app.asar/assets", name),
+      expected: readFileSync(resolve(`brand/icons/kooyu-app-${size}.png`)).toString("base64"),
+    })),
+  );
+  assert.equal(report.approvedBrandIcons, true, "Packaged icons must match approved Kooyu brand");
   const health = await api("/health");
   assert.equal(health.protocolVersion, PROTOCOL_VERSION);
   const discovery = JSON.parse(readFileSync(join(data, "host.json"), "utf8"));

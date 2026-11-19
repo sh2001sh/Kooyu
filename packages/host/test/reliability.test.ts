@@ -227,6 +227,67 @@ test("deletion refuses active and unknown delivery rather than hiding execution"
   }
 });
 
+test("idle local deletion tolerates unknown offline stops without rewriting their receipts", async () => {
+  const f = setup();
+  try {
+    const s = f.draft();
+    f.store.saveSession({ ...s, nativeSessionId: "synthetic-native", phase: "native" });
+    const first = randomUUID(),
+      second = randomUUID();
+    // Legacy receipts remain deletable without rewriting the audit history.
+    for (const id of [first, second])
+      f.store.saveCommand({
+        id,
+        sessionId: s.id,
+        kind: "stop",
+        origin: "user",
+        controllerId: null,
+        generation: s.ownerEpoch,
+        bindingRevision: null,
+        status: "unknown",
+        nativeRunId: null,
+        body: { pause: true, receipt: { cancel: "unconfirmed: native connection offline" } },
+        createdAt: new Date().toISOString(),
+      });
+    const stop = f.store.command(first);
+    assert.equal(stop?.status, "unknown");
+    assert.equal(f.store.session(s.id).runState, "idle");
+    const result = await f.service.deleteSession(s.id);
+    assert.equal(result.status, "deleted-locally");
+    assert.equal(result.nativeDeleted, false);
+    assert.deepEqual(f.store.command(first), stop);
+    assert.equal(f.store.command(second)?.status, "unknown");
+    assert.deepEqual(await f.service.deleteSession(s.id), result);
+  } finally {
+    await f.close();
+  }
+});
+
+for (const kind of ["send", "open", "interaction", "stop"] as const)
+  test(`deletion still blocks ${kind} with an unresolved execution receipt`, async () => {
+    const f = setup();
+    try {
+      const s = f.draft();
+      f.store.saveCommand({
+        id: randomUUID(),
+        sessionId: s.id,
+        kind,
+        origin: "user",
+        controllerId: null,
+        generation: 0,
+        bindingRevision: null,
+        status: kind === "stop" ? "dispatched" : "unknown",
+        nativeRunId: null,
+        body: {},
+        createdAt: new Date().toISOString(),
+      });
+      await assert.rejects(f.service.deleteSession(s.id), /先停止/);
+      assert.equal(f.store.sessions().length, 1);
+    } finally {
+      await f.close();
+    }
+  });
+
 test("search location returns bounded context for an early event and distinguishes native snapshots", async () => {
   const f = setup();
   try {
@@ -260,6 +321,65 @@ test("search location returns bounded context for an early event and distinguish
     assert.equal(native.events.length, 0);
     assert.ok("nativeHistory" in native);
     assert.throws(() => f.service.readPage(s.id, undefined, "native-history:stale"), /重新搜索/);
+  } finally {
+    await f.close();
+  }
+});
+
+test("message directory includes unloaded user turns and respects replacements and message branches", async () => {
+  const f = setup();
+  try {
+    const s = f.draft();
+    f.service.ingest(s.id, "message", { role: "user", text: "old question" }, "old");
+    f.service.ingest(
+      s.id,
+      "message",
+      { role: "user", text: "shared question", id: "native-user" },
+      "shared",
+    );
+    for (let i = 0; i < 650; i++) f.service.ingest(s.id, "state", {}, `noise-${i}`);
+    f.service.ingest(
+      s.id,
+      "message",
+      { role: "user", text: "edited question", replaceEventId: "old" },
+      "replacement",
+    );
+    f.service.ingest(s.id, "message", { role: "user", text: "branch question" }, "branch-user");
+    const page = f.service.readPage(s.id);
+    assert.equal(page.events.length, 300);
+    assert.deepEqual(
+      page.messageIndex.map((mark) => mark.label),
+      ["shared question", "edited question", "branch question"],
+    );
+    assert.equal(page.messageIndex[0]!.id, "message-message:native-user");
+    assert.ok(!page.events.some((e) => e.id === "shared"));
+    f.store.saveSession({
+      ...f.store.session(s.id),
+      conversation: {
+        activeId: "variant",
+        branches: [
+          {
+            id: "variant",
+            rootEventId: "old",
+            originalBranchId: "root",
+            userEventId: "branch-user",
+            prefixEventIds: ["shared"],
+          },
+        ],
+      },
+    });
+    const branchEvent = f.store.recentEvents(s.id, ["message"]).find((e) => e.id === "branch-user");
+    assert.ok(branchEvent);
+    // Branch tags are immutable event metadata in production; emulate the saved tag here.
+    f.store.db
+      .prepare(
+        "UPDATE events SET data=json_set(data,'$.conversationBranchId','variant') WHERE id=?",
+      )
+      .run("branch-user");
+    assert.deepEqual(
+      f.service.readPage(s.id).messageIndex.map((mark) => mark.label),
+      ["shared question", "branch question"],
+    );
   } finally {
     await f.close();
   }
@@ -710,6 +830,10 @@ test("manual native reconciliation releases a queue without repeating unknown in
     await turn();
     assert.deepEqual(f.sends, ["one uncertain native input"]);
     assert.equal(f.store.command(id)?.status, "confirmed");
+    assert.equal(f.store.session(s.id).executionState, "settled");
+    const stopped = await f.service.stop(s.id);
+    assert.equal(stopped.cancel, "not running; native execution settled");
+    assert.deepEqual(f.cancels, []);
   } finally {
     await f.close();
   }
@@ -894,16 +1018,58 @@ test("replayed stop keeps its receipt and never cancels a later native turn", as
   }
 });
 
-test("offline stop pauses control but never claims native cancellation was confirmed", async () => {
+test("offline stop records known non-delivery while preserving unknown native execution", async () => {
   const f = setup();
   try {
     const s = f.draft(),
       id = randomUUID();
+    f.store.saveSession({ ...s, runState: "unknown", executionState: "unknown" });
     const result = await f.service.stop(s.id, true, id);
     assert.equal(result.status, "paused");
-    assert.match(result.cancel, /unconfirmed/);
-    assert.equal(f.store.command(id)?.status, "unknown");
+    assert.match(result.cancel, /not delivered/);
+    assert.equal(f.store.command(id)?.status, "rejected");
+    assert.equal(f.store.session(s.id).runState, "unknown");
+    assert.equal(f.store.session(s.id).executionState, "unknown");
   } finally {
+    await f.close();
+  }
+});
+
+test("stop after a native error pauses supervision and cancels even while send is pending", async () => {
+  let release!: () => void;
+  const f = setup({
+    sendGate: new Promise<void>((resolve) => {
+      release = resolve;
+    }),
+  });
+  try {
+    const s = f.draft(),
+      controller = f.draft("supervisor");
+    f.service.watch({
+      controllerSessionId: controller.id,
+      targetSessionId: s.id,
+      mode: "continue",
+    });
+    const command = f.service.acceptSend(s.id, {
+      requestId: randomUUID(),
+      text: "synthetic pending run",
+    });
+    await turn();
+    f.contexts.get(s.id)!.emit("error", { message: "Stream ended without finish_reason" });
+    assert.equal(f.store.session(s.id).runState, "unknown");
+    assert.equal(f.store.command(command.id)?.status, "dispatched");
+    const result = await f.service.stop(s.id, true);
+    assert.equal(result.status, "paused");
+    assert.deepEqual(f.cancels, [s.id]);
+    assert.equal(f.store.watches().find((w) => w.targetSessionId === s.id)?.state, "paused");
+    release();
+    await turn();
+    assert.equal(f.store.session(s.id).executionState, "settled");
+    const again = await f.service.stop(s.id, true);
+    assert.equal(again.cancel, "not running; native execution settled");
+    assert.deepEqual(f.cancels, [s.id]);
+  } finally {
+    release();
     await f.close();
   }
 });

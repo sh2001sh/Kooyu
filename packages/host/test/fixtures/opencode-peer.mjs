@@ -77,6 +77,10 @@ createServer(async (req, res) => {
     return;
   }
   if (path === `/session/${sessionID}/prompt_async` && method === "POST") {
+    if (process.env.SYNTHETIC_PROMPT_REJECT) {
+      res.writeHead(503, { "content-type": "application/json" });
+      return res.end(JSON.stringify({ error: "synthetic unavailable" }));
+    }
     if (!["text", "file"].includes(data.parts?.[0]?.type))
       throw new Error("V1 prompt parts required");
     res.writeHead(204);

@@ -34,6 +34,7 @@ struct UsageRecord: Codable, Identifiable, Sendable {
     let bindingId: String?
     let model: String?
     let input, output, cacheRead, cacheWrite, costUsd: Double?
+    let firstTokenMs, durationMs: Double?
     var tokens: Double { [input, output, cacheRead, cacheWrite].compactMap { $0 }.reduce(0, +) }
 }
 struct UsageReport: Decodable, Sendable { let records: [UsageRecord]; let budgets: [JSONValue] }

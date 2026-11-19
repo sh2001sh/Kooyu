@@ -1,11 +1,29 @@
 package app.kooyu.android
 
+import app.kooyu.android.ui.*
+import app.kooyu.android.ui.theme.*
+import app.kooyu.android.ui.components.*
+import app.kooyu.android.ui.home.*
+import app.kooyu.android.ui.conversation.*
+import app.kooyu.android.ui.screens.*
+
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
 
 class HostAPITest {
+    @Test fun onlyReadsRecoverTransportFailuresAndShareConnections() {
+        val read = HostAPI.clientFor("GET")
+        val write = HostAPI.clientFor("POST")
+        assertTrue(read.retryOnConnectionFailure)
+        for (method in listOf("POST", "PUT", "PATCH", "DELETE")) {
+            assertFalse(HostAPI.clientFor(method).retryOnConnectionFailure)
+        }
+        assertSame(read.connectionPool, write.connectionPool)
+        assertFalse(read.followRedirects)
+        assertFalse(write.followRedirects)
+    }
     @Test fun invalidSuccessResponseDoesNotAcknowledgePendingWrites() {
         assertEquals(true, responseObject("{\"ok\":true}").getBoolean("ok"))
         assertEquals(0, responseObject("null", allowNull = true).length())

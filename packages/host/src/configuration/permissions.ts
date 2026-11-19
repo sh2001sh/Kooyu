@@ -1,6 +1,11 @@
 import { KodoError, type HarnessId, type PermissionMode } from "@kodo/protocol";
 
 const MODES: Partial<Record<HarnessId, [PermissionMode, string][]>> = {
+  "deepseek-harness": [
+    ["dsh:ask", "逐项审批"],
+    ["dsh:allow", "自动允许"],
+    ["dsh:deny", "拒绝需审批的操作"],
+  ],
   codex: [
     ["read-only", "只读"],
     ["workspace-write", "工作区写入"],

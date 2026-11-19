@@ -1,9 +1,12 @@
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useEffect, useRef, useState, type RefObject } from "react";
+import type { ConversationMark } from "@kodo/protocol";
 
 interface Mark {
   id: string;
   label: string;
+  eventId?: string;
+  sequence?: number;
 }
 
 /**
@@ -13,10 +16,16 @@ interface Mark {
 export function ConversationNav({
   scrollRef,
   version,
+  messageIndex = [],
+  onLoadMessage,
+  loading = false,
 }: {
   scrollRef: RefObject<HTMLDivElement | null>;
   /** Changes whenever the transcript content changes. */
   version: unknown;
+  messageIndex?: ConversationMark[];
+  onLoadMessage?: (mark: ConversationMark) => Promise<void>;
+  loading?: boolean;
 }) {
   const [marks, setMarks] = useState<Mark[]>([]);
   const [active, setActive] = useState<string | null>(null);
@@ -26,10 +35,12 @@ export function ConversationNav({
     const root = scrollRef.current;
     if (!root) return;
     const nodes = [...root.querySelectorAll<HTMLElement>("[data-nav-user]")];
-    setMarks(
-      nodes.filter((n) => n.id).map((n) => ({ id: n.id, label: n.dataset.navLabel || "消息" })),
-    );
-  }, [scrollRef, version]);
+    const all = new Map<string, Mark>(messageIndex.map((mark) => [mark.id, mark]));
+    for (const node of nodes.filter((n) => n.id))
+      if (!all.has(node.id))
+        all.set(node.id, { id: node.id, label: node.dataset.navLabel || "消息" });
+    setMarks([...all.values()]);
+  }, [scrollRef, version, messageIndex]);
 
   useEffect(() => {
     const root = scrollRef.current;
@@ -43,9 +54,10 @@ export function ConversationNav({
         return;
       }
       const top = root.getBoundingClientRect().top + 112;
-      let current: string | null = marks[0]?.id ?? null;
+      let current: string | null = null;
       for (const m of marks) {
         const el = document.getElementById(m.id);
+        if (el && current === null) current = m.id;
         if (el && el.getBoundingClientRect().top <= top) current = m.id;
       }
       setActive(current);
@@ -77,11 +89,18 @@ export function ConversationNav({
     if (!target) return;
     lockUntilRef.current = Date.now() + 750;
     setActive(target.id);
-    document.getElementById(target.id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const element = document.getElementById(target.id);
+    if (element) element.scrollIntoView({ behavior: "smooth", block: "start" });
+    else if (target.eventId && target.sequence !== undefined)
+      void onLoadMessage?.(target as ConversationMark).then(() => {
+        lockUntilRef.current = Date.now() + 750;
+        setActive(target.id);
+        document.getElementById(target.id)?.scrollIntoView({ block: "start" });
+      });
   };
 
   return (
-    <nav className="conversation-nav" aria-label="对话导航">
+    <nav className="conversation-nav" aria-label="对话导航" aria-busy={loading}>
       <div className="conversation-nav__shell">
         <div className="conversation-nav__counter" aria-hidden="true">
           <span>{String(activeIdx + 1).padStart(2, "0")}</span>
@@ -92,7 +111,7 @@ export function ConversationNav({
           type="button"
           className="conversation-nav__step"
           aria-label="上一条消息"
-          disabled={activeIdx <= 0}
+          disabled={loading || activeIdx <= 0}
           onClick={() => jumpToIndex(activeIdx - 1)}
         >
           <ChevronUp size={12} aria-hidden="true" />
@@ -105,6 +124,7 @@ export function ConversationNav({
                 className={`conversation-nav__item ${m.id === active ? "is-active" : ""}`}
                 aria-label={`跳到第 ${index + 1} 条消息：${m.label}`}
                 aria-current={m.id === active ? "location" : undefined}
+                disabled={loading}
                 onClick={() => jumpToIndex(index)}
               >
                 <span className="conversation-nav__tick" aria-hidden="true" />
@@ -122,7 +142,7 @@ export function ConversationNav({
           type="button"
           className="conversation-nav__step"
           aria-label="下一条消息"
-          disabled={activeIdx >= marks.length - 1}
+          disabled={loading || activeIdx >= marks.length - 1}
           onClick={() => jumpToIndex(activeIdx + 1)}
         >
           <ChevronDown size={12} aria-hidden="true" />

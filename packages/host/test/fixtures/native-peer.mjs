@@ -6,6 +6,7 @@ import { createHash } from "node:crypto";
 const uploads = new Map();
 const mode = process.argv[2];
 let initialized = false;
+let testDshSessionId;
 let config = [
   {
     id: "engine",
@@ -99,7 +100,23 @@ const zFrame = (payload, fragmented = false) => {
 };
 for await (const line of createInterface({ input: process.stdin })) {
   const r = JSON.parse(line);
-  if (!r.method) continue;
+  if (!r.method) {
+    if (
+      process.env.SYNTHETIC_DSH_APPROVALS &&
+      typeof r.id === "string" &&
+      r.id.startsWith("test-")
+    ) {
+      write({
+        method: "test/answer",
+        params: {
+          sessionId: testDshSessionId,
+          request: r.id.includes("approval") ? "approval/request" : "question/request",
+          answer: r.result,
+        },
+      });
+    }
+    continue;
+  }
   if (process.env.SYNTHETIC_WIRE_LOG)
     appendFileSync(process.env.SYNTHETIC_WIRE_LOG, JSON.stringify(r) + "\n");
   let result = {};
@@ -158,6 +175,10 @@ for await (const line of createInterface({ input: process.stdin })) {
       },
     });
   } else if (mode === "acp" && r.method === "session/prompt") {
+    if (process.env.SYNTHETIC_PROMPT_REJECT) {
+      write({ id: r.id, error: { code: -32000, message: "synthetic API 503" } });
+      continue;
+    }
     if (!initialized) throw new Error("missing initialization");
     write({
       method: "session/update",
@@ -357,6 +378,17 @@ for await (const line of createInterface({ input: process.stdin })) {
     result = { ref: `attachment:${r.params.uploadId}` };
   } else if (mode === "zcode" && r.method === "v4/attachment/abort") result = {};
   else if (mode === "dsh" && r.method === "session/prompt") {
+    if (process.env.SYNTHETIC_DSH_APPROVALS) {
+      testDshSessionId = r.params.sessionId;
+      for (const kind of ["approval", "question"])
+        write({
+          id: `test-${kind}-${r.id}`,
+          method: `${kind}/request`,
+          params: { sessionId: r.params.sessionId },
+        });
+      // Deliver receipt after request handlers settle, so each test can change modes between turns.
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    }
     result = { messageId: "native-message-test" };
     if (process.env.SYNTHETIC_DSH_STATUS) {
       write({

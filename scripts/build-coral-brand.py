@@ -77,6 +77,66 @@ def wordmark():
     parse_path(word,TransformPen(normalized,(1,0,0,1,-x0,-y0)))
     return normalized.getCommands(),scale,round((x1-x0)*scale,2)
 
+def icon_document(path, mode='light', fullbleed=False, scale=0.456, adaptive_css=False):
+    """Build porcelain-white (light), obsidian-carbon (dark), or tinted 3D ribbon app icon."""
+    tx = round(256 - 520 * scale - 2.5, 2)
+    ty = round(256 - 480 * scale, 2)
+    clip_id = f'kooyu-icon-clip-{mode}'
+
+    if mode == 'tinted':
+        ribbon_defs = f'''<clipPath id="{clip_id}"><path d="{path}" fill-rule="evenodd" clip-rule="evenodd"/></clipPath>
+<linearGradient id="kooyu-i-loop" gradientUnits="userSpaceOnUse" x1="130" y1="640" x2="445" y2="390"><stop stop-color="#FFFFFF"/><stop offset=".48" stop-color="#D4D7DF"/><stop offset="1" stop-color="#8C919D"/></linearGradient>
+<linearGradient id="kooyu-i-upper" gradientUnits="userSpaceOnUse" x1="360" y1="560" x2="910" y2="180"><stop stop-color="#969BA8"/><stop offset=".44" stop-color="#DCE0E8"/><stop offset="1" stop-color="#FFFFFF"/></linearGradient>
+<linearGradient id="kooyu-i-lower" gradientUnits="userSpaceOnUse" x1="467" y1="524" x2="840" y2="780"><stop stop-color="#7B808C"/><stop offset=".39" stop-color="#CFD3DC"/><stop offset="1" stop-color="#F7F8FA"/></linearGradient>
+<linearGradient id="kooyu-i-front" gradientUnits="userSpaceOnUse" x1="151" y1="664" x2="490" y2="505"><stop stop-color="#FFFFFF"/><stop offset=".46" stop-color="#D7DBE3"/><stop offset="1" stop-color="#FFFFFF"/></linearGradient>'''
+    else:
+        ribbon_defs = f'''<clipPath id="{clip_id}"><path d="{path}" fill-rule="evenodd" clip-rule="evenodd"/></clipPath>
+<linearGradient id="kooyu-i-loop" gradientUnits="userSpaceOnUse" x1="130" y1="640" x2="445" y2="390"><stop stop-color="{PEACH}"/><stop offset=".48" stop-color="{CORAL}"/><stop offset="1" stop-color="#BD465F"/></linearGradient>
+<linearGradient id="kooyu-i-upper" gradientUnits="userSpaceOnUse" x1="360" y1="560" x2="910" y2="180"><stop stop-color="#C84C5F"/><stop offset=".44" stop-color="{CORAL}"/><stop offset="1" stop-color="{PEACH}"/></linearGradient>
+<linearGradient id="kooyu-i-lower" gradientUnits="userSpaceOnUse" x1="467" y1="524" x2="840" y2="780"><stop stop-color="{BERRY}"/><stop offset=".39" stop-color="{CORAL}"/><stop offset="1" stop-color="{PEACH}"/></linearGradient>
+<linearGradient id="kooyu-i-front" gradientUnits="userSpaceOnUse" x1="151" y1="664" x2="490" y2="505"><stop stop-color="{PEACH}"/><stop offset=".46" stop-color="{CORAL}"/><stop offset="1" stop-color="{PEACH}"/></linearGradient>'''
+
+    tile_defs = '''<linearGradient id="kooyu-tile-light" gradientUnits="userSpaceOnUse" x1="256" y1="0" x2="256" y2="512"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".58" stop-color="#FAFAFC"/><stop offset="1" stop-color="#EEEFF3"/></linearGradient>
+<radialGradient id="kooyu-glow-light" gradientUnits="userSpaceOnUse" cx="256" cy="264" r="225"><stop offset="0" stop-color="#F17561" stop-opacity=".12"/><stop offset=".62" stop-color="#FFD0B3" stop-opacity=".04"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/></radialGradient>
+<linearGradient id="kooyu-tile-dark" gradientUnits="userSpaceOnUse" x1="256" y1="0" x2="256" y2="512"><stop offset="0" stop-color="#22232A"/><stop offset=".55" stop-color="#17181D"/><stop offset="1" stop-color="#101115"/></linearGradient>
+<radialGradient id="kooyu-glow-dark" gradientUnits="userSpaceOnUse" cx="256" cy="258" r="225"><stop offset="0" stop-color="#F17561" stop-opacity=".22"/><stop offset=".6" stop-color="#A03259" stop-opacity=".06"/><stop offset="1" stop-color="#101115" stop-opacity="0"/></radialGradient>
+<linearGradient id="kooyu-tile-tinted" gradientUnits="userSpaceOnUse" x1="256" y1="0" x2="256" y2="512"><stop offset="0" stop-color="#1E2025"/><stop offset="1" stop-color="#0E0F12"/></linearGradient>'''
+
+    style = ''
+    if adaptive_css:
+        style = '''<style>.tile-bg{fill:url(#kooyu-tile-light)}.tile-glow{fill:url(#kooyu-glow-light)}.tile-rim{stroke:#DFDFE6;stroke-opacity:1}@media (prefers-color-scheme:dark){.tile-bg{fill:url(#kooyu-tile-dark)}.tile-glow{fill:url(#kooyu-glow-dark)}.tile-rim{stroke:#FFFFFF;stroke-opacity:.11}}</style>'''
+
+    defs = f'<defs>\n{tile_defs}\n{ribbon_defs}\n</defs>{style}'
+    rx_attr = '' if fullbleed else ' rx="112"'
+    if adaptive_css:
+        bg_rects = (
+            f'<rect width="512" height="512"{rx_attr} class="tile-bg"/>'
+            f'<rect width="512" height="512"{rx_attr} class="tile-glow"/>'
+            + ('' if fullbleed else '<rect x="2" y="2" width="508" height="508" rx="110" fill="none" stroke-width="4" class="tile-rim"/>')
+        )
+    elif mode == 'dark':
+        bg_rects = (
+            f'<rect width="512" height="512"{rx_attr} fill="url(#kooyu-tile-dark)"/>'
+            f'<rect width="512" height="512"{rx_attr} fill="url(#kooyu-glow-dark)"/>'
+            + ('' if fullbleed else '<rect x="2" y="2" width="508" height="508" rx="110" fill="none" stroke="#FFFFFF" stroke-opacity=".11" stroke-width="4"/>')
+        )
+    elif mode == 'tinted':
+        bg_rects = f'<rect width="512" height="512"{rx_attr} fill="url(#kooyu-tile-tinted)"/>'
+    else:
+        bg_rects = (
+            f'<rect width="512" height="512"{rx_attr} fill="url(#kooyu-tile-light)"/>'
+            f'<rect width="512" height="512"{rx_attr} fill="url(#kooyu-glow-light)"/>'
+            + ('' if fullbleed else '<rect x="2" y="2" width="508" height="508" rx="110" fill="none" stroke="#DFDFE6" stroke-width="4"/>')
+        )
+
+    ribbon = f'''<g transform="translate({tx} {ty}) scale({scale})"><g clip-path="url(#{clip_id})">
+<path d="{path}" fill="url(#kooyu-i-loop)" fill-rule="evenodd"/>
+<path d="M450 510 C570 550 745 550 890 650 L1030 1030 H435 V650 Z" fill="url(#kooyu-i-lower)"/>
+<path d="M205 618 C300 600 368 545 435 478 C525 370 600 190 700 140 L1030 120 V480 L720 470 L520 490 C400 550 290 608 205 618 Z" fill="url(#kooyu-i-upper)"/>
+<path d="M0 615 C185 635 265 625 365 570 C420 540 470 510 520 485 C500 515 477 548 454 572 C420 630 330 710 200 760 L0 800 Z" fill="url(#kooyu-i-front)"/>
+</g></g>'''
+    return document(bg_rects + ribbon, '0 0 512 512', 512, 512, 'Kooyu · application icon', defs)
+
 def main():
     for folder in ['svg','png','icons','fonts','components']:(OUT/folder).mkdir(parents=True,exist_ok=True)
     shutil.copyfile(ROOT/'brand/identity.json',OUT/'identity.json')
@@ -101,10 +161,10 @@ def main():
         write(f'kooyu-logo-{suffix}.svg',body,f'0 0 {total} 132',total,132,'Kooyu · monochrome horizontal lockup')
     for suffix,color in [('',INK),('-white','#FFFFFF')]:
         write(f'kooyu-wordmark{suffix}.svg',f'<path d="{word}" fill="{color}" transform="translate(4 108) scale({scale} -{scale})"/>',f'0 0 {word_width+8} 132',word_width+8,132,'Kooyu · outlined wordmark')
-    # White silhouette remains clear at tray/favicon sizes.
-    for suffix,background,foreground in [('',CORAL,'#FFFFFF'),('-dark',INK,PEACH)]:
-        icon=f'<rect width="512" height="512" rx="112" fill="{background}"/><g transform="translate(3.46 21.52) scale(.488)"><path d="{path}" fill="{foreground}" fill-rule="evenodd"/></g>'
-        (OUT/f'icons/kooyu-app{suffix}.svg').write_text(document(icon,'0 0 512 512',512,512,'Kooyu · application icon'),encoding='utf-8')
+    # Unified Porcelain-White (Light) + Obsidian-Carbon (Dark) 3D Sunset-Coral Ribbon App Icons.
+    (OUT/'icons/kooyu-app.svg').write_text(icon_document(path, mode='light', fullbleed=False), encoding='utf-8')
+    (OUT/'icons/kooyu-app-dark.svg').write_text(icon_document(path, mode='dark', fullbleed=False), encoding='utf-8')
+    (OUT/'icons/kooyu-favicon.svg').write_text(icon_document(path, mode='light', fullbleed=False, adaptive_css=True), encoding='utf-8')
     for name in ['kooyu-mark','kooyu-mark-coral','kooyu-mark-ink','kooyu-mark-white']:
         for width in [1024,2048]:render(OUT/f'svg/{name}.svg',OUT/f'png/{name}-{width}.png',width)
     for name in ['kooyu-logo','kooyu-logo-dark','kooyu-logo-white','kooyu-wordmark']:
@@ -112,15 +172,25 @@ def main():
     for size in [16,24,32,48,64,128,180,192,256,512,1024]:
         render(OUT/'icons/kooyu-app.svg',OUT/f'icons/kooyu-app-{size}.png',size,size)
     render(OUT/'icons/kooyu-app-dark.svg',OUT/'icons/kooyu-app-dark-512.png',512,512)
+    render(OUT/'icons/kooyu-app-dark.svg',OUT/'icons/kooyu-app-dark-1024.png',1024,1024)
     icon=Image.open(OUT/'icons/kooyu-app-1024.png').convert('RGBA')
     icon.save(OUT/'icons/kooyu-app.ico',sizes=[(16,16),(24,24),(32,32),(48,48),(64,64),(128,128),(256,256)])
     icon.save(OUT/'icons/kooyu-app.icns')
-    # Maskable version has an opaque, full-bleed field and safe inset symbol.
-    maskable=f'<rect width="512" height="512" fill="{CORAL}"/><g transform="translate(64.5 78.2) scale(.37)"><path d="{path}" fill="#FFFFFF" fill-rule="evenodd"/></g>'
+    # Full-bleed opaque porcelain maskable icons (PWA & Apple Touch Icon).
+    maskable_svg = icon_document(path, mode='light', fullbleed=True, scale=0.385)
     for size in [192,512]:
-        data=cairosvg.svg2png(bytestring=document(maskable,'0 0 512 512',512,512).encode(),output_width=size,output_height=size)
-        (OUT/f'icons/kooyu-maskable-{size}.png').write_bytes(data)
-    manifest={'name':'Kooyu','short_name':'Kooyu','start_url':'/','display':'standalone','background_color':PAPER,'theme_color':CORAL,'icons':[{'src':'kooyu-app-192.png','sizes':'192x192','type':'image/png','purpose':'any'},{'src':'kooyu-app-512.png','sizes':'512x512','type':'image/png','purpose':'any'},{'src':'kooyu-maskable-512.png','sizes':'512x512','type':'image/png','purpose':'maskable'}]}
+        data=cairosvg.svg2png(bytestring=maskable_svg.encode(),output_width=size,output_height=size)
+        Image.open(io.BytesIO(data)).convert('RGB').save(OUT/f'icons/kooyu-maskable-{size}.png')
+    # Full-bleed opaque iOS App Icons (Light, iOS 18+ Dark, iOS 18+ Tinted — zero transparent/black corners).
+    for variant, mode in [('light', 'light'), ('dark', 'dark'), ('tinted', 'tinted')]:
+        ios_svg = icon_document(path, mode=mode, fullbleed=True, scale=0.456)
+        raw_png = cairosvg.svg2png(bytestring=ios_svg.encode(), output_width=1024, output_height=1024)
+        Image.open(io.BytesIO(raw_png)).convert('RGB').save(OUT/f'icons/kooyu-ios-{variant}-1024.png')
+    # 180px opaque full-bleed Apple Touch Icon for iOS Safari Add-to-Home-Screen.
+    touch_svg = icon_document(path, mode='light', fullbleed=True, scale=0.456)
+    touch_png = cairosvg.svg2png(bytestring=touch_svg.encode(), output_width=180, output_height=180)
+    Image.open(io.BytesIO(touch_png)).convert('RGB').save(OUT/'icons/kooyu-apple-touch-180.png')
+    manifest={'name':'Kooyu','short_name':'Kooyu','start_url':'/','display':'standalone','background_color':'#f5f5f7','theme_color':'#f5f5f7','icons':[{'src':'kooyu-app-192.png','sizes':'192x192','type':'image/png','purpose':'any'},{'src':'kooyu-app-512.png','sizes':'512x512','type':'image/png','purpose':'any'},{'src':'kooyu-maskable-512.png','sizes':'512x512','type':'image/png','purpose':'maskable'}]}
     (OUT/'icons/site.webmanifest').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
     for name in ['manrope-latin.woff2','OFL.txt']:shutil.copyfile(ROOT/'brand/fonts'/name,OUT/'fonts'/name)
     active=OPTIONS[WORDMARK_OPTION];family=active['family'];fontfile=ROOT/f'brand/fonts/{family}/{family}-Variable.ttf'

@@ -1103,15 +1103,18 @@ test("management whitelist covers drafts, metadata, workspace and revision-contr
       (await execute("PATCH", "/api/app-settings", { revision: 0, theme: "light" })).status,
       "failed",
     );
-    const unsupported = f.service.createDraft({
+    const deepseek = f.service.createDraft({
       title: "Native",
       harnessId: "deepseek-harness",
       kind: "direct",
     });
-    const permissions = (await f.call("/api/sessions/" + unsupported.id + "/configuration")).value
+    const permissions = (await f.call("/api/sessions/" + deepseek.id + "/configuration")).value
       .permissions;
-    assert.equal(permissions.canChange, false);
-    assert.ok(permissions.reason);
+    assert.equal(permissions.canChange, true);
+    assert.deepEqual(
+      permissions.options.map((option: { value: string }) => option.value),
+      ["dsh:ask", "dsh:allow", "dsh:deny"],
+    );
   } finally {
     await f.close();
   }

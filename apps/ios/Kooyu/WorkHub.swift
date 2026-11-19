@@ -28,6 +28,7 @@ private struct WorkSheet: Identifiable {
 
 struct WorkHubView: View {
     @Bindable var model: Workbench
+    var embedded: Bool = false
     @Environment(\.dismiss) private var dismiss
     @State private var project: String
     @State private var tab: String
@@ -37,11 +38,18 @@ struct WorkHubView: View {
     @State private var loading = false
     @State private var error = ""
     @State private var sheet: WorkSheet?
-    private let tabs = ["工作记录", "成果", "自动计划", "项目概览", "项目约定", "执行能力", "常用任务"]
-    init(model: Workbench, initialProject: String = "", initialTab: String = "工作记录") {
+    private let tabs = ["进行中与目标", "交付成果", "自动计划"]
+    init(model: Workbench, initialProject: String = "", initialTab: String = "进行中与目标", embedded: Bool = false) {
         self.model = model
+        self.embedded = embedded
         _project = State(initialValue: initialProject)
-        _tab = State(initialValue: initialTab)
+        let mapped: String
+        switch initialTab {
+        case "成果", "交付成果": mapped = "交付成果"
+        case "自动计划": mapped = "自动计划"
+        default: mapped = "进行中与目标"
+        }
+        _tab = State(initialValue: mapped)
     }
     private func load() async {
         let host = model.connection?.hostId; let scope = project
@@ -52,64 +60,81 @@ struct WorkHubView: View {
     }
     private func source(_ id: String) {
         guard model.snapshot?.sessions.contains(where: { $0.id == id }) == true else { error = "来源会话已移除。"; return }
-        Task { await model.select(id); model.selectedTab = "sessions"; dismiss() }
+        Task { await model.select(id); model.selectedTab = "sessions"; if !embedded { dismiss() } }
     }
     private func compose(_ text: String) { sheet = WorkSheet(kind: "compose", value: .string(text)) }
     private func matches(_ text: String) -> Bool { search.isEmpty || text.localizedCaseInsensitiveContains(search) }
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
+        if embedded {
+            hubContent
+                .tint(KY.text)
+        } else {
+            NavigationStack {
+                hubContent
+                    .navigationTitle(project.isEmpty ? "工作" : model.snapshot?.projects.first { $0.id == project }?.name ?? "项目工作")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) { Button("完成") { dismiss() } }
+                        ToolbarItem(placement: .primaryAction) { Button { Task { await load() } } label: { Image(systemName: "arrow.clockwise") }.accessibilityLabel("刷新工作记录").disabled(loading) }
+                    }
+            }
+            .tint(KY.text)
+        }
+    }
+
+    private var hubContent: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
                 Picker("项目范围", selection: $project) {
                     Text("全部项目").tag("")
                     ForEach(model.snapshot?.projects ?? []) { Text($0.name).tag($0.id) }
-                }.pickerStyle(.menu).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 20) { ForEach(tabs, id: \.self) { title in
-                        Button { tab = title } label: { Text(title).font(.subheadline.weight(tab == title ? .semibold : .regular)).foregroundStyle(tab == title ? KY.coral : KY.textSecondary).padding(.vertical, 14) }
-                    } }.padding(.horizontal, 20)
-                }
-                Divider()
-                StatusView(model: model)
-                if loading { ProgressView().padding(12) }
-                if !error.isEmpty { Text(error).foregroundStyle(KY.destructive).padding() }
-                List {
-                    if let data {
-                        if ["工作记录", "成果", "自动计划"].contains(tab) {
-                            TextField("搜索名称或内容", text: $search)
-                            if tab == "工作记录" { Toggle("需要我处理", isOn: $attention) }
-                        }
-                        switch tab {
-                        case "工作记录": work(data)
-                        case "成果": artifacts(data)
-                        case "自动计划": plans(data)
-                        case "项目概览": overview(data)
-                        case "项目约定": memories(data)
-                        case "执行能力": capabilities(data)
-                        default:
-                            Text("选择后填入草稿，修改后再发送。").foregroundStyle(KY.textSecondary)
-                            ForEach(workTemplates.indices, id: \.self) { index in Button { compose(workTemplates[index].1) } label: { WorkRow(title: workTemplates[index].0, subtitle: workTemplates[index].1) }.buttonStyle(.plain) }
-                        }
+                }.pickerStyle(.menu)
+                Spacer()
+                if embedded {
+                    Button { Task { await load() } } label: {
+                        Image(systemName: "arrow.clockwise").frame(width: 36, height: 36)
                     }
-                }.listStyle(.plain).refreshable { await load() }
-            }
-            .background(KY.paper)
-            .navigationTitle(project.isEmpty ? "我的工作" : model.snapshot?.projects.first { $0.id == project }?.name ?? "项目工作")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("完成") { dismiss() } }
-                ToolbarItem(placement: .primaryAction) { Button { Task { await load() } } label: { Image(systemName: "arrow.clockwise") }.accessibilityLabel("刷新工作记录").disabled(loading) }
-            }
-            .task(id: (model.connection?.hostId ?? "") + ":" + project) { data = nil; await load() }
-            .sheet(item: $sheet, onDismiss: { Task { await load() } }) { selection in
-                switch selection.kind {
-                case "goal": GoalDetailView(model: model, goalId: selection.value["id"].string, onOpenSession: source)
-                case "artifact": ManagedArtifactView(model: model, artifact: selection.value)
-                case "plan": WorkPlanEditor(model: model, plan: selection.value, runs: data?["activations"].array.filter { $0["automationId"].string == selection.value["id"].string } ?? [], canRun: data?["actions"]["automations.run"]["available"].boolean == true, open: source)
-                case "memory": WorkMemoryEditor(model: model, memory: selection.value, project: project)
-                default: SessionComposerView(model: model, initialProject: project, initialText: selection.value.string)
+                    .accessibilityLabel("刷新工作记录")
+                    .disabled(loading)
                 }
             }
-        }.tint(KY.text)
+            .padding(.horizontal, 16)
+            .padding(.top, 6)
+
+            KooyuSegmentedControl(
+                options: tabs.map { SegmentOption(value: $0, label: $0) },
+                selection: $tab
+            )
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+
+            Divider()
+            if !embedded { StatusView(model: model) }
+            if loading { ProgressView().padding(12) }
+            if !error.isEmpty { Text(error).foregroundStyle(KY.destructive).padding() }
+            List {
+                if let data {
+                    TextField("搜索名称或内容", text: $search)
+                    if tab == "进行中与目标" { Toggle("需要我处理", isOn: $attention) }
+                    switch tab {
+                    case "进行中与目标": work(data)
+                    case "交付成果": artifacts(data)
+                    default: plans(data)
+                    }
+                }
+            }.listStyle(.plain).refreshable { await load() }
+        }
+        .background(KY.paper)
+        .task(id: (model.connection?.hostId ?? "") + ":" + project) { data = nil; await load() }
+        .sheet(item: $sheet, onDismiss: { Task { await load() } }) { selection in
+            switch selection.kind {
+            case "goal": GoalDetailView(model: model, goalId: selection.value["id"].string, onOpenSession: source)
+            case "artifact": ManagedArtifactView(model: model, artifact: selection.value)
+            case "plan": WorkPlanEditor(model: model, plan: selection.value, runs: data?["activations"].array.filter { $0["automationId"].string == selection.value["id"].string } ?? [], canRun: data?["actions"]["automations.run"]["available"].boolean == true, open: source)
+            case "memory": WorkMemoryEditor(model: model, memory: selection.value, project: project)
+            default: SessionComposerView(model: model, initialProject: project, initialText: selection.value.string)
+            }
+        }
     }
     @ViewBuilder private func work(_ data: JSONValue) -> some View {
         let inbox = data["inbox"].array.filter { item in matches(model.snapshot?.sessions.first { $0.id == item["sessionId"].string }?.title ?? "") }
@@ -146,23 +171,6 @@ struct WorkHubView: View {
         }
         if plans.isEmpty { ContentUnavailableView("暂无匹配计划", systemImage: "calendar", description: Text("从对话创建，再在这里管理时间、边界和运行记录。")) }
     }
-    @ViewBuilder private func overview(_ data: JSONValue) -> some View {
-        Section("项目目录") { ForEach(Array(data["workspaces"].array.enumerated()), id: \.offset) { _, workspace in WorkRow(title: model.snapshot?.projects.first { $0.id == workspace["projectId"].string }?.name ?? "未分组目录", subtitle: workspace["rootPath"].string, arrow: false) } }
-        Section("最近对话") { ForEach(Array(data["sessions"].array.filter { !$0["archived"].boolean }.sorted { $0["createdAt"].string > $1["createdAt"].string }.prefix(12).enumerated()), id: \.offset) { _, session in Button { source(session["id"].string) } label: { WorkRow(title: session["title"].string, subtitle: harnessVisual(session["harnessId"].string).name) }.buttonStyle(.plain) } }
-        Button("在此新建对话", systemImage: "plus") { compose("") }
-    }
-    @ViewBuilder private func memories(_ data: JSONValue) -> some View {
-        Button("新增约定", systemImage: "plus") { sheet = WorkSheet(kind: "memory", value: .null) }.disabled(!model.canWrite)
-        ForEach(Array(data["memories"].array.enumerated()), id: \.offset) { _, memory in Button { sheet = WorkSheet(kind: "memory", value: memory) } label: { WorkRow(title: memory["subject"].string, subtitle: (memory["scope"].string == "user" ? "全局" : model.snapshot?.projects.first { $0.id == memory["projectId"].string }?.name ?? "项目") + " · " + (memory["status"].string == "confirmed" ? "已确认" : "待确认") + "\n" + memory["content"].string) }.buttonStyle(.plain) }
-        if data["memories"].array.isEmpty { ContentUnavailableView("还没有长期约定", systemImage: "book", description: Text("保存稳定的项目规范；临时进度留在对话中。")) }
-    }
-    @ViewBuilder private func capabilities(_ data: JSONValue) -> some View {
-        Text("能力来自当前设备；实际执行仍在设备上。").foregroundStyle(KY.textSecondary)
-        ForEach(Array(data["harnesses"].array.enumerated()), id: \.offset) { _, harness in
-            let labels = [("directChat", "对话"), ("historyRead", "历史读取"), ("resume", "恢复会话"), ("observeLive", "执行状态"), ("observeExternal", "外部会话"), ("steer", "途中补充"), ("cancel", "停止"), ("interaction", "询问与审批"), ("usage", "用量"), ("quota", "额度")]
-            WorkRow(title: harness["name"].string, subtitle: (harness["health"].object.isEmpty ? "尚未检查安装状态" : harness["health"]["installed"].boolean ? "已安装" : "未安装") + "\n" + labels.filter { harness["capabilities"][$0.0].string == "supported" }.map { $0.1 }.joined(separator: " / ") + "\n" + harness["health"]["error"].string, arrow: false)
-        }
-    }
 }
 
 private struct WorkRow: View {
@@ -185,7 +193,12 @@ private struct WorkPlanEditor: View {
     let canRun: Bool
     let open: (String) -> Void
     @Environment(\.dismiss) private var dismiss
-    @State private var name = "", prompt = "", zone = "", maxRuns = "0", maxCost = "0", error = ""
+    @State private var name = ""
+    @State private var prompt = ""
+    @State private var zone = ""
+    @State private var maxRuns = "0"
+    @State private var maxCost = "0"
+    @State private var error = ""
     @State private var timing = PlanTiming(.null)
     @State private var preview: [JSONValue] = []
     private func bodyFields() throws -> [String: JSONValue] {
@@ -236,7 +249,8 @@ struct WorkMemoryEditor: View {
     let memory: JSONValue
     let project: String
     @Environment(\.dismiss) private var dismiss
-    @State private var subject = "", content = ""
+    @State private var subject = ""
+    @State private var content = ""
     @State private var deleting = false
     private func save(_ status: String) async {
         let existing = !memory["id"].string.isEmpty

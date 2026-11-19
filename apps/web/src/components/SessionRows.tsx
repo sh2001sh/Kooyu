@@ -15,18 +15,16 @@ import {
 } from "lucide-react";
 import { HARNESS_IDS } from "@kodo/protocol/client";
 import type { HarnessId, Project, Session, Supervision } from "@kodo/protocol";
-import {
-  HARNESS_NAMES,
-  RUN_STATE_LABELS,
-  formatRelativeDate,
-  shortModelLabel,
-} from "../lib/harnesses";
+import { HARNESS_NAMES, formatRelativeDate, shortModelLabel } from "../lib/harnesses";
+import { useT } from "../lib/i18n";
 import { HarnessBadge, KodoMark } from "./KodoBrand";
+import { SegmentedControl } from "./SegmentedControl";
+import { StatusBadge, sessionStatusTone } from "./StatusBadge";
 import { useSidebarActions } from "./useSidebarActions";
 
 type SearchHit = { sessionId: string; eventId?: string; snippet?: string };
 
-export type SidebarViewMode = "project" | "harness";
+export type SidebarViewMode = "recent" | "project" | "harness";
 
 export interface SessionRowsProps {
   viewMode: SidebarViewMode;
@@ -45,8 +43,9 @@ export interface SessionRowsProps {
   onQueryChange: (q: string) => void;
   onToggleArchived: () => void;
   onSelectSession: (id: string, eventId?: string) => void;
+  onOpenWorkbench: () => void;
   onOpenInbox: () => void;
-  onCreateMaster: () => void;
+  onCreateMaster: (text?: string) => void;
   onCreateProject: () => void;
   onCreateInProject: (projectId: string | null) => void;
   onCreateWithHarness: (harnessId: HarnessId) => void;
@@ -54,6 +53,7 @@ export interface SessionRowsProps {
   onDeleteProject?: (project: Project) => void;
   onEditProject: (project: Project) => void;
   onOpenProjectOverview?: (projectId: string) => void;
+  onOpenCommandPalette?: () => void;
   act: (work: () => Promise<unknown>) => Promise<void>;
 }
 
@@ -89,6 +89,7 @@ export function SessionRows({
   onQueryChange,
   onToggleArchived,
   onSelectSession,
+  onOpenWorkbench,
   onOpenInbox,
   onCreateMaster,
   onCreateProject,
@@ -98,6 +99,7 @@ export function SessionRows({
   onDeleteProject,
   onEditProject,
   onOpenProjectOverview,
+  onOpenCommandPalette,
   act,
 }: SessionRowsProps) {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
@@ -126,12 +128,18 @@ export function SessionRows({
     );
     const hit = searching ? searchHits.find((h) => h.sessionId === s.id) : undefined;
     const projName = s.projectId ? projectNames.get(s.projectId) : undefined;
-    const stateText =
-      s.kind === "supervisor"
-        ? "项目主对话"
-        : s.phase === "draft"
-          ? "尚未启动"
-          : RUN_STATE_LABELS[s.runState];
+    const tone = sessionStatusTone(s);
+    // Second line stays short: in project view the badge already names the harness, so show the
+    // model; in harness view show which project the session belongs to; in recent view show project + model.
+    const modelTag = s.model ? shortModelLabel(s.model) : HARNESS_NAMES[s.harnessId];
+    const detail =
+      mode === "project"
+        ? modelTag
+        : mode === "recent"
+          ? projName
+            ? `${projName} · ${modelTag}`
+            : modelTag
+          : (projName ?? "未归属");
 
     return (
       <div
@@ -163,21 +171,15 @@ export function SessionRows({
                     <span className="mini-pill mini-pill--subtle">主对话</span>
                   )}
                   {s.pinned && <Pin size={11} className="session-row__pin" />}
-                  {(s.runState === "running" || s.runState === "waiting-input") && (
-                    <span className={`status-dot ${s.runState}`} />
-                  )}
+                  <span className="row-date">{formatRelativeDate(s.createdAt)}</span>
                 </div>
                 <div className="session-meta">
-                  <span className="harness-label">
-                    {mode === "project" ? HARNESS_NAMES[s.harnessId] : (projName ?? "未归属")}
-                  </span>
+                  <StatusBadge tone={tone} className="session-state-text" />
                   <span className="session-meta__sep" aria-hidden="true">
                     ·
                   </span>
-                  <span className={`session-state-text is-${s.runState}`}>{stateText}</span>
-                  {s.model && <span className="session-model-tag">{shortModelLabel(s.model)}</span>}
+                  <span className="harness-label">{detail}</span>
                   {supervised && <span className="session-model-tag">托管中</span>}
-                  <span className="row-date">{formatRelativeDate(s.createdAt)}</span>
                 </div>
                 {hit?.snippet && <div className="search-snippet">{hit.snippet}</div>}
               </div>
@@ -265,6 +267,7 @@ export function SessionRows({
     );
   };
 
+  const t = useT();
   const unassigned = sortGroupSessions(list.filter((s) => !s.projectId));
 
   return (
@@ -280,11 +283,11 @@ export function SessionRows({
           <Search size={14} />
           <input
             aria-label="搜索历史"
-            placeholder="搜索对话…"
+            placeholder={t("sidebar.searchPlaceholder")}
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
           />
-          {query && (
+          {query ? (
             <button
               type="button"
               className="search__clear"
@@ -293,26 +296,39 @@ export function SessionRows({
             >
               <X size={12} />
             </button>
+          ) : (
+            onOpenCommandPalette && (
+              <button
+                type="button"
+                className="search-kbd-trigger desktop-only"
+                aria-label="打开命令面板"
+                title="命令面板 (⌘K / Ctrl+K)"
+                onClick={onOpenCommandPalette}
+              >
+                <kbd>{navigator.userAgent.includes("Mac") ? "⌘K" : "Ctrl K"}</kbd>
+              </button>
+            )
           )}
         </div>
-
-        <button
-          type="button"
-          className={`filter-icon-btn ${showArchived ? "active" : ""}`}
-          title="显示归档"
-          aria-label="显示归档"
-          aria-pressed={showArchived}
-          onClick={onToggleArchived}
-        >
-          <Archive size={14} />
-        </button>
       </div>
 
-      {/* Unified flat nav + L0 Kodo Masters (no boxed card banner) */}
+      {/* Unified flat nav (工作 + 待处理 grouped under search) + L0 Kooyu Masters */}
       <div className="sidebar__section">
         <button
           type="button"
-          className={`nav-row ${scope === "inbox" ? "selected" : ""}`}
+          className={`nav-row desktop-only ${scope === "workbench" ? "selected" : ""}`}
+          aria-label="工作"
+          title="工作与成果"
+          onClick={onOpenWorkbench}
+          aria-current={scope === "workbench" ? "page" : undefined}
+        >
+          <Layers size={14} className="nav-row__icon" aria-hidden="true" />
+          <span className="nav-row__title">工作</span>
+        </button>
+
+        <button
+          type="button"
+          className={`nav-row session-rows-inbox-btn desktop-only ${scope === "inbox" ? "selected" : ""}`}
           aria-label="待处理"
           title="查看待处理通知与交互"
           onClick={onOpenInbox}
@@ -322,116 +338,203 @@ export function SessionRows({
           {pendingCount > 0 && <span className="nav-row__badge">{pendingCount}</span>}
         </button>
 
-        <div className="sidebar__section-head">
-          <span className="sidebar__section-label">主对话</span>
-          <button
-            type="button"
-            className="tree-group__add"
-            aria-label="新建主对话"
-            title="开启 Kooyu 全局主对话"
-            onClick={onCreateMaster}
-          >
-            <Plus size={13} />
-          </button>
-        </div>
-
-        {masters.length > 0 ? (
-          <div className="pinned-masters__list">
-            {masters.map((m) => {
-              const activeCount = supervisions.filter(
-                (w) => w.controllerSessionId === m.id && w.state === "active",
-              ).length;
-              if (actions.renamingId === m.id) return <div key={m.id}>{actions.renameForm(m)}</div>;
-              return (
-                <div
-                  className="session-row-wrap"
-                  key={m.id}
-                  onContextMenu={(event) => actions.open(event, { kind: "session", value: m })}
+        {/* L0 pinned commander card: Kooyu 主对话 sits above every project group (deduplicated when empty). */}
+        <div className="l0-card">
+          {masters.length > 0 ? (
+            <>
+              <div className="l0-card__head desktop-only-flex">
+                <span className="l0-card__mark" aria-hidden="true">
+                  <KodoMark size={16} />
+                </span>
+                <span className="l0-card__title">Kooyu 主对话</span>
+                <button
+                  type="button"
+                  className="tree-group__add"
+                  aria-label="新建主对话"
+                  title="开启 Kooyu 全局主对话"
+                  onClick={() => onCreateMaster()}
                 >
-                  <button
-                    type="button"
-                    key={m.id}
-                    title={m.title}
-                    className={`master-row ${selected === m.id ? "selected" : ""} ${
-                      m.archived ? "is-archived" : ""
-                    }`}
-                    aria-current={selected === m.id ? "true" : undefined}
-                    onClick={() => onSelectSession(m.id)}
-                    onKeyDown={(event) => actions.keyboard(event, { kind: "session", value: m })}
-                    aria-haspopup="menu"
-                  >
-                    <span className="master-row__mark" aria-hidden="true">
-                      <KodoMark size={15} />
-                    </span>
-                    <div className="master-row__content">
-                      <div className="master-row__title">
-                        <span>{m.title}</span>
-                        {m.unread && <span className="session-unread" aria-label="未读" />}
-                        {m.pinned && <Pin size={11} />}
-                        {(m.runState === "running" || m.runState === "waiting-input") && (
-                          <span className={`status-dot ${m.runState}`} />
-                        )}
-                      </div>
-                      <div className="master-row__meta">
-                        <span>
-                          {activeCount > 0 ? `正在统筹 ${activeCount} 个会话` : "跨项目主对话"}
+                  <Plus size={13} />
+                </button>
+              </div>
+              <div className="pinned-masters__list">
+                {masters.map((m) => {
+                  const activeCount = supervisions.filter(
+                    (w) => w.controllerSessionId === m.id && w.state === "active",
+                  ).length;
+                  if (actions.renamingId === m.id)
+                    return <div key={m.id}>{actions.renameForm(m)}</div>;
+                  return (
+                    <div
+                      className="session-row-wrap"
+                      key={m.id}
+                      onContextMenu={(event) => actions.open(event, { kind: "session", value: m })}
+                    >
+                      <button
+                        type="button"
+                        key={m.id}
+                        title={m.title}
+                        className={`master-row ${selected === m.id ? "selected" : ""} ${
+                          m.archived ? "is-archived" : ""
+                        }`}
+                        aria-current={selected === m.id ? "true" : undefined}
+                        onClick={() => onSelectSession(m.id)}
+                        onKeyDown={(event) =>
+                          actions.keyboard(event, { kind: "session", value: m })
+                        }
+                        aria-haspopup="menu"
+                      >
+                        <span className="master-row__mark" aria-hidden="true">
+                          <KodoMark size={15} />
                         </span>
-                        <span className="row-date">{formatRelativeDate(m.createdAt)}</span>
-                      </div>
+                        <div className="master-row__content">
+                          <div className="master-row__title">
+                            <span>{m.title}</span>
+                            <span className="mobile-master-tag mobile-only">全局主控</span>
+                            {m.unread && <span className="session-unread" aria-label="未读" />}
+                            {m.pinned && <Pin size={11} />}
+                            <span className="row-date">{formatRelativeDate(m.createdAt)}</span>
+                          </div>
+                          <div className="master-row__meta">
+                            <StatusBadge tone={sessionStatusTone(m)} />
+                            <span className="session-meta__sep" aria-hidden="true">
+                              ·
+                            </span>
+                            <span className="master-row__summary">
+                              {activeCount > 0
+                                ? `正在统筹 ${activeCount} 个会话`
+                                : "统筹项目进展与自动计划"}
+                            </span>
+                          </div>
+                        </div>
+                      </button>
+                      {actions.more({ kind: "session", value: m })}
                     </div>
-                  </button>
-                  {actions.more({ kind: "session", value: m })}
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <button type="button" className="nav-row nav-row--subtle" onClick={onCreateMaster}>
-            <span className="master-row__mark" aria-hidden="true">
-              <KodoMark size={14} />
-            </span>
-            <span className="nav-row__title">开启 Kooyu 主对话</span>
-            <Plus size={13} className="nav-row__trailing" aria-hidden="true" />
-          </button>
-        )}
-      </div>
-
-      {/* Minimalist 2-tab View Switcher: 按项目 | 按 Harness (DeepSeek-style clean underline tabs) */}
-      <div className="sidebar__tabs-wrap">
-        <div
-          className="sidebar-tabs"
-          data-active-index={viewMode === "project" ? "0" : "1"}
-          role="group"
-          aria-label="列表分组视角"
-        >
-          <button
-            type="button"
-            className={viewMode === "project" ? "active" : ""}
-            aria-pressed={viewMode === "project"}
-            onClick={() => onViewModeChange("project")}
-          >
-            按项目
-          </button>
-          <button
-            type="button"
-            className={viewMode === "harness" ? "active" : ""}
-            aria-pressed={viewMode === "harness"}
-            onClick={() => onViewModeChange("harness")}
-          >
-            按 Harness
-          </button>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="nav-row nav-row--subtle master-empty-row"
+              aria-label="开启 Kooyu 主对话"
+              title="开启 Kooyu 全局主对话"
+              onClick={() => onCreateMaster()}
+            >
+              <span className="master-row__mark" aria-hidden="true">
+                <KodoMark size={15} />
+              </span>
+              <span className="nav-row__title">
+                <span className="desktop-only">Kooyu 主对话</span>
+                <span className="mobile-only">Kooyu 主对话 · 点击开启全局统筹</span>
+              </span>
+              <Plus size={14} className="nav-row__trailing" aria-hidden="true" />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Collapsible 3-tier tree */}
+      {/* Mobile compact filter pills (全部对话 | 按项目 | 按引擎 | 已归档) */}
+      <div className="mobile-filter-pills mobile-only-flex" role="group" aria-label="会话筛选视角">
+        {(
+          [
+            ["recent", t("sidebar.tab.all")],
+            ["project", t("sidebar.tab.projects")],
+            ["harness", t("sidebar.tab.engines")],
+          ] as Array<[SidebarViewMode, string]>
+        ).map(([mode, label]) => {
+          const active = !showArchived && viewMode === mode;
+          return (
+            <button
+              type="button"
+              key={mode}
+              aria-pressed={active}
+              className={`mobile-filter-pill ${active ? "is-active" : ""}`}
+              onClick={() => {
+                if (showArchived) onToggleArchived();
+                onViewModeChange(mode);
+              }}
+            >
+              {label}
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          aria-pressed={showArchived}
+          aria-label="显示归档"
+          title={showArchived ? "返回进行中的会话" : "显示归档"}
+          className={`mobile-filter-pill ${showArchived ? "is-active" : ""}`}
+          onClick={onToggleArchived}
+        >
+          {t("sidebar.tab.archived")}
+        </button>
+      </div>
+
+      {/* Desktop sliding segmented switcher: 按项目 | 按 Harness | 归档 */}
+      <div className="sidebar__tabs-wrap desktop-only">
+        <SegmentedControl<SidebarViewMode | "archived">
+          className="sidebar-tabs"
+          ariaLabel="列表分组视角"
+          value={showArchived ? "archived" : viewMode === "recent" ? "project" : viewMode}
+          options={[
+            { value: "project", label: t("sidebar.tab.projects") },
+            { value: "harness", label: t("sidebar.tab.harness") },
+            {
+              value: "archived",
+              label: (
+                <>
+                  <Archive size={12} aria-hidden="true" />
+                  {t("sidebar.tab.archivedShort")}
+                </>
+              ),
+              ariaLabel: "显示归档",
+              title: showArchived ? "返回进行中的会话" : "显示归档",
+            },
+          ]}
+          onChange={(next) => {
+            if (next === "archived") {
+              onToggleArchived();
+              return;
+            }
+            if (showArchived) onToggleArchived();
+            onViewModeChange(next);
+          }}
+        />
+      </div>
+
+      {/* Session stream (flat chronological on mobile 'recent', or collapsible 3-tier tree) */}
       <div className="session-rows">
-        {viewMode === "project" ? (
+        {viewMode === "recent" ? (
+          sortGroupSessions(list).length > 0 ? (
+            <div className="tree-group">
+              <div className="tree-group__rows">
+                {sortGroupSessions(list).map((s) => renderSessionRow(s, "recent"))}
+              </div>
+            </div>
+          ) : (
+            <div className="list-empty list-empty--compact">
+              <span className="list-empty__icon" aria-hidden="true">
+                <MessageSquare size={20} />
+              </span>
+              <strong>
+                {searching ? "无匹配结果" : showArchived ? "暂无归档会话" : "暂无会话"}
+              </strong>
+              {!searching && !showArchived && (
+                <p className="list-empty__hint mobile-only-block">
+                  点击右上角「新建」选择引擎或项目即可开始对话
+                </p>
+              )}
+            </div>
+          )
+        ) : viewMode === "project" ? (
           <>
             {[...projects]
               .sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)))
               .map((p) => {
                 const items = sortGroupSessions(list.filter((s) => s.projectId === p.id));
-                if (searching && items.length === 0) return null;
+                if ((searching || showArchived) && items.length === 0) return null;
                 return renderGroup({
                   groupKey: `project:${p.id}`,
                   title: p.name,
@@ -453,12 +556,19 @@ export function SessionRows({
                 onAdd: () => onCreateInProject(null),
               })}
 
-            {projects.length === 0 && list.length === 0 && (
+            {(showArchived ? list.length === 0 : projects.length === 0 && list.length === 0) && (
               <div className="list-empty list-empty--compact">
                 <span className="list-empty__icon" aria-hidden="true">
                   <MessageSquare size={20} />
                 </span>
-                <strong>{searching ? "无匹配结果" : "暂无会话"}</strong>
+                <strong>
+                  {searching ? "无匹配结果" : showArchived ? "暂无归档会话" : "暂无会话"}
+                </strong>
+                {!searching && !showArchived && (
+                  <p className="list-empty__hint mobile-only-block">
+                    上方可一键唤起任意引擎，或先创建项目归档管理代码工作区
+                  </p>
+                )}
               </div>
             )}
 
@@ -492,7 +602,9 @@ export function SessionRows({
                 <span className="list-empty__icon" aria-hidden="true">
                   <MessageSquare size={20} />
                 </span>
-                <strong>{searching ? "无匹配结果" : "暂无会话"}</strong>
+                <strong>
+                  {searching ? "无匹配结果" : showArchived ? "暂无归档会话" : "暂无会话"}
+                </strong>
               </div>
             )}
           </>

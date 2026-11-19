@@ -72,14 +72,21 @@ export function IosPopover({
       })}
 
       {open && (
-        <div
-          id={panelId}
-          role={role}
-          aria-labelledby={triggerId}
-          className={`ios-popover ios-popover--${side} ios-popover--align-${align} ${wide ? "ios-popover--wide" : ""}`}
-        >
-          {children}
-        </div>
+        <>
+          <div
+            className="ios-popover-scrim"
+            aria-hidden="true"
+            onClick={() => onOpenChange(false)}
+          />
+          <div
+            id={panelId}
+            role={role}
+            aria-labelledby={triggerId}
+            className={`ios-popover ios-popover--${side} ios-popover--align-${align} ${wide ? "ios-popover--wide" : ""}`}
+          >
+            {children}
+          </div>
+        </>
       )}
     </div>
   );

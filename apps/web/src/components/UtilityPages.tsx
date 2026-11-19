@@ -3,14 +3,18 @@ import { AlertCircle, Check, ChevronRight, ShieldAlert, Smartphone } from "lucid
 import QRCode from "qrcode";
 import type { InboxItem, ProviderConfiguration, Snapshot, Usage } from "@kodo/protocol";
 import { api, remoteClient } from "../lib/host-client";
-import { formatDate } from "../lib/harnesses";
+import { HARNESS_NAMES, formatDate } from "../lib/harnesses";
+import { InteractionCard } from "./Composer";
 import { KodoMark } from "./KodoBrand";
 import { GlobalMemorySettings } from "./settings/GlobalMemorySettings";
+import { AppearanceSettings } from "./settings/AppearanceSettings";
 import { GeneralSettings } from "./settings/GeneralSettings";
 import { EngineSettings } from "./settings/EngineSettings";
 import { ProviderSettings } from "./settings/ProviderSettings";
 import { AdvancedSettings } from "./settings/AdvancedSettings";
+import { ImportSettings } from "./settings/ImportSettings";
 import { SettingsPage, SettingsSection } from "./settings/SettingsKit";
+import { useT } from "../lib/i18n";
 import { WorkCenter } from "./WorkCenter";
 import type { SettingsSectionId } from "./SettingsNavigation";
 
@@ -31,19 +35,74 @@ export function InboxPage({
   act: Action;
   onOpenSession: (sessionId: string) => void;
 }) {
+  const t = useT();
+  const [filter, setFilter] = useState<"pending" | "errors" | "recent">("pending");
+  const visibleItems = pending.filter((item) => {
+    if (filter === "errors") return item.type === "error" || item.type === "limit";
+    if (filter === "recent") return item.type === "notification";
+    return true;
+  });
+  const errorCount = pending.filter((i) => i.type === "error" || i.type === "limit").length;
+  const recentCount = pending.filter((i) => i.type === "notification").length;
+
+  const summarizePayload = (payload: unknown): string | null => {
+    if (!payload || typeof payload !== "object") return null;
+    const p = payload as Record<string, any>;
+    const text =
+      p.message ??
+      p.error?.message ??
+      (typeof p.error === "string" ? p.error : undefined) ??
+      p.summary ??
+      p.reason ??
+      p.title;
+    return typeof text === "string" && text.trim() ? text.trim() : null;
+  };
+
   return (
-    <>
-      {pending.length === 0 ? (
+    <div className="inbox-shell">
+      <div className="inbox-filters" role="tablist" aria-label={t("inbox.pending")}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={filter === "pending"}
+          className={`inbox-filter-pill ${filter === "pending" ? "is-active" : ""}`}
+          onClick={() => setFilter("pending")}
+        >
+          {t("inbox.pending")} ({pending.length})
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={filter === "errors"}
+          className={`inbox-filter-pill ${filter === "errors" ? "is-active" : ""}`}
+          onClick={() => setFilter("errors")}
+        >
+          {t("inbox.errors")} ({errorCount})
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={filter === "recent"}
+          className={`inbox-filter-pill ${filter === "recent" ? "is-active" : ""}`}
+          onClick={() => setFilter("recent")}
+        >
+          {t("inbox.recent")} ({recentCount})
+        </button>
+      </div>
+
+      {visibleItems.length === 0 ? (
         <div className="empty-small settings-group">
           <span className="empty-small__badge" aria-hidden="true">
             <Check size={22} />
           </span>
-          <h2>暂无待处理事项</h2>
+          <h2>{t("inbox.empty")}</h2>
         </div>
       ) : (
         <div className="card-stack">
-          {pending.map((i) => {
-            const title = snapshot?.sessions.find((s) => s.id === i.sessionId)?.title ?? "未知会话";
+          {visibleItems.map((i) => {
+            const session = snapshot?.sessions.find((s) => s.id === i.sessionId);
+            const title = session?.title ?? "未知会话";
+            const summary = summarizePayload(i.payload);
             const typeText =
               i.type === "interaction"
                 ? "等待原生交互"
@@ -64,18 +123,35 @@ export function InboxPage({
                   </span>
                   <div className="inbox-item__meta">
                     <strong>{title}</strong>
-                    <span>{typeText}</span>
+                    <span>
+                      {session ? `${HARNESS_NAMES[session.harnessId]} · ` : ""}
+                      {typeText}
+                    </span>
                   </div>
                   <time className="inbox-item__time">{formatDate(i.createdAt)}</time>
                 </div>
-                <pre>{JSON.stringify(i.payload, null, 2)}</pre>
+
+                {i.type === "interaction" ? (
+                  <div className="inbox-item__interaction">
+                    <InteractionCard item={i} act={act} />
+                  </div>
+                ) : (
+                  <div className="inbox-item__body">
+                    {summary && <p className="inbox-item__summary">{summary}</p>}
+                    <details className="inbox-item__raw">
+                      <summary>查看技术详情</summary>
+                      <pre>{JSON.stringify(i.payload, null, 2)}</pre>
+                    </details>
+                  </div>
+                )}
+
                 <div className="actions">
                   <button
                     type="button"
                     className="primary"
                     onClick={() => onOpenSession(i.sessionId)}
                   >
-                    打开会话
+                    {t("inbox.open")}
                     <ChevronRight size={15} />
                   </button>
                   <button
@@ -84,7 +160,7 @@ export function InboxPage({
                       void act(() => api(`/inbox/${encodeURIComponent(i.id)}/read`, "POST", {}))
                     }
                   >
-                    标记已读
+                    {t("inbox.markRead")}
                   </button>
                 </div>
               </section>
@@ -92,7 +168,7 @@ export function InboxPage({
           })}
         </div>
       )}
-    </>
+    </div>
   );
 }
 
@@ -104,6 +180,7 @@ export function HealthPage({
   providerConfig,
   onProviderConfigLoaded,
   usage,
+  onOpenSession,
 }: {
   snapshot: Snapshot;
   act: Action;
@@ -112,14 +189,21 @@ export function HealthPage({
   onSectionChange: (next: SettingsSectionId) => void;
   providerConfig?: ProviderConfiguration;
   onProviderConfigLoaded?: (next: ProviderConfiguration) => void;
+  onOpenSession?: (sessionId: string) => void;
 }) {
   return (
     <div className="page-stack">
+      {section === "appearance" && <AppearanceSettings />}
       {section === "work" && <WorkCenter snapshot={snapshot} />}
       {section === "memory" && (
-        <GlobalMemorySettings key={snapshot.hostId} hostId={snapshot.hostId} />
+        <GlobalMemorySettings key={snapshot.hostId} hostId={snapshot.hostId} snapshot={snapshot} />
       )}
-      {section === "general" && <GeneralSettings snapshot={snapshot} />}
+      {section === "general" && (
+        <GeneralSettings
+          snapshot={snapshot}
+          onOpenAppearance={() => onSectionChange("appearance")}
+        />
+      )}
       {section === "harnesses" && (
         <EngineSettings
           snapshot={snapshot}
@@ -127,8 +211,13 @@ export function HealthPage({
           onOpenProviders={() => onSectionChange("providers")}
         />
       )}
-      {section === "providers" && <ProviderSettings act={act} onLoaded={onProviderConfigLoaded} />}
+      {section === "providers" && (
+        <ProviderSettings snapshot={snapshot} act={act} onLoaded={onProviderConfigLoaded} />
+      )}
       {section === "usage" && <UsagePage snapshot={snapshot} usage={usage} act={act} />}
+      {section === "import" && (
+        <ImportSettings snapshot={snapshot} act={act} onOpenSession={onOpenSession} />
+      )}
       {section === "devices" && <DevicesPage snapshot={snapshot} act={act} />}
       {section === "advanced" && (
         <AdvancedSettings

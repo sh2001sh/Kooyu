@@ -28,9 +28,8 @@ for (const width of [1440, 390]) {
       );
       writeFileSync(join(source, "scripts", "action.js"), "throw new Error('must not execute');");
       await page.goto("/");
-      if (width < 600) await page.getByRole("button", { name: "打开导航", exact: true }).click();
       await page
-        .getByRole("navigation", { name: "系统工具", exact: true })
+        .getByRole("navigation", { name: width < 600 ? "移动端标签导航" : "系统工具", exact: true })
         .getByRole("button", { name: /^(设置|Harness 与配置)$/ })
         .click();
       await page

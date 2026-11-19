@@ -1,3 +1,5 @@
+import Observation
+import os
 import SwiftUI
 import UIKit
 
@@ -7,39 +9,297 @@ extension Color {
         self.init(uiColor: UIColor { traits in
             let isDark = traits.userInterfaceStyle == .dark
             let hex = isDark ? dark : light
-            return UIColor(red: CGFloat((hex >> 16) & 0xFF) / 255, green: CGFloat((hex >> 8) & 0xFF) / 255,
-                           blue: CGFloat(hex & 0xFF) / 255, alpha: isDark ? darkAlpha : lightAlpha)
+            return UIColor(
+                red: CGFloat((hex >> 16) & 0xFF) / 255,
+                green: CGFloat((hex >> 8) & 0xFF) / 255,
+                blue: CGFloat(hex & 0xFF) / 255,
+                alpha: isDark ? darkAlpha : lightAlpha
+            )
         })
+    }
+
+    init(hex: UInt32, alpha: CGFloat = 1) {
+        self.init(
+            .sRGB,
+            red: Double((hex >> 16) & 0xFF) / 255,
+            green: Double((hex >> 8) & 0xFF) / 255,
+            blue: Double(hex & 0xFF) / 255,
+            opacity: Double(alpha)
+        )
     }
 }
 
-/// Desktop design tokens (apps/web/src/styles/app.css `:root` / `.dark`): monochrome accent,
-/// paper/navigator/sunken surfaces and hairline borders, so the phone reads as the same product.
+private func uiColor(_ hex: UInt32, alpha: CGFloat = 1) -> UIColor {
+    UIColor(
+        red: CGFloat((hex >> 16) & 0xFF) / 255,
+        green: CGFloat((hex >> 8) & 0xFF) / 255,
+        blue: CGFloat(hex & 0xFF) / 255,
+        alpha: alpha
+    )
+}
+
+private func mixHex(_ a: UInt32, _ b: UInt32, weightA: CGFloat) -> UInt32 {
+    let w = max(0, min(1, weightA))
+    let r = CGFloat((a >> 16) & 0xFF) * w + CGFloat((b >> 16) & 0xFF) * (1 - w)
+    let g = CGFloat((a >> 8) & 0xFF) * w + CGFloat((b >> 8) & 0xFF) * (1 - w)
+    let bl = CGFloat(a & 0xFF) * w + CGFloat(b & 0xFF) * (1 - w)
+    return (UInt32(r.rounded()) << 16) | (UInt32(g.rounded()) << 8) | UInt32(bl.rounded())
+}
+
+private func relativeLuminance(_ hex: UInt32) -> CGFloat {
+    let r = CGFloat((hex >> 16) & 0xFF) / 255
+    let g = CGFloat((hex >> 8) & 0xFF) / 255
+    let b = CGFloat(hex & 0xFF) / 255
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+}
+
+/// 5 unified cross-platform presets matching Web (`appearance.ts`) and Android (`Theme.kt`).
+struct KYThemePreset: Identifiable, Sendable {
+    let id: String
+    let label: String
+    let lightBg: UInt32
+    let lightFg: UInt32
+    let darkBg: UInt32
+    let darkFg: UInt32
+    let accentId: String
+}
+
+let kyThemePresets: [KYThemePreset] = [
+    KYThemePreset(id: "kooyu", label: "极简墨白", lightBg: 0xFFFFFF, lightFg: 0x141518, darkBg: 0x121316, darkFg: 0xF3F4F6, accentId: "default"),
+    KYThemePreset(id: "chatgpt", label: "澄澈素白", lightBg: 0xFFFFFF, lightFg: 0x1A1C1F, darkBg: 0x212121, darkFg: 0xECECEC, accentId: "default"),
+    KYThemePreset(id: "graphite", label: "深空石墨", lightBg: 0xFAFAFC, lightFg: 0x1C1C1E, darkBg: 0x1C1C1E, darkFg: 0xF5F5F7, accentId: "blue"),
+    KYThemePreset(id: "claude", label: "温润米宣", lightBg: 0xFAF9F5, lightFg: 0x1F1E1D, darkBg: 0x1F1E1B, darkFg: 0xEFECE6, accentId: "coral"),
+    KYThemePreset(id: "nord", label: "极夜冰川", lightBg: 0xF4F6FA, lightFg: 0x2E3440, darkBg: 0x242933, darkFg: 0xECEFF4, accentId: "indigo"),
+]
+
+struct KYAccentOption: Identifiable, Sendable {
+    let id: String
+    let label: String
+    let lightHex: UInt32
+    let darkHex: UInt32
+}
+
+let kyAccentOptions: [KYAccentOption] = [
+    KYAccentOption(id: "default", label: "默认", lightHex: 0x141518, darkHex: 0xF3F4F6),
+    KYAccentOption(id: "coral", label: "珊瑚红", lightHex: 0xE6533C, darkHex: 0xF17561),
+    KYAccentOption(id: "blue", label: "苹果蓝", lightHex: 0x007AFF, darkHex: 0x3B9EFF),
+    KYAccentOption(id: "indigo", label: "靛青紫", lightHex: 0x5856D6, darkHex: 0x7D7AFF),
+    KYAccentOption(id: "emerald", label: "翡翠绿", lightHex: 0x10A37F, darkHex: 0x34D399),
+    KYAccentOption(id: "amber", label: "琥珀金", lightHex: 0xD97706, darkHex: 0xF59E0B),
+]
+
+/// Immutable, Sendable palette snapshot resolved atomically by `KY` dynamic colors.
+struct KYPaletteSnapshot: Sendable {
+    let presetId: String
+    let accentId: String
+    let highContrast: Bool
+
+    var preset: KYThemePreset {
+        kyThemePresets.first { $0.id == presetId } ?? kyThemePresets[0]
+    }
+
+    func paperHex(dark: Bool) -> UInt32 { dark ? preset.darkBg : preset.lightBg }
+    func textHex(dark: Bool) -> UInt32 { dark ? preset.darkFg : preset.lightFg }
+
+    func navigatorHex(dark: Bool) -> UInt32 {
+        if presetId == "kooyu" { return dark ? 0x0B0C0E : 0xF5F5F7 }
+        return dark ? mixHex(paperHex(dark: true), 0x000000, weightA: 0.64) : mixHex(paperHex(dark: false), textHex(dark: false), weightA: 0.962)
+    }
+
+    func raisedHex(dark: Bool) -> UInt32 {
+        if presetId == "kooyu" { return dark ? 0x181A1F : 0xFFFFFF }
+        return dark ? mixHex(paperHex(dark: true), textHex(dark: true), weightA: 0.955) : paperHex(dark: false)
+    }
+
+    func sunkenHex(dark: Bool) -> UInt32 {
+        if presetId == "kooyu" { return dark ? 0x0F1115 : 0xEFF0F3 }
+        return dark ? mixHex(paperHex(dark: true), 0x000000, weightA: 0.78) : mixHex(paperHex(dark: false), textHex(dark: false), weightA: 0.942)
+    }
+
+    func bubbleHex(dark: Bool) -> UInt32 {
+        if presetId == "kooyu" { return dark ? 0x20232B : 0xF2F3F6 }
+        return dark ? mixHex(paperHex(dark: true), textHex(dark: true), weightA: 0.922) : mixHex(paperHex(dark: false), textHex(dark: false), weightA: 0.946)
+    }
+
+    func capsuleHex(dark: Bool) -> UInt32 {
+        if presetId == "kooyu" { return dark ? 0x15171C : 0xF4F5F7 }
+        return mixHex(paperHex(dark: dark), textHex(dark: dark), weightA: 0.965)
+    }
+
+    func textSecondaryHex(dark: Bool) -> UInt32 {
+        if presetId == "kooyu" { return dark ? 0xA6AAB3 : 0x52555C }
+        return mixHex(textHex(dark: dark), paperHex(dark: dark), weightA: dark ? 0.68 : 0.64)
+    }
+
+    func textTertiaryHex(dark: Bool) -> UInt32 {
+        if presetId == "kooyu" { return dark ? 0x737882 : 0x80848E }
+        return mixHex(textHex(dark: dark), paperHex(dark: dark), weightA: dark ? 0.46 : 0.48)
+    }
+
+    func accentHex(dark: Bool) -> UInt32 {
+        if accentId == "default" { return textHex(dark: dark) }
+        guard let opt = kyAccentOptions.first(where: { $0.id == accentId }) else { return textHex(dark: dark) }
+        return dark ? opt.darkHex : opt.lightHex
+    }
+
+    func onAccentHex(dark: Bool) -> UInt32 {
+        relativeLuminance(accentHex(dark: dark)) > 0.48 ? 0x121316 : 0xFFFFFF
+    }
+
+    func microCoralHex(dark: Bool) -> UInt32 {
+        if accentId == "default" { return dark ? 0xF17561 : 0xE6533C }
+        return accentHex(dark: dark)
+    }
+
+    var contrastMultiplier: CGFloat { highContrast ? 1.55 : 1.0 }
+
+    static func loadFromDefaults() -> KYPaletteSnapshot {
+        let defaults = UserDefaults.standard
+        let preset = defaults.string(forKey: "kooyu.ap.preset") ?? "kooyu"
+        let accent = defaults.string(forKey: "kooyu.ap.accent") ?? "default"
+        let contrast = defaults.bool(forKey: "kooyu.ap.highContrast")
+        return KYPaletteSnapshot(presetId: preset, accentId: accent, highContrast: contrast)
+    }
+}
+
+private enum KYPaletteStorage {
+    static let lock = OSAllocatedUnfairLock(initialState: KYPaletteSnapshot.loadFromDefaults())
+
+    static var current: KYPaletteSnapshot {
+        lock.withLock { $0 }
+    }
+
+    static func update(_ next: KYPaletteSnapshot) {
+        lock.withLock { $0 = next }
+    }
+}
+
+/// Observable appearance store synchronized with `UserDefaults` and `KY` dynamic colors.
+@Observable @MainActor
+final class AppearanceStore {
+    static let shared = AppearanceStore()
+
+    var themeMode: String
+    var presetId: String
+    var accentId: String
+    var highContrast: Bool
+    var revision: Int = 0
+
+    private init() {
+        let defaults = UserDefaults.standard
+        let savedMode = defaults.string(forKey: "kooyu.appearance") ?? "system"
+        self.themeMode = ["system", "light", "dark"].contains(savedMode) ? savedMode : "system"
+        let snap = KYPaletteSnapshot.loadFromDefaults()
+        self.presetId = snap.presetId
+        self.accentId = snap.accentId
+        self.highContrast = snap.highContrast
+        KYPaletteStorage.update(snap)
+    }
+
+    var preferredColorScheme: ColorScheme? {
+        switch themeMode {
+        case "dark": return .dark
+        case "light": return .light
+        default: return nil
+        }
+    }
+
+    var isModified: Bool {
+        presetId != "kooyu" || accentId != "default" || highContrast
+    }
+
+    func setThemeMode(_ mode: String) {
+        guard ["system", "light", "dark"].contains(mode) else { return }
+        themeMode = mode
+        UserDefaults.standard.set(mode, forKey: "kooyu.appearance")
+    }
+
+    func selectPreset(_ id: String) {
+        guard let preset = kyThemePresets.first(where: { $0.id == id }) else { return }
+        presetId = preset.id
+        accentId = preset.accentId
+        persistAndNotify()
+    }
+
+    func selectAccent(_ id: String) {
+        guard kyAccentOptions.contains(where: { $0.id == id }) else { return }
+        accentId = id
+        persistAndNotify()
+    }
+
+    func setHighContrast(_ enabled: Bool) {
+        highContrast = enabled
+        persistAndNotify()
+    }
+
+    func reset() {
+        presetId = "kooyu"
+        accentId = "default"
+        highContrast = false
+        persistAndNotify()
+    }
+
+    private func persistAndNotify() {
+        let defaults = UserDefaults.standard
+        defaults.set(presetId, forKey: "kooyu.ap.preset")
+        defaults.set(accentId, forKey: "kooyu.ap.accent")
+        defaults.set(highContrast, forKey: "kooyu.ap.highContrast")
+        KYPaletteStorage.update(KYPaletteSnapshot(presetId: presetId, accentId: accentId, highContrast: highContrast))
+        revision += 1
+    }
+}
+
+private func dynamicKY(_ resolve: @escaping @Sendable (KYPaletteSnapshot, Bool) -> UIColor) -> Color {
+    Color(uiColor: UIColor { traits in
+        let isDark = traits.userInterfaceStyle == .dark
+        return resolve(KYPaletteStorage.current, isDark)
+    })
+}
+
+/// Unified Kooyu tokens — Canonical 极简墨白 palette synced 1:1 with Web (`tokens.css`) and Android (`Theme.kt`):
+/// Light `#F5F5F7 / #FFFFFF / #F2F3F6 / #141518` · Dark `#0B0C0E / #121316 / #20232B / #F3F4F6`.
+/// `accent` is monochrome control ink (or user-selected accent); `brandCoral` is reserved for micro-accents only.
 enum KY {
-    static let paper = Color(light: 0xFFFFFF, dark: 0x0C0E14)
-    static let navigator = Color(light: 0xF7F7F9, dark: 0x08090D)
-    static let raised = Color(light: 0xFFFFFF, dark: 0x12151F)
-    static let sunken = Color(light: 0xF1F2F4, dark: 0x06070A)
-    static let bubble = Color(light: 0xF2F3F6, dark: 0x1A1D26)
-    static let capsule = Color(light: 0xF8F8FA, dark: 0x161922)
-    static let text = Color(light: 0x111317, dark: 0xF4F4F6)
-    static let textSecondary = Color(light: 0x525866, dark: 0xB0B5C0)
-    static let textTertiary = Color(light: 0x848B98, dark: 0x79808E)
-    static let borderSubtle = Color(light: 0x111317, dark: 0xFFFFFF, lightAlpha: 0.07, darkAlpha: 0.06)
-    static let border = Color(light: 0x111317, dark: 0xFFFFFF, lightAlpha: 0.11, darkAlpha: 0.11)
-    static let borderStrong = Color(light: 0x111317, dark: 0xFFFFFF, lightAlpha: 0.18, darkAlpha: 0.22)
-    static let accent = Color(light: 0x18191D, dark: 0xF4F4F6)
-    static let onAccent = Color(light: 0xFFFFFF, dark: 0x141518)
-    static let accentTint = Color(light: 0x18191D, dark: 0xFFFFFF, lightAlpha: 0.07, darkAlpha: 0.08)
-    static let brandCoral = Color(light: 0xF17561, dark: 0xF17561)
-    static let brandCoralTint = Color(light: 0xF17561, dark: 0xF17561, lightAlpha: 0.14, darkAlpha: 0.22)
-    static let success = Color(light: 0x15803D, dark: 0x4ADE80)
-    static let successTint = Color(light: 0x16A34A, dark: 0x4ADE80, lightAlpha: 0.1, darkAlpha: 0.12)
-    static let doneText = Color(light: 0x218056, dark: 0x5FD39E)
-    static let info = Color(light: 0xB45309, dark: 0xFBBF24)
-    static let infoTint = Color(light: 0xD97706, dark: 0xF59E0B, lightAlpha: 0.1, darkAlpha: 0.12)
-    static let destructive = Color(light: 0xB91C1C, dark: 0xF87171)
-    static let destructiveTint = Color(light: 0xDC2626, dark: 0xEF4444, lightAlpha: 0.09, darkAlpha: 0.14)
+    static var navigator: Color { dynamicKY { uiColor($0.navigatorHex(dark: $1)) } }
+    static var paper: Color { dynamicKY { uiColor($0.paperHex(dark: $1)) } }
+    static var raised: Color { dynamicKY { uiColor($0.raisedHex(dark: $1)) } }
+    static var sunken: Color { dynamicKY { uiColor($0.sunkenHex(dark: $1)) } }
+    static var glass: Color { dynamicKY { uiColor($0.paperHex(dark: $1), alpha: $1 ? 0.84 : 0.86) } }
+    static var bubble: Color { dynamicKY { uiColor($0.bubbleHex(dark: $1)) } }
+    static var capsule: Color { dynamicKY { uiColor($0.capsuleHex(dark: $1)) } }
+    static var text: Color { dynamicKY { uiColor($0.textHex(dark: $1)) } }
+    static var textSecondary: Color { dynamicKY { uiColor($0.textSecondaryHex(dark: $1)) } }
+    static var textTertiary: Color { dynamicKY { uiColor($0.textTertiaryHex(dark: $1)) } }
+    static var borderSubtle: Color { dynamicKY { uiColor($0.textHex(dark: $1), alpha: min(0.35, 0.065 * $0.contrastMultiplier)) } }
+    static var border: Color { dynamicKY { uiColor($0.textHex(dark: $1), alpha: min(0.45, ($1 ? 0.11 : 0.10) * $0.contrastMultiplier)) } }
+    static var borderStrong: Color { dynamicKY { uiColor($0.textHex(dark: $1), alpha: min(0.60, ($1 ? 0.19 : 0.18) * $0.contrastMultiplier)) } }
+    static var accent: Color { dynamicKY { uiColor($0.accentHex(dark: $1)) } }
+    static var onAccent: Color { dynamicKY { uiColor($0.onAccentHex(dark: $1)) } }
+    static var accentTint: Color { dynamicKY { uiColor($0.accentHex(dark: $1), alpha: $1 ? 0.14 : 0.08) } }
+    static var brandCoral: Color { dynamicKY { uiColor($0.microCoralHex(dark: $1)) } }
+    static var brandCoralTint: Color { dynamicKY { uiColor($0.microCoralHex(dark: $1), alpha: $1 ? 0.18 : 0.11) } }
+    /// Coral used as text on paper (higher contrast than `brandCoral`).
+    static var coralInk: Color { dynamicKY { $0.accentId == "default" ? uiColor($1 ? 0xFF9B8A : 0xC2422F) : uiColor($0.accentHex(dark: $1)) } }
+    static let success = Color(light: 0x16A34A, dark: 0x34D399)
+    static let successTint = Color(light: 0x16A34A, dark: 0x34D399, lightAlpha: 0.11, darkAlpha: 0.14)
+    static let doneText = Color(light: 0x15803D, dark: 0x4ADE80)
+    static let info = Color(light: 0xD97706, dark: 0xF59E0B)
+    static let infoTint = Color(light: 0xD97706, dark: 0xF59E0B, lightAlpha: 0.11, darkAlpha: 0.14)
+    /// Amber used as text on paper (status words next to the running dot).
+    static let infoText = Color(light: 0xB45309, dark: 0xFBBF24)
+    static let destructive = Color(light: 0xDC2626, dark: 0xF87171)
+    static let destructiveTint = Color(light: 0xDC2626, dark: 0xF87171, lightAlpha: 0.10, darkAlpha: 0.15)
+}
+
+/// Typography scale (§2.2). Fixed point sizes, matching the existing `.system(size:)` usage across the app.
+enum KYFont {
+    static let pageTitle = Font.system(size: 20, weight: .bold)
+    static let sectionHeader = Font.system(size: 12, weight: .semibold)
+    static let rowTitle = Font.system(size: 14, weight: .semibold)
+    static let body = Font.system(size: 15)
+    static let label = Font.system(size: 13, weight: .medium)
+    static let caption = Font.system(size: 11, weight: .medium).monospacedDigit()
+    static let mono = Font.system(size: 12, design: .monospaced)
 }
 
 /// Desktop HARNESS_VISUALS (apps/web/src/lib/harnesses.ts): one tinted plate + ink per engine.
@@ -118,8 +378,8 @@ struct KooyuButtonStyle: ButtonStyle {
             .background(fill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(prominent ? .clear : KY.border))
             .opacity(enabled ? (configuration.isPressed ? 0.82 : 1) : 0.45)
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
-            .animation(.snappy(duration: 0.15), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .animation(KYMotion.snap, value: configuration.isPressed)
     }
 }
 

@@ -10,6 +10,8 @@ import {
   FolderPlus,
   GitBranch,
   Monitor,
+  MoreHorizontal,
+  Plus,
 } from "lucide-react";
 import { NATIVE_HARNESS_IDS, bindingReasoningLevels } from "@kodo/protocol/client";
 import type {
@@ -22,18 +24,29 @@ import type {
 } from "@kodo/protocol";
 import { shouldSend, useAppPreferences } from "../lib/preferences";
 import { api, send } from "../lib/host-client";
+import { appendVoiceTranscript, useVoiceInput } from "../lib/voice";
+import { VoiceInputButton, VoiceRecordingBar } from "./VoiceInputControls";
 import {
   HARNESS_NAMES,
+  formatWorkspaceLabel,
   modelChoiceLabels,
   resolveInheritedBinding,
   shortModelLabel,
+  modelOptionValue,
 } from "../lib/harnesses";
 import { HarnessBadge } from "./KodoBrand";
 import { CanvasAura } from "./CanvasAura";
 import { MobiusLoader } from "./MobiusLoader";
 import { IosPopover } from "./IosPopover";
+import {
+  ComposerDropOverlay,
+  MobileComposerPlusSheet,
+  SlashTemplateMenu,
+  useFileDropZone,
+} from "./ComposerExtras";
+import { Modal } from "./Motion";
 import { ComposerModelControls } from "./ComposerModelControls";
-import { PermissionControls } from "./PermissionControls";
+import { PermissionControls, permissionModesFor } from "./PermissionControls";
 import { DirectoryPicker } from "./DirectoryPicker";
 import { ProjectModal } from "./Modals";
 import { AttachmentButton, AttachmentList, useAttachments } from "./Attachments";
@@ -66,14 +79,6 @@ interface DraftWorkspaceProps {
   onDraftSaved: (session: Session) => void;
   onFirstSendStarted: (session: Session, firstMessage: string, requestId: string) => void;
   onFirstSendFailed: (session: Session, message: string) => Promise<void>;
-}
-
-function modelOptionValue(harnessId: HarnessId, m: HarnessModelOption): string {
-  if (m.provider?.startsWith("kodo-")) return m.id;
-  if (["kodo", "pi", "opencode", "zcode"].includes(harnessId) && m.provider) {
-    return `${m.provider}/${m.id}`;
-  }
-  return m.id;
 }
 
 /**
@@ -128,8 +133,10 @@ export function DraftWorkspace({
   const [modelChoice, setModelChoice] = useState("inherit");
   const [customModel, setCustomModel] = useState("");
   const [modelQuery, setModelQuery] = useState("");
-  const [reasoning, setReasoning] = useState("");
-  const [permissionMode, setPermissionMode] = useState<PermissionMode | null>(null);
+  const [reasoning, setReasoning] = useState<string | undefined>(undefined);
+  const [permissionMode, setPermissionMode] = useState<PermissionMode | null | undefined>(
+    undefined,
+  );
   const [modelsCache, setModelsCache] = useState<Partial<Record<HarnessId, HarnessModelsPayload>>>(
     {},
   );
@@ -144,11 +151,15 @@ export function DraftWorkspace({
   const [reasoningOpen, setReasoningOpen] = useState(false);
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [showDirectoryPicker, setShowDirectoryPicker] = useState(false);
+  const [plusSheetOpen, setPlusSheetOpen] = useState(false);
+  const [mobileMetaOpen, setMobileMetaOpen] = useState(false);
+  const [mobileHarnessOpen, setMobileHarnessOpen] = useState(false);
   const [workspaceContext, setWorkspaceContext] = useState<{
     branch: string | null;
     git: boolean;
   }>();
   const attachments = useAttachments("draft", null);
+  const dropZone = useFileDropZone(connected && !busy, (files) => void attachments.add(files));
   const firstSendRef = useRef(false);
   const [firstMessage, setFirstMessage] = useState<string | null>(null);
 
@@ -160,8 +171,8 @@ export function DraftWorkspace({
       project !== initialProject ||
       workspace !== initialWorkspace ||
       modelChoice !== "inherit" ||
-      reasoning ||
-      permissionMode ||
+      reasoning !== undefined ||
+      permissionMode !== undefined ||
       attachments.attachments.length
     ) {
       onDraftActivated();
@@ -184,7 +195,7 @@ export function DraftWorkspace({
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
-    setReasoning("");
+    setReasoning(modelChoice === "inherit" ? undefined : "");
   }, [harnessId, modelChoice, customModel]);
   const appliedNonceRef = useRef(preset.nonce);
 
@@ -223,8 +234,8 @@ export function DraftWorkspace({
       setProviderChoiceId(undefined);
       setCustomModel("");
       setModelQuery("");
-      setReasoning("");
-      setPermissionMode(null);
+      setReasoning(undefined);
+      setPermissionMode(undefined);
       attachments.clear();
       openOnlyPopover(null);
     }
@@ -325,16 +336,43 @@ export function DraftWorkspace({
       }))
     : nativeDiscoveredModels;
 
+  const harnessPreset = preferences.harnessDefaults?.[harnessId];
+  const presetModel =
+    executorId === "local" && harnessPreset?.model
+      ? activeProviderBinding
+        ? activeProviderBinding.availableModels?.some((m) => m.model === harnessPreset.model)
+          ? harnessPreset.model
+          : null
+        : !inherited.binding
+          ? harnessPreset.model
+          : null
+      : null;
+  const validPresetPermission =
+    harnessPreset?.permissionMode &&
+    permissionModesFor(harnessId).some((m) => m.value === harnessPreset.permissionMode)
+      ? (harnessPreset.permissionMode as PermissionMode)
+      : null;
+  const effectiveReasoning =
+    reasoning !== undefined
+      ? reasoning
+      : modelChoice === "inherit" && executorId === "local"
+        ? (harnessPreset?.reasoning ?? "")
+        : "";
+  const effectivePermissionMode =
+    permissionMode !== undefined ? permissionMode : validPresetPermission;
+
   const nativeModel =
     harnessDesc?.nativeDefaults?.model ??
     (cachedPayload?.defaultModel
       ? `${cachedPayload.defaultModel.provider ? `${cachedPayload.defaultModel.provider}/` : ""}${cachedPayload.defaultModel.model}`
       : "");
-  const inheritShort = inherited.binding
-    ? `${inherited.binding.model}`
-    : nativeModel
-      ? shortModelLabel(nativeModel)
-      : "原生默认";
+  const inheritShort = presetModel
+    ? shortModelLabel(presetModel)
+    : inherited.binding
+      ? `${inherited.binding.model}`
+      : nativeModel
+        ? shortModelLabel(nativeModel)
+        : "原生默认";
 
   const filteredModels = useMemo(() => {
     const q = modelQuery.trim().toLocaleLowerCase();
@@ -395,10 +433,18 @@ export function DraftWorkspace({
       projectId: project || null,
       workspaceId,
       ...(executorId !== "local" ? { executorId, bindingId: null, model: null } : bindingPayload),
-      ...(reasoning ? { reasoning } : {}),
-      ...(["codex", "claude-code", "zcode", "opencode", "pi", "kodo", "kimi-code"].includes(
-        harnessId,
-      )
+      ...(reasoning !== undefined ? { reasoning: reasoning || null } : {}),
+      ...(permissionMode !== undefined &&
+      [
+        "codex",
+        "claude-code",
+        "zcode",
+        "opencode",
+        "pi",
+        "kodo",
+        "kimi-code",
+        "deepseek-harness",
+      ].includes(harnessId)
         ? { permissionMode }
         : {}),
     });
@@ -412,8 +458,8 @@ export function DraftWorkspace({
     });
   };
 
-  const handleSendFirst = () => {
-    const text = compose;
+  const handleSendFirst = (overrideText?: string) => {
+    const text = overrideText ?? compose;
     const attachmentIds = attachments.readyIds;
     if (
       (!text.trim() && !attachmentIds.length) ||
@@ -431,7 +477,7 @@ export function DraftWorkspace({
     firstSendRef.current = true;
     setFirstMessage(text);
     void act(async () => {
-      const created = await createSessionRecord(compose);
+      const created = await createSessionRecord(text);
       const requestId = crypto.randomUUID();
       // Enter the conversation before waiting for delivery or a full Host snapshot.
       onFirstSendStarted(created, text, requestId);
@@ -450,6 +496,22 @@ export function DraftWorkspace({
       setFirstMessage(null);
     });
   };
+
+  const composeRef = useRef(compose);
+  composeRef.current = compose;
+  const voice = useVoiceInput({
+    disabled: Boolean(firstMessage) || busy,
+    onTranscript: (spoken) => {
+      const merged = appendVoiceTranscript(composeRef.current, spoken);
+      composeRef.current = merged;
+      setCompose(merged);
+      requestAnimationFrame(() => textareaRef.current?.focus());
+    },
+    onAutoSend: () => {
+      const merged = composeRef.current;
+      if (merged.trim()) handleSendFirst(merged);
+    },
+  });
 
   const selectedProjectName = projects.find((p) => p.id === project)?.name;
   const selectedWorkspace = workspaces.find((w) => w.id === workspace);
@@ -470,14 +532,15 @@ export function DraftWorkspace({
         ? `项目主对话 · ${selectedProjectName}`
         : "全局主对话 · 跨项目"
       : (selectedProjectName ?? "选择项目");
-  const workspaceButtonText =
+  const rawWorkspacePath =
     workspace === "__new_path__" && customPath.trim()
       ? customPath.trim()
-      : selectedWorkspace
-        ? selectedWorkspace.rootPath
-        : kind === "supervisor" && !project
-          ? "无绑定目录"
-          : "选择工作位置";
+      : (selectedWorkspace?.rootPath ?? "");
+  const workspaceButtonText = rawWorkspacePath
+    ? formatWorkspaceLabel(rawWorkspacePath) || rawWorkspacePath
+    : kind === "supervisor" && !project
+      ? "无绑定目录"
+      : "选择工作位置";
 
   const activeModelSummary =
     modelSupport === "native-only"
@@ -505,9 +568,11 @@ export function DraftWorkspace({
         ? modelChoice.slice("model:".length)
         : modelChoice.startsWith("binding:")
           ? (bindings.find((p) => p.id === modelChoice.slice("binding:".length))?.model ?? "")
-          : modelChoice === "inherit" || modelChoice === "native"
-            ? (inherited.binding?.model ?? nativeModel)
-            : "";
+          : modelChoice === "native"
+            ? nativeModel
+            : modelChoice === "inherit"
+              ? (presetModel ?? inherited.binding?.model ?? nativeModel)
+              : "";
 
   const draftModelParameters = useMemo(() => {
     const models = cachedPayload?.models ?? [];
@@ -576,6 +641,86 @@ export function DraftWorkspace({
     (m) => modelOptionValue(harnessId, m).toLocaleLowerCase() === trimmedQuery.toLocaleLowerCase(),
   );
 
+  const selectHarnessChoice = (nextId: HarnessId) => {
+    setHarnessId(nextId);
+    if (nextId === "kodo") {
+      setExecutorId("local");
+      if (executorId !== "local") setWorkspace("");
+    }
+    setPermissionMode(undefined);
+    setModelChoice("inherit");
+    setProviderChoiceId(undefined);
+    setCustomModel("");
+    setModelQuery("");
+    setHarnessOpen(false);
+    setMobileHarnessOpen(false);
+  };
+
+  const renderHarnessMenu = () => (
+    <>
+      <div className="ios-menu__section-label">主控统筹</div>
+      <button
+        type="button"
+        role="option"
+        data-value="kodo"
+        aria-selected={harnessId === "kodo"}
+        className={`ios-menu__item ios-menu__item--featured ${
+          harnessId === "kodo" ? "is-selected" : ""
+        }`}
+        onClick={() => selectHarnessChoice("kodo")}
+      >
+        <HarnessBadge harnessId="kodo" size="xs" tone="mono" />
+        <span className="ios-menu__title">Kooyu · 主对话</span>
+        {harnessId === "kodo" && <Check size={14} className="ios-menu__check" />}
+      </button>
+
+      <div className="ios-menu__divider" />
+      <div className="ios-menu__section-label">原生 Harness</div>
+
+      <div className="ios-menu__scroll">
+        {NATIVE_HARNESS_IDS.map((id) => {
+          const health = harnesses.find((item) => item.id === id)?.health;
+          const installed = health?.installed;
+          const selected = harnessId === id;
+          return (
+            <button
+              type="button"
+              role="option"
+              key={id}
+              data-value={id}
+              aria-selected={selected}
+              className={`ios-menu__item ${selected ? "is-selected" : ""}`}
+              onClick={() => selectHarnessChoice(id)}
+            >
+              <HarnessBadge harnessId={id} size="xs" tone="mono" />
+              <span className="ios-menu__title">{HARNESS_NAMES[id]}</span>
+              <span className={`ios-menu__status ${installed ? "is-ready" : "is-muted"}`}>
+                {health?.launchable === false && installed
+                  ? "桌面待连接"
+                  : health?.source === "desktop-bundled"
+                    ? "桌面入口"
+                    : installed
+                      ? "入口已发现"
+                      : "未发现"}
+              </span>
+              {selected && <Check size={14} className="ios-menu__check" />}
+            </button>
+          );
+        })}
+      </div>
+    </>
+  );
+
+  const draftPermissionsNode = (
+    <PermissionControls
+      harnessId={harnessId}
+      nativePermission={harnessDesc?.nativeDefaults?.permission}
+      value={effectivePermissionMode}
+      onChange={setPermissionMode}
+      disabled={busy || !connected}
+    />
+  );
+
   return (
     <>
       <header className="chat-header chat-header--draft">
@@ -588,11 +733,48 @@ export function DraftWorkspace({
           <ChevronLeft size={20} />
         </button>
 
-        <div className="chat-header__badge">
+        {/* Phone (<=760px) centered Engine Switcher + sanitized folder/branch subtitle + overflow menu */}
+        <div className="mobile-draft-center mobile-only">
+          <button
+            type="button"
+            className="mobile-draft-engine-pill"
+            aria-label="切换对话引擎"
+            onClick={() => setMobileHarnessOpen(true)}
+          >
+            <HarnessBadge harnessId={harnessId} size="xs" shape="circle" tone="mono" />
+            <span>{harnessId === "kodo" ? "Kooyu 主对话" : HARNESS_NAMES[harnessId]}</span>
+            <ChevronDown size={13} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="mobile-draft-subpill"
+            onClick={() => setMobileMetaOpen(true)}
+            title={rawWorkspacePath || workspaceButtonText}
+          >
+            <Folder size={11} aria-hidden="true" />
+            <span>
+              {workspaceButtonText}
+              {workspaceContext?.git && workspaceContext.branch
+                ? ` · ${workspaceContext.branch}`
+                : ""}
+            </span>
+          </button>
+        </div>
+
+        <button
+          type="button"
+          className="mobile-only icon-button chat-overflow-btn"
+          aria-label="新对话设置"
+          onClick={() => setMobileMetaOpen(true)}
+        >
+          <MoreHorizontal size={18} />
+        </button>
+
+        <div className="chat-header__badge desktop-only">
           <HarnessBadge harnessId={harnessId} size="sm" tone="mono" />
         </div>
 
-        <div className="draft-heading">
+        <div className="draft-heading desktop-only">
           <div className="draft-context-row">
             <IosPopover
               open={projectOpen}
@@ -683,7 +865,7 @@ export function DraftWorkspace({
                   type="button"
                   {...triggerProps}
                   aria-label="工作位置"
-                  title={workspaceButtonText}
+                  title={rawWorkspacePath || workspaceButtonText}
                   className="draft-crumb-btn draft-crumb-btn--path"
                   data-value={workspace}
                 >
@@ -711,7 +893,7 @@ export function DraftWorkspace({
               </button>
 
               {orderedWorkspaces.map((w) => {
-                const seg = w.rootPath.split(/[\\/]/).filter(Boolean).pop() ?? w.rootPath;
+                const seg = formatWorkspaceLabel(w.rootPath) || w.rootPath;
                 return (
                   <button
                     type="button"
@@ -746,7 +928,7 @@ export function DraftWorkspace({
               >
                 <FolderOpen size={14} className="ios-menu__icon" aria-hidden="true" />
                 <span className="ios-menu__title">
-                  {executorId === "local" ? "选择本机文件夹" : "在工作中心登记节点目录"}
+                  {executorId === "local" ? "选择本机文件夹" : "在自动化与通知登记节点目录"}
                 </span>
               </button>
             </IosPopover>
@@ -781,7 +963,7 @@ export function DraftWorkspace({
 
         <button
           type="button"
-          className="draft-save-btn"
+          className="draft-save-btn desktop-only"
           disabled={busy || !connected}
           title="保存空草稿"
           onClick={handleSaveDraft}
@@ -811,225 +993,190 @@ export function DraftWorkspace({
                 </div>
               </div>
             </div>
-          ) : (
-            <div className="draft-canvas">
-              <CanvasAura harnessId={harnessId} />
-              <div className="draft-hero">
-                <div className="draft-hero__index" aria-hidden="true">
-                  <span>01</span>
-                  <span className="draft-hero__rule" />
-                  <span>{HARNESS_NAMES[harnessId]}</span>
-                </div>
-                <div className="draft-hero__badge">
-                  <HarnessBadge harnessId={harnessId} size="lg" tone="tinted" />
-                </div>
-                <h2>
-                  {selectedProjectName
-                    ? `在 ${selectedProjectName} 中做什么？`
-                    : kind === "supervisor"
-                      ? "让 Kooyu 接下来做什么？"
-                      : `交给 ${HARNESS_NAMES[harnessId]} 什么任务？`}
-                </h2>
-              </div>
-
-              <div className="draft-composer-wrap">
-                <div
-                  className="composer composer--draft"
-                  onPointerMove={(e) => {
-                    const r = e.currentTarget.getBoundingClientRect();
-                    e.currentTarget.style.setProperty("--mx", `${e.clientX - r.left}px`);
-                    e.currentTarget.style.setProperty("--my", `${e.clientY - r.top}px`);
-                  }}
-                >
-                  <AttachmentList
-                    attachments={attachments.attachments}
-                    error={attachments.error}
-                    disabled={busy}
-                    onRemove={attachments.remove}
-                  />
-                  {sendBlockedReason && (
-                    <div className="composer-inline-hint" role="status">
-                      <span>{sendBlockedReason}</span>
-                      <button
-                        type="button"
-                        className="composer-inline-hint__btn"
-                        onClick={() =>
-                          openOnlyPopover(
-                            sendBlockedReason.includes("工作位置") ? "workspace" : "model",
-                          )
-                        }
-                      >
-                        {sendBlockedReason.includes("工作位置") ? "选择目录" : "选择绑定"}
-                      </button>
-                    </div>
-                  )}
-
-                  <textarea
-                    ref={textareaRef}
-                    rows={2}
-                    aria-label="消息"
-                    placeholder={
-                      connected
-                        ? harnessId === "kodo"
-                          ? "Kooyu"
-                          : HARNESS_NAMES[harnessId]
-                        : "Host 未连接"
-                    }
-                    value={compose}
-                    onChange={(e) => setCompose(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (shouldSend(e, preferences.sendShortcut)) {
-                        e.preventDefault();
-                        handleSendFirst();
+          ) : null}
+          <div
+            className={firstMessage ? "draft-canvas draft-canvas--sending" : "draft-canvas"}
+            {...(!firstMessage ? dropZone.handlers : {})}
+          >
+            {!firstMessage && (
+              <>
+                <ComposerDropOverlay active={dropZone.dragOver} label="松开以上传文件到新对话" />
+                <CanvasAura harnessId={harnessId} />
+                <div className="draft-hero">
+                  <button
+                    type="button"
+                    className="draft-hero__badge"
+                    aria-label="选择执行引擎"
+                    title="点击切换对话引擎"
+                    onClick={() => {
+                      if (window.matchMedia("(max-width: 760px)").matches) {
+                        setMobileHarnessOpen(true);
+                      } else {
+                        openOnlyPopover(harnessOpen ? null : "harness");
                       }
                     }}
-                  />
+                  >
+                    <HarnessBadge harnessId={harnessId} size="lg" tone="tinted" />
+                  </button>
+                  <h2>
+                    {selectedProjectName
+                      ? `在「${selectedProjectName}」推进什么？`
+                      : kind === "supervisor"
+                        ? "今天想推进什么？"
+                        : `与 ${HARNESS_NAMES[harnessId]} 开启新对话`}
+                  </h2>
+                </div>
+              </>
+            )}
 
-                  {executors.length > 1 && harnessId !== "kodo" && (
-                    <label className="draft-executor">
-                      执行节点
-                      <select
-                        aria-label="执行节点"
-                        value={executorId}
-                        disabled={busy}
-                        onChange={(e) => {
-                          setExecutorId(e.target.value);
-                          setWorkspace("");
-                          setCustomPath("");
-                          setModelChoice("native");
-                          setProviderChoiceId(null);
-                        }}
-                      >
-                        {executors.map((e) => (
-                          <option key={e.id} value={e.id}>
-                            {e.name} · {e.status === "online" ? "在线" : "离线"}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  )}
-                  <div className="composer-toolbar composer-toolbar--draft">
-                    <div className="composer-pickers">
-                      <AttachmentButton
-                        loading={false}
-                        disabled={busy || !connected}
-                        onAdd={(files) => void attachments.add(files)}
-                      />
-                      <IosPopover
-                        open={harnessOpen}
-                        onOpenChange={(next) => openOnlyPopover(next ? "harness" : null)}
-                        side="top"
-                        align="start"
-                        wide
-                        trigger={(triggerProps) => (
-                          <button
-                            type="button"
-                            {...triggerProps}
-                            aria-label="Harness"
-                            data-value={harnessId}
-                            className="composer-pill-btn composer-harness-trigger"
-                            title="切换对话引擎（Kooyu 主对话或原生 Harness）"
-                          >
-                            <HarnessBadge
-                              harnessId={harnessId}
-                              size="xs"
-                              shape="circle"
-                              tone="mono"
-                            />
-                            <span className="composer-harness__name">
-                              {harnessId === "kodo" ? "Kooyu · 主对话" : HARNESS_NAMES[harnessId]}
-                            </span>
-                            <ChevronDown
-                              size={13}
-                              className="composer-pill-chevron"
-                              aria-hidden="true"
-                            />
-                          </button>
-                        )}
-                      >
-                        <div className="ios-menu__section-label">主控统筹</div>
+            <div className="draft-composer-wrap">
+              <div
+                className="composer composer--draft"
+                onPointerMove={(e) => {
+                  const r = e.currentTarget.getBoundingClientRect();
+                  e.currentTarget.style.setProperty("--mx", `${e.clientX - r.left}px`);
+                  e.currentTarget.style.setProperty("--my", `${e.clientY - r.top}px`);
+                }}
+              >
+                <SlashTemplateMenu
+                  compose={compose}
+                  onSelect={(text) => {
+                    setCompose(text);
+                    requestAnimationFrame(() => textareaRef.current?.focus());
+                  }}
+                />
+                <AttachmentList
+                  attachments={attachments.attachments}
+                  error={attachments.error}
+                  disabled={busy}
+                  onRemove={attachments.remove}
+                />
+                <VoiceRecordingBar voice={voice} />
+                {sendBlockedReason && (
+                  <div className="composer-inline-hint" role="status">
+                    <span>{sendBlockedReason}</span>
+                    <button
+                      type="button"
+                      className="composer-inline-hint__btn"
+                      onClick={() => {
+                        if (window.matchMedia("(max-width: 760px)").matches) {
+                          if (sendBlockedReason.includes("工作位置")) {
+                            setMobileMetaOpen(true);
+                          } else {
+                            openOnlyPopover("model");
+                          }
+                        } else {
+                          openOnlyPopover(
+                            sendBlockedReason.includes("工作位置") ? "workspace" : "model",
+                          );
+                        }
+                      }}
+                    >
+                      {sendBlockedReason.includes("工作位置") ? "选择目录" : "选择绑定"}
+                    </button>
+                  </div>
+                )}
+
+                <textarea
+                  ref={textareaRef}
+                  rows={2}
+                  aria-label="消息"
+                  disabled={Boolean(firstMessage)}
+                  placeholder={
+                    connected
+                      ? harnessId === "kodo"
+                        ? "Kooyu"
+                        : HARNESS_NAMES[harnessId]
+                      : "Host 未连接"
+                  }
+                  value={firstMessage ? "" : compose}
+                  onChange={(e) => setCompose(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (shouldSend(e, preferences.sendShortcut)) {
+                      e.preventDefault();
+                      handleSendFirst();
+                    }
+                  }}
+                />
+
+                {executors.length > 1 && harnessId !== "kodo" && (
+                  <label className="draft-executor desktop-only">
+                    执行节点
+                    <select
+                      aria-label="执行节点"
+                      value={executorId}
+                      disabled={busy}
+                      onChange={(e) => {
+                        setExecutorId(e.target.value);
+                        setWorkspace("");
+                        setCustomPath("");
+                        setModelChoice("native");
+                        setProviderChoiceId(null);
+                      }}
+                    >
+                      {executors.map((e) => (
+                        <option key={e.id} value={e.id}>
+                          {e.name} · {e.status === "online" ? "在线" : "离线"}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                <div className="composer-toolbar composer-toolbar--draft">
+                  <button
+                    type="button"
+                    className="composer-mobile-plus mobile-only"
+                    aria-label="添加附件、权限或模板"
+                    disabled={busy || !connected}
+                    onClick={() => setPlusSheetOpen(true)}
+                  >
+                    <Plus size={19} />
+                  </button>
+                  <div className="composer-pickers desktop-only-flex">
+                    <AttachmentButton
+                      loading={false}
+                      disabled={busy || !connected}
+                      onAdd={(files) => void attachments.add(files)}
+                    />
+                    <IosPopover
+                      open={harnessOpen}
+                      onOpenChange={(next) => openOnlyPopover(next ? "harness" : null)}
+                      side="top"
+                      align="start"
+                      wide
+                      trigger={(triggerProps) => (
                         <button
                           type="button"
-                          role="option"
-                          data-value="kodo"
-                          aria-selected={harnessId === "kodo"}
-                          className={`ios-menu__item ios-menu__item--featured ${
-                            harnessId === "kodo" ? "is-selected" : ""
-                          }`}
-                          onClick={() => {
-                            setHarnessId("kodo");
-                            setExecutorId("local");
-                            if (executorId !== "local") setWorkspace("");
-                            setPermissionMode(null);
-                            setModelChoice("inherit");
-                            setProviderChoiceId(undefined);
-                            setCustomModel("");
-                            setModelQuery("");
-                            setHarnessOpen(false);
-                          }}
+                          {...triggerProps}
+                          aria-label="Harness"
+                          data-value={harnessId}
+                          className="composer-pill-btn composer-harness-trigger"
+                          title="切换对话引擎（Kooyu 主对话或原生 Harness）"
                         >
-                          <HarnessBadge harnessId="kodo" size="xs" tone="mono" />
-                          <span className="ios-menu__title">Kooyu · 主对话</span>
-                          {harnessId === "kodo" && <Check size={14} className="ios-menu__check" />}
+                          <HarnessBadge
+                            harnessId={harnessId}
+                            size="xs"
+                            shape="circle"
+                            tone="mono"
+                          />
+                          <span className="composer-harness__name">
+                            {harnessId === "kodo" ? "Kooyu · 主对话" : HARNESS_NAMES[harnessId]}
+                          </span>
+                          <ChevronDown
+                            size={13}
+                            className="composer-pill-chevron"
+                            aria-hidden="true"
+                          />
                         </button>
+                      )}
+                    >
+                      {renderHarnessMenu()}
+                    </IosPopover>
+                    {draftPermissionsNode}
+                  </div>
 
-                        <div className="ios-menu__divider" />
-                        <div className="ios-menu__section-label">原生 Harness</div>
-
-                        <div className="ios-menu__scroll">
-                          {NATIVE_HARNESS_IDS.map((id) => {
-                            const health = harnesses.find((item) => item.id === id)?.health;
-                            const installed = health?.installed;
-                            const selected = harnessId === id;
-                            return (
-                              <button
-                                type="button"
-                                role="option"
-                                key={id}
-                                data-value={id}
-                                aria-selected={selected}
-                                className={`ios-menu__item ${selected ? "is-selected" : ""}`}
-                                onClick={() => {
-                                  setHarnessId(id);
-                                  setPermissionMode(null);
-                                  setModelChoice("inherit");
-                                  setProviderChoiceId(undefined);
-                                  setCustomModel("");
-                                  setModelQuery("");
-                                  setHarnessOpen(false);
-                                }}
-                              >
-                                <HarnessBadge harnessId={id} size="xs" tone="mono" />
-                                <span className="ios-menu__title">{HARNESS_NAMES[id]}</span>
-                                <span
-                                  className={`ios-menu__status ${
-                                    installed ? "is-ready" : "is-muted"
-                                  }`}
-                                >
-                                  {health?.launchable === false && installed
-                                    ? "桌面待连接"
-                                    : health?.source === "desktop-bundled"
-                                      ? "桌面入口"
-                                      : installed
-                                        ? "入口已发现"
-                                        : "未发现"}
-                                </span>
-                                {selected && <Check size={14} className="ios-menu__check" />}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </IosPopover>
-                      <PermissionControls
-                        harnessId={harnessId}
-                        nativePermission={harnessDesc?.nativeDefaults?.permission}
-                        value={permissionMode}
-                        onChange={setPermissionMode}
-                        disabled={busy || !connected}
-                      />
-                    </div>
-
-                    <div className="composer-actions-right">
+                  <div className="composer-actions-right">
+                    <div className="composer-mobile-chips">
                       {executorId === "local" && (
                         <ComposerModelControls
                           harnessId={harnessId}
@@ -1073,7 +1220,7 @@ export function DraftWorkspace({
                                     key: "inherit",
                                     dataValue: "inherit",
                                     title: "继承默认",
-                                    subtitle: `${inherited.source} · ${inheritShort}`,
+                                    subtitle: `${presetModel ? "新对话默认" : inherited.source} · ${inheritShort}`,
                                     selected: modelChoice === "inherit",
                                     onSelect: () => {
                                       setModelChoice("inherit");
@@ -1183,34 +1330,46 @@ export function DraftWorkspace({
                           parametersModel={draftModelParameters}
                           popoverAriaLabel="草稿模型设置"
                           reasoningLevels={draftReasoningOptions}
-                          reasoningValue={reasoning}
+                          reasoningValue={effectiveReasoning}
                           reasoningDefault={harnessDesc?.nativeDefaults?.reasoning ?? undefined}
                           reasoningSliderLabel="新对话思考强度"
                           onReasoningChange={setReasoning}
                         />
                       )}
-
-                      <button
-                        type="button"
-                        className="send-button"
-                        aria-label="发送消息"
-                        disabled={
-                          (!compose.trim() && !attachments.readyIds.length) ||
-                          !connected ||
-                          busy ||
-                          attachments.uploading ||
-                          !!sendBlockedReason
-                        }
-                        onClick={handleSendFirst}
-                      >
-                        <ArrowUp size={17} strokeWidth={2.4} />
-                      </button>
+                      <span className="mobile-only-inline composer-mobile-perm">
+                        <PermissionControls
+                          ariaLabel="工具权限"
+                          harnessId={harnessId}
+                          nativePermission={harnessDesc?.nativeDefaults?.permission}
+                          value={effectivePermissionMode}
+                          onChange={setPermissionMode}
+                          disabled={busy || !connected}
+                        />
+                      </span>
                     </div>
+
+                    <VoiceInputButton voice={voice} disabled={Boolean(firstMessage) || busy} />
+                    <button
+                      type="button"
+                      className="send-button"
+                      aria-label="发送消息"
+                      disabled={
+                        Boolean(firstMessage) ||
+                        (!compose.trim() && !attachments.readyIds.length) ||
+                        !connected ||
+                        busy ||
+                        attachments.uploading ||
+                        !!sendBlockedReason
+                      }
+                      onClick={() => handleSendFirst()}
+                    >
+                      <ArrowUp size={17} strokeWidth={2.4} />
+                    </button>
                   </div>
                 </div>
               </div>
             </div>
-          )}
+          </div>
         </div>
       </div>
       {showProjectForm && (
@@ -1243,6 +1402,145 @@ export function DraftWorkspace({
           }}
         />
       )}
+      {mobileHarnessOpen && (
+        <Modal title="选择对话引擎" onClose={() => setMobileHarnessOpen(false)}>
+          <div className="ios-inset-group">{renderHarnessMenu()}</div>
+        </Modal>
+      )}
+      {mobileMetaOpen && (
+        <Modal title="新对话上下文" onClose={() => setMobileMetaOpen(false)}>
+          <div className="ios-inset-group">
+            <label className="ios-field-row">
+              <span>自定义标题</span>
+              <input
+                value={title}
+                disabled={busy}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="新对话"
+                maxLength={200}
+              />
+            </label>
+            <label className="ios-field-row">
+              <span>归属项目</span>
+              <select
+                value={project}
+                onChange={(e) => {
+                  const nextProj = e.target.value;
+                  setProject(nextProj);
+                  const hostId =
+                    executors.find((e) => e.id === executorId)?.hostId ?? snapshot?.hostId;
+                  const matched = workspaces.find(
+                    (w) => w.projectId === nextProj && w.hostId === hostId,
+                  );
+                  setWorkspace(matched?.id ?? "");
+                }}
+              >
+                <option value="">
+                  {kind === "supervisor" ? "全局主对话 · 跨项目" : "未归属对话"}
+                </option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="ios-field-row">
+              <span>工作目录</span>
+              <select
+                value={workspace}
+                onChange={(e) => {
+                  setWorkspace(e.target.value);
+                  if (e.target.value !== "__new_path__") setCustomPath("");
+                }}
+              >
+                <option value="">
+                  {kind === "supervisor" && !project ? "无绑定目录" : "不指定目录"}
+                </option>
+                {orderedWorkspaces.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {formatWorkspaceLabel(w.rootPath) || w.rootPath}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {executors.length > 1 && harnessId !== "kodo" && (
+              <label className="ios-field-row">
+                <span>执行节点</span>
+                <select
+                  aria-label="执行节点"
+                  value={executorId}
+                  disabled={busy}
+                  onChange={(e) => {
+                    setExecutorId(e.target.value);
+                    setWorkspace("");
+                    setCustomPath("");
+                    setModelChoice("native");
+                    setProviderChoiceId(null);
+                  }}
+                >
+                  {executors.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.name} · {e.status === "online" ? "在线" : "离线"}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </div>
+          <div className="ios-group-block">
+            <div className="ios-inset-group">
+              {executorId === "local" && (
+                <button
+                  type="button"
+                  className="ios-sheet-action-row"
+                  onClick={() => {
+                    setMobileMetaOpen(false);
+                    setShowDirectoryPicker(true);
+                  }}
+                >
+                  <FolderOpen size={16} />
+                  <span>浏览并选择本机文件夹…</span>
+                </button>
+              )}
+              <button
+                type="button"
+                className="ios-sheet-action-row"
+                onClick={() => {
+                  setMobileMetaOpen(false);
+                  setShowProjectForm(true);
+                }}
+              >
+                <FolderPlus size={16} />
+                <span>新建项目…</span>
+              </button>
+              <button
+                type="button"
+                className="ios-sheet-action-row"
+                disabled={busy || !connected}
+                onClick={() => {
+                  setMobileMetaOpen(false);
+                  handleSaveDraft();
+                }}
+              >
+                <BookmarkPlus size={16} />
+                <span>保存为空会话草稿</span>
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+      <MobileComposerPlusSheet
+        open={plusSheetOpen}
+        onClose={() => setPlusSheetOpen(false)}
+        disabled={busy || !connected}
+        onAddFiles={(files) => void attachments.add(files)}
+        permissionsNode={draftPermissionsNode}
+        onSelectTemplate={(text) => {
+          setCompose(text);
+          requestAnimationFrame(() => textareaRef.current?.focus());
+        }}
+      />
     </>
   );
 }

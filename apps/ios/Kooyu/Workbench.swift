@@ -26,10 +26,12 @@ import Observation
     private var refreshing = false
     private var epoch = 0
     private var settingsRefreshedAt = Date.distantPast
+    private var settingsRefresh: Task<Void, Never>?
     init() { do { book = try ConnectionVault.load() } catch { self.error = error.localizedDescription } }
     private func current(_ c: Connection, _ generation: Int) -> Bool { epoch == generation && connection?.token == c.token && connection?.hostId == c.hostId }
     private func commit(_ next: ConnectionBook) throws { try ConnectionVault.save(next); book = next }
     private func reset(_ next: ConnectionBook) {
+        settingsRefresh?.cancel(); settingsRefresh = nil
         epoch += 1; book = next; snapshot = nil; page = nil; selected = nil; usage = nil; appSettings = nil
         settingsRefreshedAt = .distantPast
         online = false; busy = false; error = ""; notice = ""; usageError = ""; composerDraft = ""
@@ -69,11 +71,8 @@ import Observation
             guard current(c, generation) else { return }
             let reconnecting = !online && snapshot != nil
             snapshot = next; if !online { error = "" }; online = true
-            if reconnecting { notice = "连接已恢复 · \(next.inbox.filter { !$0.resolved }.count) 项待处理，可在收件箱查看。" }
-            if appSettings == nil || Date().timeIntervalSince(settingsRefreshedAt) > 10 {
-                let settings: JSONValue = try await api.get("/app-settings")
-                guard current(c, generation) else { return }; appSettings = settings; settingsRefreshedAt = Date()
-            }
+            if reconnecting { notice = "连接已恢复 · \(next.inbox.filter { !$0.resolved }.count) 项待处理，可在「待办」查看。" }
+            refreshSettings(c, generation)
             if let id = selected {
                 let cursor = page?.events.map(\.sequence).max()
                 let path = "/sessions/\(id)" + (cursor.map { "?after=\($0)" } ?? "?tail=300")
@@ -90,6 +89,17 @@ import Observation
         catch {
             guard current(c, generation) else { return }; online = false; self.error = error.localizedDescription
             if (error as? APIError)?.status == 401 { snapshot = nil; page = nil; usage = nil }
+        }
+    }
+    private func refreshSettings(_ c: Connection, _ generation: Int) {
+        guard settingsRefresh == nil, Date().timeIntervalSince(settingsRefreshedAt) >= 30 else { return }
+        settingsRefreshedAt = Date()
+        settingsRefresh = Task { [weak self] in
+            let settings: JSONValue? = try? await HostAPI(connection: c).get("/app-settings")
+            guard let self, !Task.isCancelled, self.current(c, generation) else { return }
+            if let settings { self.appSettings = settings }
+            // Optional preferences never block messages or decide connection/auth state.
+            self.settingsRefresh = nil
         }
     }
     func refreshUsage() async {
@@ -223,7 +233,7 @@ import Observation
             let sessionId = item["sessionId"].string
             if !sessionId.isEmpty, state.sessions.contains(where: { $0.id == sessionId }) {
                 selectedTab = "sessions"; await select(sessionId)
-            } else { selectedTab = "sessions"; notice = item["title"].string }
+            } else { selectedTab = "inbox"; notice = item["title"].string }
             guard connection?.hostId == c.hostId, connection?.token == c.token else { return false }
             let _: JSONValue = try await api.perform(target.path + "/read", method: "POST", body: .object([:]))
             return true

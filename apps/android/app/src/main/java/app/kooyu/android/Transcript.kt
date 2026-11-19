@@ -1,5 +1,12 @@
 package app.kooyu.android
 
+import app.kooyu.android.ui.*
+import app.kooyu.android.ui.theme.*
+import app.kooyu.android.ui.components.*
+import app.kooyu.android.ui.home.*
+import app.kooyu.android.ui.conversation.*
+import app.kooyu.android.ui.screens.*
+
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -25,6 +32,64 @@ data class TranscriptRow(val id: String, val role: String, val text: String, val
     val payload: JSONObject? = null, val origin: String? = null, val child: ChildTranscript? = null, val createdAt: String? = null, val attachments: List<JSONObject> = emptyList())
 
 data class Transcript(val rows: List<TranscriptRow>, val thinkingPending: Boolean)
+
+data class MessageVariantState(
+    val index: Int,
+    val count: Int,
+    val disabled: Boolean,
+    val selectOffset: (Int) -> Unit,
+)
+
+/** Filter event stream to the active conversation branch, matching packages/protocol/src/conversation.ts. */
+fun conversationEvents(events: List<JSONObject>, conversation: JSONObject?): List<JSONObject> {
+    if (conversation == null) return events
+    val activeId = conversation.optString("activeId").ifEmpty { return events }
+    val branches = conversation.optJSONArray("branches")?.objects().orEmpty()
+    val branch = branches.firstOrNull { it.optString("id") == activeId }
+    val prefixArr = branch?.optJSONArray("prefixEventIds")
+    val prefix = buildSet {
+        if (prefixArr != null) {
+            for (i in 0 until prefixArr.length()) add(prefixArr.optString(i))
+        }
+    }
+    return events.filter { ev ->
+        val id = ev.optString("id")
+        val branchId = ev.nullableString("conversationBranchId") ?: "root"
+        id in prefix || branchId == activeId
+    }
+}
+
+/** Compute `< 1 / 2 >` variant switcher state for a user message row when branches exist. */
+fun resolveMessageVariants(
+    row: TranscriptRow,
+    conversation: JSONObject?,
+    disabled: Boolean,
+    onSelectBranch: (String) -> Unit,
+): MessageVariantState? {
+    if (row.role != RowRole.USER || conversation == null) return null
+    val eventId = row.eventIds.firstOrNull() ?: return null
+    val branches = conversation.optJSONArray("branches")?.objects().orEmpty()
+    val branch = branches.firstOrNull {
+        it.optString("userEventId") == eventId || it.optString("rootEventId") == eventId
+    } ?: return null
+    val rootEventId = branch.optString("rootEventId")
+    val siblings = branches.filter { it.optString("rootEventId") == rootEventId }
+    val choices = listOf(branch.optString("originalBranchId")) + siblings.map { it.optString("id") }
+    if (choices.size <= 1) return null
+    val currentIndex = if (eventId == rootEventId) {
+        0
+    } else {
+        siblings.indexOfFirst { it.optString("userEventId") == eventId } + 1
+    }.coerceIn(0, choices.lastIndex)
+    return MessageVariantState(
+        index = currentIndex,
+        count = choices.size,
+        disabled = disabled,
+        selectOffset = { offset ->
+            choices.getOrNull(currentIndex + offset)?.let(onSelectBranch)
+        }
+    )
+}
 
 /** A run of consecutive tool calls collapses into one group, like the desktop. */
 sealed interface TranscriptBlock {
@@ -88,9 +153,11 @@ fun buildTranscript(events: List<JSONObject>): Transcript {
             rows += TranscriptRow(id, RowRole.ERROR, text, listOf(id), payload)
     }
 
+    val replaced = events.mapNotNull { it.optJSONObject("payload")?.str("replaceEventId")?.takeIf { id -> id.isNotEmpty() } }.toSet()
     for (e in events) {
         val p = e.optJSONObject("payload") ?: JSONObject()
         val eventId = e.optString("id")
+        if (e.optString("type") == "message" && eventId in replaced) continue
         when (e.optString("type")) {
             "subagent" -> {
                 val agentId = p.str("agentId")?.takeIf { it.isNotEmpty() } ?: continue

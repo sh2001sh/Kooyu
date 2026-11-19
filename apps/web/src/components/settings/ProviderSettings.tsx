@@ -1,16 +1,40 @@
 import { useCallback, useEffect, useState } from "react";
-import { KeyRound, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { createPortal } from "react-dom";
+import {
+  ChevronDown,
+  KeyRound,
+  Link2,
+  Plus,
+  RefreshCw,
+  Search,
+  Sparkles,
+  Trash2,
+  X,
+} from "lucide-react";
 import type {
+  AppSettings,
   CatalogModel,
   EndpointProtocol,
+  HarnessBinding,
+  HarnessId,
   ModelParameters,
   Provider,
   ProviderConfiguration,
+  Snapshot,
 } from "@kodo/protocol";
-import { bindingReasoningLevels } from "@kodo/protocol/client";
+import { HARNESS_PROVIDER_PROTOCOLS, bindingReasoningLevels } from "@kodo/protocol/client";
 import { api } from "../../lib/host-client";
-import { formatDate } from "../../lib/harnesses";
+import { formatDate, shortModelLabel } from "../../lib/harnesses";
 import { catalogModelSource, groupCatalogModels } from "../../lib/catalog-models";
+import {
+  CLAUDE_MODEL_MAP_SLOTS,
+  harnessSupportsModelMap,
+  pruneHarnessDefaultsForModels,
+  suggestClaudeModelMap,
+  type ClaudeModelSlot,
+} from "../../lib/model-mapping";
+import { useAppPreferences } from "../../lib/preferences";
+import { HarnessBadge } from "../KodoBrand";
 import { SettingsPage, SettingsRow, SettingsSection, StatusDot, SxSelect } from "./SettingsKit";
 import {
   ModelPricingEditor,
@@ -29,17 +53,55 @@ const PROTOCOLS: { value: EndpointProtocol; label: string; hint: string }[] = [
 ];
 const protocolLabel = (p: EndpointProtocol) => PROTOCOLS.find((x) => x.value === p)?.label ?? p;
 
+const PROTOCOL_SHORT: Record<EndpointProtocol, string> = {
+  "openai-completions": "Chat Completions",
+  "openai-responses": "Responses",
+  "anthropic-messages": "Anthropic",
+  "google-generative-ai": "Gemini",
+};
+const protocolShort = (protocol: EndpointProtocol) => PROTOCOL_SHORT[protocol] ?? protocol;
+
+function endpointDisplayLabel(
+  e: Provider["endpoints"][number],
+  allEndpoints: Provider["endpoints"],
+  harnessId?: HarnessId,
+): string {
+  const proto = protocolShort(e.protocol);
+  const clean = e.name.trim();
+  const sameProtoCount = allEndpoints.filter((x) => x.protocol === e.protocol).length;
+  const gatewaySuffix =
+    harnessId &&
+    ["claude-code", "gemini"].includes(harnessId) &&
+    e.protocol === "openai-completions"
+      ? "（网关）"
+      : "";
+  const showName =
+    clean &&
+    clean !== "默认" &&
+    clean.toLowerCase() !== proto.toLowerCase() &&
+    clean.toLowerCase() !== protocolLabel(e.protocol).toLowerCase();
+  if (showName || (sameProtoCount > 1 && clean)) {
+    return `${proto} · ${clean}${gatewaySuffix}`;
+  }
+  return `${proto}${gatewaySuffix}`;
+}
+
+const isHarnessEndpointCompatible = (harnessId: HarnessId, protocol: EndpointProtocol) =>
+  HARNESS_PROVIDER_PROTOCOLS[harnessId].includes(protocol) ||
+  (["claude-code", "gemini"].includes(harnessId) && protocol === "openai-completions");
+
 /** Model sources: an account/service (provider) with its endpoints, key and models. */
 export function ProviderSettings({
+  snapshot,
   act,
   onLoaded,
 }: {
+  snapshot?: Snapshot;
   act: Action;
   onLoaded?: (data: ProviderConfiguration) => void;
 }) {
   const [data, setData] = useState<ProviderConfiguration>(),
     [editing, setEditing] = useState<Provider | null | false>(false),
-    [modelProvider, setModelProvider] = useState(""),
     [error, setError] = useState(""),
     [notice, setNotice] = useState("");
   const load = useCallback(async () => {
@@ -50,23 +112,21 @@ export function ProviderSettings({
   useEffect(() => {
     void load().catch((e: Error) => setError(e.message));
   }, [load]);
-  const run = async (work: () => Promise<unknown>, done?: string) => {
+  const run = async (work: () => Promise<unknown>, done?: string | (() => string | undefined)) => {
     setError("");
     setNotice("");
     await act(async () => {
       try {
         await work();
         await load();
-        if (done) setNotice(done);
+        const message = typeof done === "function" ? done() : done;
+        if (message) setNotice(message);
       } catch (e) {
         setError(e instanceof Error ? e.message : "操作失败，请重试。");
       }
     });
   };
 
-  const activeProvider = data?.providers.some((provider) => provider.id === modelProvider)
-    ? modelProvider
-    : "";
   return (
     <SettingsPage
       title="模型来源"
@@ -114,39 +174,14 @@ export function ProviderSettings({
         <ProviderCard
           key={p.id}
           provider={p}
+          providers={data.providers}
+          bindings={data.bindings}
+          snapshot={snapshot}
           models={data.models.filter((m) => m.providerId === p.id)}
-          usedBy={data.bindings.filter((b) => b.providerId === p.id).length}
           onEdit={() => setEditing(p)}
           run={run}
         />
       ))}
-      {data && data.models.length > 0 && (
-        <SettingsSection
-          title="模型"
-          actions={
-            <SxSelect
-              ariaLabel="模型来源筛选"
-              value={activeProvider}
-              onChange={setModelProvider}
-              options={[
-                { value: "", label: "全部来源" },
-                ...data.providers.map((provider) => ({
-                  value: provider.id,
-                  label: provider.name,
-                })),
-              ]}
-            />
-          }
-        >
-          <ModelTable
-            models={data.models.filter(
-              (model) => !activeProvider || model.providerId === activeProvider,
-            )}
-            providers={data.providers}
-            run={run}
-          />
-        </SettingsSection>
-      )}
       {data && (
         <p className="sx-note">
           模型资料：{data.catalog.source.includes("models.dev") ? "models.dev" : "内置目录"} ·{" "}
@@ -161,21 +196,571 @@ export function ProviderSettings({
 
 function ProviderCard({
   provider: p,
+  providers,
+  bindings,
+  snapshot,
   models,
-  usedBy,
   onEdit,
   run,
 }: {
   provider: Provider;
+  providers: Provider[];
+  bindings: HarnessBinding[];
+  snapshot?: Snapshot;
   models: CatalogModel[];
-  usedBy: number;
   onEdit: () => void;
-  run: (work: () => Promise<unknown>, done?: string) => Promise<void>;
+  run: (work: () => Promise<unknown>, done?: string | (() => string | undefined)) => Promise<void>;
 }) {
   const [adding, setAdding] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [busyApply, setBusyApply] = useState(false);
+  const { settings, update: updatePreferences } = useAppPreferences();
+  const [applyError, setApplyError] = useState("");
+  const [selectedEndpointId, setSelectedEndpointId] = useState<string>("all");
+  const [endpointChoices, setEndpointChoices] = useState<Partial<Record<HarnessId, string>>>({});
+  const [expandedConfigId, setExpandedConfigId] = useState<HarnessId | null>(null);
   const [newModel, setNewModel] = useState("");
+  const [modelsOpen, setModelsOpen] = useState(true);
+  const [query, setQuery] = useState("");
   const failed = p.discovery?.some((d) => d.status === "error");
   const endpoint = p.endpoints[0];
+  const allBindings = snapshot?.bindings ?? bindings;
+  const harnessBindingIds = snapshot?.bindingDefaults.harnessBindingIds ?? {};
+  const activeBindingFor = (harnessId: HarnessId) => {
+    const id = harnessBindingIds[harnessId];
+    return id ? allBindings.find((b) => b.id === id) : undefined;
+  };
+  const compatibleHarnesses = [...(snapshot?.harnesses ?? [])]
+    .filter((h) => p.endpoints.some((e) => isHarnessEndpointCompatible(h.id, e.protocol)))
+    .sort((a, b) => Number(Boolean(b.health?.launchable)) - Number(Boolean(a.health?.launchable)));
+  const activeHarnesses = compatibleHarnesses.filter(
+    (h) => activeBindingFor(h.id)?.providerId === p.id,
+  );
+  const usedBy = snapshot
+    ? activeHarnesses.length
+    : bindings.filter((b) => b.providerId === p.id).length;
+
+  const lockedEndpoint =
+    selectedEndpointId === "all" ? undefined : p.endpoints.find((e) => e.id === selectedEndpointId);
+  const modalCompatibleHarnesses = lockedEndpoint
+    ? compatibleHarnesses.filter((h) => isHarnessEndpointCompatible(h.id, lockedEndpoint.protocol))
+    : compatibleHarnesses;
+
+  const chosenEndpointFor = (harnessId: HarnessId) => {
+    if (lockedEndpoint && isHarnessEndpointCompatible(harnessId, lockedEndpoint.protocol)) {
+      return lockedEndpoint;
+    }
+    const compat = p.endpoints.filter((e) => isHarnessEndpointCompatible(harnessId, e.protocol));
+    const current = activeBindingFor(harnessId);
+    const preferredId =
+      endpointChoices[harnessId] ?? (current?.providerId === p.id ? current.endpointId : undefined);
+    const nativeDefault = compat.find((e) =>
+      HARNESS_PROVIDER_PROTOCOLS[harnessId].includes(e.protocol),
+    );
+    return compat.find((e) => e.id === preferredId) ?? nativeDefault ?? compat[0];
+  };
+
+  const modelsForEndpoint = (endpointId?: string, binding?: HarnessBinding) => {
+    const fromCatalog = endpointId
+      ? models.filter((m) => m.endpointId === endpointId).map((m) => m.model)
+      : models.map((m) => m.model);
+    const fromBinding =
+      binding && binding.providerId === p.id && (!endpointId || binding.endpointId === endpointId)
+        ? (binding.availableModels ?? []).map((m) => m.model)
+        : [];
+    return [...new Set([...fromBinding, ...fromCatalog])].sort();
+  };
+
+  const pruneStalePreset = async (harnessId: HarnessId, endpointId: string) => {
+    const validSet = new Set(modelsForEndpoint(endpointId));
+    if (validSet.size === 0) return;
+    await updatePreferences((current) => {
+      const existing = current.harnessDefaults?.[harnessId];
+      const pruned = pruneHarnessDefaultsForModels(existing, validSet);
+      if (!pruned || pruned === existing) return current;
+      const all: AppSettings["harnessDefaults"] = { ...current.harnessDefaults };
+      if (
+        !pruned.model &&
+        !pruned.reasoning &&
+        !pruned.permissionMode &&
+        !Object.keys(pruned.modelMap ?? {}).length
+      ) {
+        delete all[harnessId];
+      } else {
+        all[harnessId] = pruned;
+      }
+      return { ...current, harnessDefaults: all };
+    });
+  };
+
+  const updateHarnessModelMap = (
+    harnessId: HarnessId,
+    mutate: (
+      prev: Partial<Record<ClaudeModelSlot, string>>,
+    ) => Partial<Record<ClaudeModelSlot, string>>,
+  ) => {
+    setApplyError("");
+    void updatePreferences((current) => {
+      const existing = current.harnessDefaults?.[harnessId] ?? {
+        model: null,
+        reasoning: null,
+        permissionMode: null,
+        modelMap: {},
+      };
+      const nextMap = mutate({ ...(existing.modelMap ?? {}) });
+      const all: AppSettings["harnessDefaults"] = { ...current.harnessDefaults };
+      all[harnessId] = { ...existing, modelMap: nextMap };
+      return { ...current, harnessDefaults: all };
+    }).catch((e: Error) => setApplyError(e.message));
+  };
+
+  const updateHarnessDefaultModel = (harnessId: HarnessId, model: string | null) => {
+    setApplyError("");
+    void updatePreferences((current) => {
+      const existing = current.harnessDefaults?.[harnessId] ?? {
+        model: null,
+        reasoning: null,
+        permissionMode: null,
+        modelMap: {},
+      };
+      const next = { ...existing, model };
+      const all: AppSettings["harnessDefaults"] = { ...current.harnessDefaults };
+      if (
+        !next.model &&
+        !next.reasoning &&
+        !next.permissionMode &&
+        !Object.keys(next.modelMap ?? {}).length
+      ) {
+        delete all[harnessId];
+      } else {
+        all[harnessId] = next;
+      }
+      return { ...current, harnessDefaults: all };
+    }).catch((e: Error) => setApplyError(e.message));
+  };
+
+  const applyToHarness = async (
+    harnessId: HarnessId,
+    harnessName: string,
+    targetEndpointId?: string,
+  ) => {
+    const chosen =
+      (targetEndpointId ? p.endpoints.find((e) => e.id === targetEndpointId) : undefined) ??
+      chosenEndpointFor(harnessId);
+    if (!chosen) return;
+    setApplyError("");
+    setBusyApply(true);
+    try {
+      const current = activeBindingFor(harnessId);
+      const enforceEndpoint = Boolean(targetEndpointId || lockedEndpoint);
+      const alreadySame =
+        current?.providerId === p.id && (!enforceEndpoint || current.endpointId === chosen.id);
+      let localErr = "";
+      await run(
+        async () => {
+          const fresh = await api<Snapshot>("/snapshot");
+          try {
+            if (alreadySame) {
+              await api("/binding-defaults", "PATCH", {
+                expectedRevision: fresh.bindingDefaults.revision,
+                harnessBindingIds: {
+                  ...fresh.bindingDefaults.harnessBindingIds,
+                  [harnessId]: null,
+                },
+              });
+            } else {
+              await api("/harness-provider-bindings", "POST", {
+                harnessId,
+                providerId: p.id,
+                endpointId: chosen.id,
+                expectedDefaultsRevision: fresh.bindingDefaults.revision,
+                requestId: crypto.randomUUID(),
+              });
+            }
+          } catch (e) {
+            localErr = e instanceof Error ? e.message : "应用失败，请重试。";
+            throw e;
+          }
+        },
+        alreadySame
+          ? `已将 ${harnessName} 恢复为原生配置`
+          : `已将「${p.name}」应用到 ${harnessName}`,
+      );
+      if (localErr) {
+        setApplyError(localErr);
+      } else if (alreadySame) {
+        setExpandedConfigId((prev) => (prev === harnessId ? null : prev));
+      } else {
+        await pruneStalePreset(harnessId, chosen.id).catch(() => {});
+        if (harnessSupportsModelMap(harnessId)) setExpandedConfigId(harnessId);
+      }
+    } finally {
+      setBusyApply(false);
+    }
+  };
+
+  const isAppliedOnTarget = (harnessId: HarnessId) => {
+    const active = activeBindingFor(harnessId);
+    if (!active || active.providerId !== p.id) return false;
+    if (lockedEndpoint) return active.endpointId === lockedEndpoint.id;
+    return true;
+  };
+
+  const unappliedReadyHarnesses = modalCompatibleHarnesses.filter(
+    (h) => h.health?.launchable && !isAppliedOnTarget(h.id),
+  );
+
+  const applyToAllReady = async () => {
+    if (!unappliedReadyHarnesses.length || busyApply) return;
+    setApplyError("");
+    setBusyApply(true);
+    const failures: string[] = [];
+    const appliedEndpoints: Array<{ harnessId: HarnessId; endpointId: string }> = [];
+    let appliedCount = 0;
+    try {
+      await run(
+        async () => {
+          for (const h of unappliedReadyHarnesses) {
+            const ep = chosenEndpointFor(h.id);
+            if (!ep) continue;
+            try {
+              const fresh = await api<Snapshot>("/snapshot");
+              await api("/harness-provider-bindings", "POST", {
+                harnessId: h.id,
+                providerId: p.id,
+                endpointId: ep.id,
+                expectedDefaultsRevision: fresh.bindingDefaults.revision,
+                requestId: crypto.randomUUID(),
+              });
+              appliedCount += 1;
+              appliedEndpoints.push({ harnessId: h.id, endpointId: ep.id });
+            } catch (e) {
+              failures.push(`${h.name}：${e instanceof Error ? e.message : "应用失败"}`);
+            }
+          }
+        },
+        () => (appliedCount > 0 ? `已将「${p.name}」应用到 ${appliedCount} 个引擎` : undefined),
+      );
+      for (const item of appliedEndpoints) {
+        await pruneStalePreset(item.harnessId, item.endpointId).catch(() => {});
+      }
+      const mapped = appliedEndpoints.find((item) => harnessSupportsModelMap(item.harnessId));
+      if (mapped) setExpandedConfigId(mapped.harnessId);
+      if (failures.length) setApplyError(failures.join("；"));
+    } finally {
+      setBusyApply(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!applying) {
+      setExpandedConfigId(null);
+      setSelectedEndpointId("all");
+      return;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        setApplying(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [applying]);
+
+  const readyHarnesses = modalCompatibleHarnesses.filter((h) => h.health?.launchable);
+  const uninstalledHarnesses = modalCompatibleHarnesses.filter((h) => !h.health?.launchable);
+
+  const renderApplyRow = (h: Snapshot["harnesses"][number]) => {
+    const compatEndpoints = p.endpoints.filter((e) =>
+      isHarnessEndpointCompatible(h.id, e.protocol),
+    );
+    const activeBinding = activeBindingFor(h.id);
+    const isAppliedToProvider = activeBinding?.providerId === p.id;
+    const isApplied = isAppliedOnTarget(h.id);
+    const chosenEp = chosenEndpointFor(h.id);
+    const currentProviderEp =
+      isAppliedToProvider && activeBinding
+        ? p.endpoints.find((e) => e.id === activeBinding.endpointId)
+        : undefined;
+    const isOtherEndpointOfSameProvider =
+      Boolean(lockedEndpoint) && isAppliedToProvider && !isApplied && Boolean(currentProviderEp);
+    const supportsMap = harnessSupportsModelMap(h.id);
+    const epModels = modelsForEndpoint(chosenEp?.id, activeBinding);
+    const preset = settings.harnessDefaults?.[h.id];
+    const map = preset?.modelMap ?? {};
+    const mappedEntries = Object.entries(map).filter(([, v]) => Boolean(v));
+    const staleMapCount = mappedEntries.filter(
+      ([, v]) => Boolean(v) && !epModels.includes(v!),
+    ).length;
+    const activeDefaultModel = isApplied
+      ? supportsMap
+        ? (map.main ?? activeBinding?.model)
+        : (preset?.model ?? activeBinding?.model)
+      : null;
+    const canConfigure = isApplied && (supportsMap || epModels.length > 1);
+    const showInlineEndpointSelect = !lockedEndpoint && compatEndpoints.length > 1;
+    const isExpanded = isApplied && expandedConfigId === h.id;
+    const otherProvider =
+      activeBinding && activeBinding.providerId !== p.id
+        ? (providers.find((item) => item.id === activeBinding.providerId)?.name ??
+          activeBinding.name.split(" · ")[0])
+        : null;
+    const subtext = isApplied
+      ? supportsMap
+        ? activeDefaultModel
+          ? `主模型：${shortModelLabel(activeDefaultModel)}${mappedEntries.length > 1 ? ` · 已自定义 ${mappedEntries.length} 档` : "（其余同主模型）"}`
+          : `已将「${p.name}」设为默认`
+        : activeDefaultModel
+          ? `默认模型：${shortModelLabel(activeDefaultModel)}`
+          : `已将「${p.name}」设为默认`
+      : isOtherEndpointOfSameProvider && currentProviderEp && lockedEndpoint
+        ? `当前使用 ${endpointDisplayLabel(currentProviderEp, p.endpoints, h.id)}，开启后将切换为 ${protocolShort(lockedEndpoint.protocol)}`
+        : otherProvider
+          ? `当前使用 ${otherProvider}，开启后将切换`
+          : h.health?.launchable
+            ? supportsMap
+              ? "当前使用原生配置 · 开启后可配置角色模型映射"
+              : "当前使用原生配置"
+            : "当前未安装，仍可预先配置";
+
+    return (
+      <div
+        key={h.id}
+        className={`sx-apply-row ${isApplied ? "is-active" : ""} ${isExpanded ? "is-expanded" : ""}`}
+      >
+        <div className="sx-apply-row__head">
+          <button
+            type="button"
+            className="sx-apply-row__btn"
+            aria-pressed={isApplied}
+            disabled={busyApply}
+            onClick={() => void applyToHarness(h.id, h.name, lockedEndpoint?.id)}
+          >
+            <HarnessBadge harnessId={h.id} size="sm" tone="tinted" />
+            <span className="sx-apply-row__text">
+              <span className="sx-apply-row__title">
+                <strong>{h.name}</strong>
+                {isApplied ? (
+                  <span className="sx-apply-status is-applied">已应用</span>
+                ) : isOtherEndpointOfSameProvider && currentProviderEp ? (
+                  <span className="sx-apply-status is-other">
+                    当前 {protocolShort(currentProviderEp.protocol)}
+                  </span>
+                ) : otherProvider ? (
+                  <span className="sx-apply-status is-other">{otherProvider}</span>
+                ) : supportsMap ? (
+                  <span className="sx-apply-status is-map">支持映射</span>
+                ) : null}
+                {!showInlineEndpointSelect &&
+                  chosenEp &&
+                  p.endpoints.length > 1 &&
+                  !lockedEndpoint && (
+                    <span className="sx-apply-status is-proto">
+                      {protocolShort(chosenEp.protocol)}
+                    </span>
+                  )}
+                {isApplied && staleMapCount > 0 && (
+                  <span className="sx-apply-status is-warn">需核对映射</span>
+                )}
+              </span>
+              <small>{subtext}</small>
+            </span>
+          </button>
+
+          <div className="sx-apply-row__right">
+            {showInlineEndpointSelect && (
+              <select
+                className="sx-apply-ep-select"
+                aria-label={`${h.name} 使用的端点协议`}
+                value={chosenEp?.id ?? ""}
+                disabled={busyApply}
+                onChange={(e) => {
+                  const nextEpId = e.target.value;
+                  setEndpointChoices((prev) => ({ ...prev, [h.id]: nextEpId }));
+                  if (isAppliedToProvider) void applyToHarness(h.id, h.name, nextEpId);
+                }}
+              >
+                {compatEndpoints.map((ep) => (
+                  <option key={ep.id} value={ep.id}>
+                    {endpointDisplayLabel(ep, p.endpoints, h.id)}
+                  </option>
+                ))}
+              </select>
+            )}
+            {canConfigure && (
+              <button
+                type="button"
+                className={`sx-apply-cfg-btn ${isExpanded ? "is-open" : ""}`}
+                aria-expanded={isExpanded}
+                aria-label={supportsMap ? `配置 ${h.name} 模型映射` : `配置 ${h.name} 默认模型`}
+                onClick={() => setExpandedConfigId((prev) => (prev === h.id ? null : h.id))}
+              >
+                <span>
+                  {supportsMap
+                    ? mappedEntries.length > 0
+                      ? `映射 ${mappedEntries.length}/5`
+                      : "模型映射"
+                    : "选模型"}
+                </span>
+                <ChevronDown size={12} className="sx-apply-cfg-btn__chevron" />
+              </button>
+            )}
+            <button
+              type="button"
+              className="sx-apply-switch-hit"
+              role="switch"
+              aria-checked={isApplied}
+              aria-label={
+                isApplied ? `取消 ${h.name} 的「${p.name}」配置` : `将「${p.name}」应用到 ${h.name}`
+              }
+              disabled={busyApply}
+              onClick={() => void applyToHarness(h.id, h.name, lockedEndpoint?.id)}
+            >
+              <span className={`sx-ios-switch ${isApplied ? "is-on" : ""}`} aria-hidden="true">
+                <span className="sx-ios-switch__thumb" />
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {isExpanded && (
+          <div className="sx-apply-drawer" aria-label={`${h.name} 模型配置`}>
+            {compatEndpoints.length > 1 && (
+              <div className="sx-apply-drawer__row">
+                <label className="sx-apply-drawer__label" htmlFor={`apply-ep-${p.id}-${h.id}`}>
+                  <span>端点协议</span>
+                  <small>切换后立即生效并同步可用模型</small>
+                </label>
+                <select
+                  id={`apply-ep-${p.id}-${h.id}`}
+                  className="sx-apply-drawer__select"
+                  value={chosenEp?.id ?? ""}
+                  disabled={busyApply}
+                  onChange={(e) => {
+                    const nextEpId = e.target.value;
+                    setEndpointChoices((prev) => ({ ...prev, [h.id]: nextEpId }));
+                    void applyToHarness(h.id, h.name, nextEpId);
+                  }}
+                >
+                  {compatEndpoints.map((ep) => (
+                    <option key={ep.id} value={ep.id}>
+                      {endpointDisplayLabel(ep, p.endpoints, h.id)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {supportsMap ? (
+              <>
+                <div className="sx-apply-drawer__head">
+                  <span>角色模型映射</span>
+                  <div className="sx-apply-drawer__tools">
+                    <button
+                      type="button"
+                      className="sx-apply-mini-btn"
+                      disabled={epModels.length === 0}
+                      onClick={() =>
+                        updateHarnessModelMap(h.id, () =>
+                          suggestClaudeModelMap(epModels, activeBinding?.model),
+                        )
+                      }
+                    >
+                      <Sparkles size={11} /> 智能匹配
+                    </button>
+                    {mappedEntries.length > 0 && (
+                      <button
+                        type="button"
+                        className="sx-apply-mini-btn"
+                        onClick={() => updateHarnessModelMap(h.id, () => ({}))}
+                      >
+                        恢复同主模型
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="sx-apply-map-list">
+                  {CLAUDE_MODEL_MAP_SLOTS.map(({ slot, shortLabel, hint }) => {
+                    const val = map[slot] ?? "";
+                    const isStale = Boolean(val) && !epModels.includes(val);
+                    const selectId = `apply-map-${p.id}-${h.id}-${slot}`;
+                    return (
+                      <div key={slot} className="sx-apply-drawer__row">
+                        <label className="sx-apply-drawer__label" htmlFor={selectId} title={hint}>
+                          <span>{shortLabel}</span>
+                          <small>{hint}</small>
+                        </label>
+                        <select
+                          id={selectId}
+                          className={`sx-apply-drawer__select ${isStale ? "is-stale" : ""}`}
+                          value={val}
+                          onChange={(e) => {
+                            const nextVal = e.target.value;
+                            updateHarnessModelMap(h.id, (prev) => {
+                              if (nextVal) prev[slot] = nextVal;
+                              else delete prev[slot];
+                              return prev;
+                            });
+                          }}
+                        >
+                          <option value="">
+                            {slot === "main"
+                              ? `来源默认（${shortModelLabel(activeBinding?.model ?? epModels[0] ?? "")}）`
+                              : "同主模型"}
+                          </option>
+                          {isStale && <option value={val}>⚠ {val}（当前来源无此模型）</option>}
+                          {epModels.map((m) => (
+                            <option key={m} value={m}>
+                              {m}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            ) : (
+              <div className="sx-apply-drawer__row">
+                <label className="sx-apply-drawer__label" htmlFor={`apply-model-${p.id}-${h.id}`}>
+                  <span>新对话默认模型</span>
+                  <small>留空则使用当前来源的默认模型</small>
+                </label>
+                <select
+                  id={`apply-model-${p.id}-${h.id}`}
+                  className="sx-apply-drawer__select"
+                  value={preset?.model ?? ""}
+                  onChange={(e) => updateHarnessDefaultModel(h.id, e.target.value || null)}
+                >
+                  <option value="">
+                    来源默认（{shortModelLabel(activeBinding?.model ?? epModels[0] ?? "")}）
+                  </option>
+                  {preset?.model && !epModels.includes(preset.model) && (
+                    <option value={preset.model}>⚠ {preset.model}（当前来源无此模型）</option>
+                  )}
+                  {epModels.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const trimmedQuery = query.trim().toLowerCase();
+  const visibleModels = trimmedQuery
+    ? models.filter(
+        (m) =>
+          m.model.toLowerCase().includes(trimmedQuery) ||
+          (m.name?.toLowerCase().includes(trimmedQuery) ?? false),
+      )
+    : models;
   return (
     <SettingsSection
       title={
@@ -188,12 +773,32 @@ function ProviderCard({
               <StatusDot tone="ok">已连接</StatusDot>
             )}
             <span className="sx-tag">{models.length} 个模型</span>
-            <span className="sx-tag">{usedBy ? `${usedBy} 个引擎在用` : "尚未被引擎使用"}</span>
+            <button
+              type="button"
+              className={`sx-tag sx-tag--btn ${applying ? "is-active" : ""}`}
+              onClick={() => {
+                setApplying((v) => !v);
+                setApplyError("");
+              }}
+            >
+              {usedBy ? `${usedBy} 个引擎在用` : "尚未被引擎使用"}
+            </button>
           </div>
         </div>
       }
       actions={
         <>
+          <button
+            type="button"
+            className={`quiet-btn ${applying ? "is-active" : ""}`}
+            aria-haspopup="dialog"
+            onClick={() => {
+              setApplying(true);
+              setApplyError("");
+            }}
+          >
+            <Link2 size={12} /> 应用到
+          </button>
           <button type="button" className="quiet-btn" onClick={() => setAdding((v) => !v)}>
             <Plus size={12} /> 手动添加
           </button>
@@ -254,6 +859,165 @@ function ProviderCard({
         ))}
       </div>
 
+      {applying &&
+        createPortal(
+          <div
+            className="sx-apply-backdrop"
+            role="presentation"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) setApplying(false);
+            }}
+          >
+            <div
+              className="sx-apply-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-label={`将 ${p.name} 应用到引擎`}
+            >
+              <div className="sx-apply-modal__handle" aria-hidden="true" />
+              <header className="sx-apply-modal__head">
+                <div className="sx-apply-modal__copy">
+                  <div className="sx-apply-modal__title-row">
+                    <h3>应用到引擎</h3>
+                    <span className="sx-tag">{p.name}</span>
+                  </div>
+                  <p>开启即将此来源设为引擎默认，关闭后恢复原生配置。</p>
+                </div>
+                <button
+                  type="button"
+                  className="icon-button sx-apply-modal__close"
+                  aria-label="关闭"
+                  onClick={() => setApplying(false)}
+                >
+                  <X size={16} />
+                </button>
+              </header>
+
+              {p.endpoints.length > 1 ? (
+                <div className="sx-apply-ep-bar" role="tablist" aria-label="选择目标端点协议">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={selectedEndpointId === "all"}
+                    className={`sx-apply-ep-pill ${selectedEndpointId === "all" ? "is-active" : ""}`}
+                    onClick={() => setSelectedEndpointId("all")}
+                  >
+                    全部端点
+                  </button>
+                  {p.endpoints.map((ep) => {
+                    const count = modelsForEndpoint(ep.id).length;
+                    const active = selectedEndpointId === ep.id;
+                    return (
+                      <button
+                        key={ep.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={active}
+                        className={`sx-apply-ep-pill ${active ? "is-active" : ""}`}
+                        onClick={() => setSelectedEndpointId(ep.id)}
+                      >
+                        <span>{endpointDisplayLabel(ep, p.endpoints)}</span>
+                        <small>{count}</small>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : endpoint ? (
+                <div className="sx-apply-ep-single">
+                  <div className="sx-apply-ep-single__info">
+                    <span className="sx-protocol-badge">{protocolShort(endpoint.protocol)}</span>
+                    <code title={endpoint.baseUrl}>{endpoint.baseUrl}</code>
+                  </div>
+                  <button
+                    type="button"
+                    className="sx-apply-mini-btn"
+                    onClick={() => {
+                      setApplying(false);
+                      onEdit();
+                    }}
+                  >
+                    + 添加其他协议端点
+                  </button>
+                </div>
+              ) : null}
+
+              <div className="sx-apply-modal__body">
+                {models.length === 0 ? (
+                  <div className="sx-apply-empty">
+                    此来源还没有可用模型，请先关闭后点击「获取模型」或「手动添加」。
+                  </div>
+                ) : lockedEndpoint && modelsForEndpoint(lockedEndpoint.id).length === 0 ? (
+                  <div className="sx-apply-empty">
+                    「{endpointDisplayLabel(lockedEndpoint, p.endpoints)}
+                    」端点暂无可用模型，请先关闭后点击「获取模型 · {lockedEndpoint.name}
+                    」或手动添加。
+                  </div>
+                ) : modalCompatibleHarnesses.length === 0 ? (
+                  <div className="sx-apply-empty">当前没有与此端点协议兼容的引擎。</div>
+                ) : (
+                  <>
+                    {readyHarnesses.length > 0 && (
+                      <div className="sx-apply-section">
+                        <div className="sx-apply-section__label">
+                          <span>已安装兼容引擎</span>
+                          <span>
+                            {readyHarnesses.filter((h) => isAppliedOnTarget(h.id)).length} /{" "}
+                            {readyHarnesses.length}
+                          </span>
+                        </div>
+                        <div className="sx-apply-group">{readyHarnesses.map(renderApplyRow)}</div>
+                      </div>
+                    )}
+                    {uninstalledHarnesses.length > 0 && (
+                      <div className="sx-apply-section is-muted">
+                        <div className="sx-apply-section__label">
+                          <span>未安装引擎</span>
+                          <span>{uninstalledHarnesses.length}</span>
+                        </div>
+                        <div className="sx-apply-group">
+                          {uninstalledHarnesses.map(renderApplyRow)}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+                {applyError && (
+                  <p className="sx-provider-apply__error" role="alert">
+                    {applyError}
+                  </p>
+                )}
+              </div>
+
+              <footer className="sx-apply-modal__foot">
+                <div className="sx-apply-modal__foot-left">
+                  {models.length > 0 && unappliedReadyHarnesses.length > 0 ? (
+                    <button
+                      type="button"
+                      className="quiet-btn"
+                      disabled={busyApply}
+                      onClick={() => void applyToAllReady()}
+                    >
+                      应用到全部已安装 ({unappliedReadyHarnesses.length})
+                    </button>
+                  ) : (
+                    <span className="sx-apply-modal__summary">
+                      {usedBy > 0 ? `已应用到 ${usedBy} 个引擎` : "暂未应用到任何引擎"}
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="primary sx-apply-modal__done"
+                  onClick={() => setApplying(false)}
+                >
+                  完成
+                </button>
+              </footer>
+            </div>
+          </div>,
+          document.body,
+        )}
+
       {adding && endpoint && (
         <form
           className="sx-form sx-provider-add-form"
@@ -268,6 +1032,7 @@ function ProviderCard({
               });
               setNewModel("");
               setAdding(false);
+              setModelsOpen(true);
             }, "已添加");
           }}
         >
@@ -283,6 +1048,47 @@ function ProviderCard({
           </SettingsRow>
         </form>
       )}
+
+      <div className="sx-provider-models">
+        <div className="sx-provider-models__bar">
+          <button
+            type="button"
+            className={`sx-provider-models__toggle ${modelsOpen ? "is-open" : ""}`}
+            aria-expanded={modelsOpen}
+            onClick={() => setModelsOpen((v) => !v)}
+          >
+            <ChevronDown size={14} className="sx-provider-models__chevron" aria-hidden="true" />
+            <span>模型列表</span>
+            <span className="sx-provider-models__count">{models.length}</span>
+          </button>
+          {modelsOpen && models.length > 6 && (
+            <label className="sx-provider-models__search">
+              <Search size={13} aria-hidden="true" />
+              <input
+                type="search"
+                aria-label={`筛选 ${p.name} 的模型`}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="筛选模型…"
+              />
+            </label>
+          )}
+        </div>
+        {modelsOpen &&
+          (models.length === 0 ? (
+            <div className="sx-provider-models__empty">
+              此来源暂无模型，点击上方「获取模型」或「手动添加」。
+            </div>
+          ) : (
+            <ModelTable
+              provider={p}
+              models={visibleModels}
+              providers={providers}
+              emptyMessage={trimmedQuery ? `未找到匹配「${query.trim()}」的模型` : undefined}
+              run={run}
+            />
+          ))}
+      </div>
     </SettingsSection>
   );
 }
@@ -291,37 +1097,36 @@ function num(v?: number) {
   return v === undefined ? "—" : v.toLocaleString();
 }
 function ModelTable({
+  provider,
   models,
   providers,
+  emptyMessage,
   run,
 }: {
+  provider: Provider;
   models: CatalogModel[];
   providers: Provider[];
+  emptyMessage?: string;
   run: (work: () => Promise<unknown>, done?: string) => Promise<void>;
 }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [selectedSources, setSelectedSources] = useState<Record<string, string>>({});
+  const showEndpoint = provider.endpoints.length > 1;
+  const colCount = showEndpoint ? 7 : 6;
+  const endpointName = (model: CatalogModel) =>
+    provider.endpoints.find((item) => item.id === model.endpointId)?.name ?? model.endpointId;
   return (
     <div className="table-scroll sx-model-table-card">
       <table className="sx-table sx-model-table" aria-label="模型列表">
-        <colgroup>
-          <col style={{ width: "30%" }} />
-          <col style={{ width: "16%" }} />
-          <col style={{ width: "8%" }} />
-          <col style={{ width: "8%" }} />
-          <col style={{ width: "12%" }} />
-          <col style={{ width: "20%" }} />
-          <col style={{ width: "6%" }} />
-        </colgroup>
         <thead>
           <tr>
             <th>模型</th>
-            <th>来源</th>
+            {showEndpoint && <th>接口</th>}
             <th className="num">上下文</th>
             <th className="num">最大输出</th>
             <th>思考档位</th>
             <th>模型价格</th>
-            <th />
+            <th className="num" aria-label="操作" />
           </tr>
         </thead>
         <tbody>
@@ -333,13 +1138,21 @@ function ModelTable({
                 key={m.id}
                 model={m}
                 source={catalogModelSource(m, providers)}
+                colSpan={colCount}
                 onDone={() => setEditing(null)}
                 run={run}
               />
             ) : (
               <tr key={m.id}>
                 <td className="model-identity">
-                  <span className="sx-model-name">{m.model}</span>
+                  <div className="sx-model-name-row">
+                    <span className="sx-model-name" title={m.model}>
+                      {m.model}
+                    </span>
+                    {Object.keys(m.overrides).length > 0 && (
+                      <span className="sx-edited">已修改</span>
+                    )}
+                  </div>
                   <span className="provider-help">
                     {m.effective.input?.includes("image")
                       ? "文本 · 图片"
@@ -347,30 +1160,31 @@ function ModelTable({
                         ? "文本"
                         : "输入模态待确认"}
                   </span>
-                  {Object.keys(m.overrides).length > 0 && <span className="sx-edited">已修改</span>}
                 </td>
-                <td className="model-source" data-label="来源">
-                  {sources.length > 1 ? (
-                    <SxSelect
-                      compact
-                      ariaLabel={`模型 ${model} 的来源`}
-                      value={m.id}
-                      onChange={(nextId) => {
-                        setSelectedSources((previous) => ({
-                          ...previous,
-                          [model]: nextId,
-                        }));
-                        setEditing(null);
-                      }}
-                      options={sources.map((source) => ({
-                        value: source.id,
-                        label: catalogModelSource(source, providers),
-                      }))}
-                    />
-                  ) : (
-                    <span className="sx-source-pill">{catalogModelSource(m, providers)}</span>
-                  )}
-                </td>
+                {showEndpoint && (
+                  <td className="model-source" data-label="接口">
+                    {sources.length > 1 ? (
+                      <SxSelect
+                        compact
+                        ariaLabel={`模型 ${model} 的来源`}
+                        value={m.id}
+                        onChange={(nextId) => {
+                          setSelectedSources((previous) => ({
+                            ...previous,
+                            [model]: nextId,
+                          }));
+                          setEditing(null);
+                        }}
+                        options={sources.map((source) => ({
+                          value: source.id,
+                          label: endpointName(source),
+                        }))}
+                      />
+                    ) : (
+                      <span className="sx-source-pill">{endpointName(m)}</span>
+                    )}
+                  </td>
+                )}
                 <td className="num model-limit" data-label="上下文">
                   {num(m.effective.contextWindow)}
                 </td>
@@ -392,7 +1206,7 @@ function ModelTable({
                     <span className="sx-tier-none">—</span>
                   )}
                 </td>
-                <td className="model-pricing-cell">
+                <td className="model-pricing-cell" data-label="模型价格">
                   <ModelPricingSummary pricing={m.effective.pricing} />
                 </td>
                 <td className="num model-actions">
@@ -405,7 +1219,9 @@ function ModelTable({
           })}
           {models.length === 0 && (
             <tr>
-              <td colSpan={7}>此来源暂无模型</td>
+              <td colSpan={colCount} className="sx-provider-models__empty">
+                {emptyMessage ?? "此来源暂无模型"}
+              </td>
             </tr>
           )}
         </tbody>
@@ -417,11 +1233,13 @@ function ModelTable({
 function ModelEditRow({
   model: m,
   source,
+  colSpan,
   onDone,
   run,
 }: {
   model: CatalogModel;
   source: string;
+  colSpan: number;
   onDone: () => void;
   run: (work: () => Promise<unknown>, done?: string) => Promise<void>;
 }) {
@@ -448,7 +1266,7 @@ function ModelEditRow({
   const auto = m.automatic;
   return (
     <tr className="is-editing">
-      <td colSpan={7}>
+      <td colSpan={colSpan}>
         <form
           className="sx-model-editor"
           onSubmit={(event) => {

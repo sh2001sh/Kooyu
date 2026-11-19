@@ -29,9 +29,11 @@ test("an edited desktop draft remains open and readable after switching to phone
   const codexNativePermission = snapshot.harnesses.find(
     (item: { id: string; nativeDefaults?: { permission?: string | null } }) => item.id === "codex",
   )?.nativeDefaults?.permission;
-  await expect(page.getByRole("button", { name: "会话权限" })).toContainText(
-    codexNativePermission || "原生默认",
-  );
+  await page.getByRole("button", { name: "添加附件、权限或模板", exact: true }).click();
+  await expect(
+    page.getByRole("dialog", { name: "添加与设置" }).getByRole("button", { name: "会话权限" }),
+  ).toContainText(codexNativePermission || "原生默认");
+  await page.keyboard.press("Escape");
   await page.setViewportSize({ width: 320, height: 700 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
@@ -60,17 +62,17 @@ test("remote draft selects only node directories and keeps Host model bindings l
   await page.getByRole("button", { name: "Harness", exact: true }).click();
   await page.locator('.ios-popover [role="option"][data-value="codex"]').click();
   await page.getByLabel("执行节点", { exact: true }).selectOption(executor.id);
-  await page.setViewportSize({ width: 390, height: 960 });
   await page.getByRole("button", { name: "项目", exact: true }).click();
   await page.getByRole("option", { name: "Remote draft project", exact: true }).click();
   await expect(page.getByRole("button", { name: "工作位置", exact: true })).toHaveAttribute(
     "data-value",
     workspace.id,
   );
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByRole("button", { name: "工作位置", exact: true }).click();
-  await expect(page.getByRole("button", { name: "在工作中心登记节点目录" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "在自动化与通知登记节点目录" })).toBeDisabled();
   await page.getByRole("option").filter({ hasText: "Z:/worker-only-project" }).click();
+  await page.setViewportSize({ width: 390, height: 960 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await expect(page.getByRole("button", { name: "模型配置", exact: true })).toHaveCount(0);
   await page.getByRole("textbox", { name: "消息", exact: true }).fill("远程草稿验收");
   await page.screenshot({ path: testInfo.outputPath("remote-draft-phone.png") });

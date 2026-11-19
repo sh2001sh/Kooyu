@@ -1,5 +1,12 @@
 package app.kooyu.android
 
+import app.kooyu.android.ui.*
+import app.kooyu.android.ui.theme.*
+import app.kooyu.android.ui.components.*
+import app.kooyu.android.ui.home.*
+import app.kooyu.android.ui.conversation.*
+import app.kooyu.android.ui.screens.*
+
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.Instant
@@ -39,11 +46,13 @@ data class HostHarness(val id: String, val name: String, val modelSupport: Strin
 }
 data class UsageRecord(val id: String, val sessionId: String, val projectId: String?, val source: String,
     val scope: String, val input: Double?, val output: Double?, val cacheRead: Double?, val cacheWrite: Double?,
-    val costUsd: Double?, val costKind: String, val model: String?, val createdAt: String, val bindingId: String? = null) {
+    val costUsd: Double?, val costKind: String, val model: String?, val createdAt: String, val bindingId: String? = null,
+    val firstTokenMs: Double? = null, val durationMs: Double? = null) {
     val tokens get() = listOfNotNull(input, output, cacheRead, cacheWrite).sum()
     companion object { fun parse(o: JSONObject) = UsageRecord(o.getString("id"), o.getString("sessionId"), o.nullableString("projectId"),
         o.optString("source"), o.optString("scope"), o.nullableNumber("input"), o.nullableNumber("output"), o.nullableNumber("cacheRead"),
-        o.nullableNumber("cacheWrite"), o.nullableNumber("costUsd"), o.optString("costKind", "unknown"), o.nullableString("model"), o.optString("createdAt"), o.nullableString("bindingId")) }
+        o.nullableNumber("cacheWrite"), o.nullableNumber("costUsd"), o.optString("costKind", "unknown"), o.nullableString("model"), o.optString("createdAt"), o.nullableString("bindingId"),
+        o.nullableNumber("firstTokenMs"), o.nullableNumber("durationMs")) }
 }
 data class UsageReport(val records: List<UsageRecord>, val budgets: List<JSONObject>) {
     companion object { fun parse(o: JSONObject) = UsageReport(o.getJSONArray("records").objects().map(UsageRecord::parse), o.optJSONArray("budgets")?.objects() ?: emptyList()) }
@@ -139,3 +148,15 @@ fun composerReasoningLevels(selected: JSONObject?, binding: JSONObject?, current
     selected?.optJSONArray("reasoning")?.let { a -> (0 until a.length()).map { a.getString(it) } }
         ?: binding?.takeIf { current.isNullOrBlank() || current == it.nullableString("model") }
             ?.optJSONObject("parameters")?.let { providerReasoningLevels(it, harness) }.orEmpty()
+
+/** Native permission modes each harness accepts (mirrors desktop PermissionControls). */
+
+fun permissionChoices(harness: String): List<Pair<String, String>> = when (harness) {
+    "codex" -> listOf("read-only" to "只读", "workspace-write" to "工作区写入", "full-access" to "完全访问")
+    "claude-code" -> listOf("accept-edits" to "自动接受编辑", "bypass-permissions" to "跳过审批")
+    "kodo", "pi" -> listOf("kodo-tools-read" to "仅阅读工具", "kodo-tools-none" to "禁用工具")
+    "zcode" -> listOf("plan" to "Plan", "build" to "Build", "edit" to "Edit", "guarded" to "Guarded", "yolo" to "YOLO")
+    "kimi-code" -> listOf("kimi:manual" to "逐项审批", "kimi:auto" to "自动判断", "kimi:yolo" to "跳过审批")
+    "opencode" -> listOf("opencode-ask" to "逐次审批", "opencode-deny" to "禁用工具", "opencode-allow" to "允许工具")
+    else -> emptyList()
+}
