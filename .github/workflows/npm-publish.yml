@@ -84,7 +84,41 @@ jobs:
         with:
           name: npm-web-package
           path: release
+      - name: Use an npm CLI with current trusted publishing support
+        run: npm install -g npm@11.21.3
       - name: Publish the tested archive using npm trusted publishing
         env:
           NPM_DIST_TAG: ${{ needs.package.outputs.tag }}
-        run: npm publish release/kooyu-*.tgz --tag "$NPM_DIST_TAG" --access public --provenance
+        run: npm publish ./release/kooyu-*.tgz --tag "$NPM_DIST_TAG" --access public --provenance
+      - name: Verify the version is publicly installable
+        env:
+          NPM_VERSION: ${{ needs.package.outputs.version }}
+          NPM_DIST_TAG: ${{ needs.package.outputs.tag }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFile, readdir } from 'node:fs/promises';
+          import { createHash } from 'node:crypto';
+          import { setTimeout as delay } from 'node:timers/promises';
+          const archives = (await readdir('release')).filter(x => x.endsWith('.tgz'));
+          if (archives.length !== 1) throw new Error('Expected one tested npm archive.');
+          const expected = createHash('sha1').update(await readFile('release/' + archives[0])).digest('hex');
+          for (let attempt = 0; attempt < 40; attempt++) {
+            let data;
+            try {
+              const response = await fetch('https://registry.npmjs.org/kooyu', {
+                headers: { 'cache-control': 'no-cache' }, signal: AbortSignal.timeout(10000),
+              });
+              if (response.ok) data = await response.json();
+            } catch (error) { console.log('Registry verification retry:', error.message); }
+            const version = data?.versions?.[process.env.NPM_VERSION];
+            if (version) {
+              if (version.dist.shasum !== expected) throw new Error('Registry archive differs from the tested package.');
+              if (data['dist-tags'][process.env.NPM_DIST_TAG] === process.env.NPM_VERSION) {
+                console.log('Verified public npm package:', version.name + '@' + version.version);
+                process.exit(0);
+              }
+            }
+            await delay(10000);
+          }
+          throw new Error('npm accepted the upload but the version/tag is not publicly available; inspect staged publishing.');
+          NODE
