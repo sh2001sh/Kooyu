@@ -1,0 +1,90 @@
+name: npm Web releases
+on:
+  workflow_run:
+    workflows: [Native application releases]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: npm dist-tag (latest publishes the base version; next publishes a unique preview)
+        type: choice
+        options: [next, latest]
+        default: next
+permissions:
+  contents: read
+concurrency:
+  group: npm-web-publish
+  cancel-in-progress: false
+jobs:
+  package:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_repository.full_name == github.repository &&
+       (github.event.workflow_run.head_branch == 'main' || startsWith(github.event.workflow_run.head_branch, 'v')))
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      tag: ${{ steps.metadata.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.13.0
+          cache: npm
+      - id: metadata
+        run: node .github/scripts/npm-release.mjs >> "$GITHUB_OUTPUT"
+      - run: npm ci
+      - run: npm run package:npm
+        env:
+          KOOYU_NPM_VERSION: ${{ steps.metadata.outputs.version }}
+      - name: Pack the publishable archive
+        working-directory: release/npm
+        run: npm pack --pack-destination ..
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-web-package
+          path: release/kooyu-*.tgz
+          if-no-files-found: error
+  install:
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-24.04, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.13.0
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-web-package
+          path: release
+      - name: Install and start the exact archive on this platform
+        shell: bash
+        run: npm run verify:npm -- release/kooyu-*.tgz
+  publish:
+    needs: [package, install]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.13.0
+          registry-url: https://registry.npmjs.org/
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-web-package
+          path: release
+      - name: Publish the tested archive using npm trusted publishing
+        env:
+          NPM_DIST_TAG: ${{ needs.package.outputs.tag }}
+        run: npm publish release/kooyu-*.tgz --tag "$NPM_DIST_TAG" --access public --provenance

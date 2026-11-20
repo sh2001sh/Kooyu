@@ -243,6 +243,7 @@ export interface AppUpdaterOptions {
 }
 
 export class AppUpdater {
+  private readonly npmDistribution = process.env.KOOYU_DISTRIBUTION === "npm";
   private readonly fetcher: typeof fetch;
   private readonly currentVersion: string;
   private readonly platform: string;
@@ -325,6 +326,23 @@ export class AppUpdater {
 
   status(): AppUpdateStatus {
     const cfg = this.config();
+    if (this.npmDistribution)
+      return {
+        distribution: "npm",
+        updateCommand: "npm install -g kooyu@latest",
+        currentVersion: this.currentVersion,
+        platform: this.platform,
+        arch: this.arch,
+        channel: cfg.channel,
+        autoCheck: false,
+        repository: cfg.repository,
+        state: "idle",
+        checkedAt: null,
+        updateAvailable: false,
+        latest: null,
+        error: null,
+        download: emptyDownload(),
+      };
     const updateAvailable = Boolean(
       this.latest && isReleaseNewer(this.currentVersion, this.latest, cfg.channel),
     );
@@ -353,6 +371,7 @@ export class AppUpdater {
     channel?: "stable" | "preview";
     repository?: string;
   }): Promise<AppUpdateStatus> {
+    if (this.npmDistribution) return this.status();
     if (this.checkInFlight) return this.checkInFlight;
     const cfg = this.config();
     const channel = overrides?.channel ?? cfg.channel;
@@ -495,6 +514,11 @@ export class AppUpdater {
   }
 
   async startDownload(options?: { assetName?: string }): Promise<AppUpdateStatus> {
+    if (this.npmDistribution)
+      throw new KodoError(
+        "UNSUPPORTED",
+        "请停止 Kooyu，运行 npm install -g kooyu@latest 后重新启动；临时运行使用 npx kooyu@latest。",
+      );
     if (this.downloadState.state === "downloading" || this.downloadState.state === "verifying") {
       return this.status();
     }
@@ -646,6 +670,11 @@ export class AppUpdater {
   }
 
   async install(): Promise<{ launched: boolean; localPath: string; message: string }> {
+    if (this.npmDistribution)
+      throw new KodoError(
+        "UNSUPPORTED",
+        "npm 版本请使用 npm install -g kooyu@latest 更新，然后重新启动。",
+      );
     const dl = this.downloadState;
     if (dl.state !== "ready" || !dl.localPath) {
       throw new KodoError("CONFLICT", "更新包尚未下载就绪，请先下载更新。");

@@ -600,6 +600,8 @@ export interface AppUpdateDownloadState {
 }
 
 export interface AppUpdateStatus {
+  distribution?: "npm";
+  updateCommand?: string;
   currentVersion: string;
   platform: string;
   arch: string;

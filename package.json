@@ -53,7 +53,9 @@
     "verify:grok-native-tools": "node scripts/verify-grok-native-tools.mjs",
     "stage:desktop": "node scripts/stage-desktop.mjs",
     "package:desktop": "npm run build && npm run stage:desktop && electron-builder --config electron-builder.yml",
-    "package:desktop:dir": "npm run build && npm run stage:desktop && electron-builder --dir --config electron-builder.yml"
+    "package:desktop:dir": "npm run build && npm run stage:desktop && electron-builder --dir --config electron-builder.yml",
+    "package:npm": "npm run build:core && npm run build -w @kodo/web && node scripts/package-npm.mjs",
+    "verify:npm": "node scripts/verify-npm.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

@@ -138,6 +138,25 @@ export function UpdateSection() {
 
   const isChecking = checking || status?.state === "checking";
 
+  if (status?.distribution === "npm")
+    return (
+      <SettingsSection title={t("update.section")}>
+        <SettingsRow label={`Kooyu v${status.currentVersion} · npm`}>
+          <a href="https://www.npmjs.com/package/kooyu" target="_blank" rel="noreferrer">
+            npm
+          </a>
+        </SettingsRow>
+        <p className="sx-note">
+          停止当前服务后，在运行 Host 的设备上执行以下命令，再重新启动。应用数据会保留。
+        </p>
+        <pre>
+          <code>{status.updateCommand}</code>
+        </pre>
+        <p className="sx-note">
+          临时运行使用 <code>npx kooyu@latest</code>。
+        </p>
+      </SettingsSection>
+    );
   return (
     <SettingsSection title={t("update.section")}>
       <div className="sx-update-hero">
