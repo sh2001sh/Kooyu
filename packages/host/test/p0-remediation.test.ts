@@ -13,6 +13,9 @@ import { Store } from "../src/storage/store.js";
 import { AppUpdater } from "../src/updater.js";
 import { PreviewService } from "../src/workspaces/preview.js";
 
+const cleanupDir = (dir: string) =>
+  rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+
 test("kodo supervisor with workspace receives background job tools and stop() cleans up running jobs", async () => {
   const dir = mkdtempSync(join(tmpdir(), "kooyu-p0-bg-"));
   const store = new Store(join(dir, "kodo.sqlite"));
@@ -54,12 +57,20 @@ test("kodo supervisor with workspace receives background job tools and stop() cl
       sessionId: session.id,
       workspaceId: workspace.id,
       cwd: dir,
-      command: `"${process.execPath}" -e "setTimeout(() => {}, 30000)"`,
+      command: `"${process.execPath}" -e "console.log('ready'); setTimeout(() => {}, 30000)"`,
       background: true,
       notifyOnExit: false,
     });
     assert.equal(started.status, "running");
     assert.equal(service.backgroundJobs.runningForSession(session.id).length, 1);
+    const readyDeadline = Date.now() + 10_000;
+    while (
+      !service.backgroundJobs.output(started.jobId).output.includes("ready") &&
+      Date.now() < readyDeadline
+    ) {
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    assert.match(service.backgroundJobs.output(started.jobId).output, /ready/);
 
     await service.stop(session.id, true);
     assert.equal(service.backgroundJobs.runningForSession(session.id).length, 0);
@@ -68,7 +79,7 @@ test("kodo supervisor with workspace receives background job tools and stop() cl
   } finally {
     await service.dispose();
     store.close();
-    rmSync(dir, { recursive: true, force: true });
+    cleanupDir(dir);
   }
 });
 
@@ -114,7 +125,7 @@ test("supervision budgetUsd fails closed when usage has unknown cost (costUsd ==
   } finally {
     await service.dispose();
     store.close();
-    rmSync(dir, { recursive: true, force: true });
+    cleanupDir(dir);
   }
 });
 
@@ -201,7 +212,7 @@ test("pauseTargetInside cancels or prunes plural coalesced batch wakes", async (
   } finally {
     await service.dispose();
     store.close();
-    rmSync(dir, { recursive: true, force: true });
+    cleanupDir(dir);
   }
 });
 
@@ -260,7 +271,7 @@ test("ExecutionCapacity reserves 2 interactive slots by default and SCHEMA_V10 c
   } finally {
     await service.dispose();
     store.close();
-    rmSync(dir, { recursive: true, force: true });
+    cleanupDir(dir);
   }
 });
 
@@ -408,6 +419,6 @@ test("AppUpdater skips prepareInstall on macOS and rolls back prepareInstall if 
     assert.equal(winRolledBack, true, "Failed win32 installer launch must resume Host dispatch");
   } finally {
     store.close();
-    rmSync(dir, { recursive: true, force: true });
+    cleanupDir(dir);
   }
 });

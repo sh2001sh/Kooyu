@@ -66,6 +66,6 @@ for (const kind of ["uncaughtException", "unhandledRejection"])
       store.close();
     } finally {
       if (child.exitCode === null) child.kill();
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
     }
   });

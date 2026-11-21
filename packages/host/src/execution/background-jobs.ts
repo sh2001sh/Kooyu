@@ -34,11 +34,31 @@ export function killProcessTree(pid: number): Promise<void> {
   if (!Number.isSafeInteger(pid) || pid <= 0) return Promise.resolve();
   if (process.platform === "win32") {
     return new Promise((done) => {
+      const isAlive = () => {
+        try {
+          process.kill(pid, 0);
+          return true;
+        } catch (error) {
+          return (error as NodeJS.ErrnoException).code === "EPERM";
+        }
+      };
       execFile(
         "taskkill",
         ["/PID", String(pid), "/T", "/F"],
         { windowsHide: true, timeout: 10_000 },
-        () => done(),
+        () => {
+          if (!isAlive()) {
+            done();
+            return;
+          }
+          const deadline = Date.now() + 800;
+          const poll = setInterval(() => {
+            if (!isAlive() || Date.now() >= deadline) {
+              clearInterval(poll);
+              done();
+            }
+          }, 25);
+        },
       );
     });
   }
