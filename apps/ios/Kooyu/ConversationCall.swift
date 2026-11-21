@@ -71,7 +71,7 @@ struct ConversationCall: View {
                 for event in model.page?.events ?? [] where event.sequence > cursor {
                     cursor = event.sequence
                     guard event.type == "message", ["assistant", ""].contains(event.payload["role"].string), !event.text.isEmpty else { continue }
-                    voice.cancel()
+                    voice.cancel(deactivateSession: false)
                     status = "正在播报回复…"
                     speaker.speak(AVSpeechUtterance(string: event.text))
                 }

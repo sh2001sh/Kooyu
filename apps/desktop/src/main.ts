@@ -129,11 +129,15 @@ async function show() {
     } catch {}
     return { action: "deny" };
   });
-  window.webContents.on("will-navigate", (event, url) => {
-    if (new URL(url).origin !== new URL(hostUrl).origin) event.preventDefault();
-  });
   const devUrl = process.env.KOOYU_DEV_URL ?? process.env.KODO_DEV_URL;
   const allowedOrigin = new URL(devUrl ?? hostUrl).origin;
+  window.webContents.on("will-navigate", (event, url) => {
+    try {
+      if (new URL(url).origin !== allowedOrigin) event.preventDefault();
+    } catch {
+      event.preventDefault();
+    }
+  });
   window.webContents.session.setPermissionCheckHandler((_wc, permission, requestingOrigin) => {
     if (permission === "media") {
       try {

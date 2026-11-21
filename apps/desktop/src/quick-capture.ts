@@ -115,6 +115,7 @@ function buildHudHtml(isDark: boolean, clipPreview: string): string {
     };
     document.getElementById("send").addEventListener("click", () => submit(false));
     q.addEventListener("keydown", (e) => {
+      if (e.isComposing || e.keyCode === 229) return;
       if (e.key === "Escape") window.location.href = "kooyu-hud://close";
       if (e.key === "Enter") { e.preventDefault(); submit(e.shiftKey); }
     });
@@ -147,13 +148,16 @@ async function dispatchQuickCapture(
   )?.id;
 
   if (!targetId) {
-    const created = (await fetch(`${hostUrl}/api/sessions`, {
+    const createdResponse = await fetch(`${hostUrl}/api/sessions`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ title: "Kooyu 主助手", harnessId: "kodo", kind: "supervisor" }),
-    }).then((r) => r.json())) as { id: string };
+    });
+    if (!createdResponse.ok) return;
+    const created = (await createdResponse.json()) as { id?: string };
     targetId = created.id;
   }
+  if (!targetId) return;
 
   await fetch(`${hostUrl}/api/sessions/${targetId}/send`, {
     method: "POST",

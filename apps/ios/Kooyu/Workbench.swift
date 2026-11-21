@@ -50,18 +50,33 @@ import Observation
     }
     func removeDevice(_ id: String) {
         guard !busy else { return }
-        guard let connection = book.devices.first(where: {$0.hostId==id}) else {return}
-        busy=true
+        guard let connection = book.devices.first(where: { $0.hostId == id }) else { return }
+        busy = true
         Task {
-            defer {busy=false}
-            do {
-                if let credential=connection.cloud {
-                    let account=try CloudDevice(base:HostAPI.origin(connection.url),stored:credential)
+            defer { busy = false }
+            var cloudLogoutIncomplete = false
+            if let credential = connection.cloud {
+                do {
+                    let account = try CloudDevice(base: HostAPI.origin(connection.url), stored: credential)
                     try await account.logout()
+                } catch {
+                    let alreadyRevoked = (error as? APIError).map { $0.status == 401 || $0.status == 403 } ?? false
+                    if !alreadyRevoked { cloudLogoutIncomplete = true }
+                    await CloudDevice.clearLocalRenewal(credential)
                 }
-                let active=book.activeHostId==id
-                var next=book;next.remove(id);try commit(next);if active {reset(next)}
-            } catch {self.error=error.localizedDescription}
+            }
+            do {
+                let active = book.activeHostId == id
+                var next = book
+                next.remove(id)
+                try commit(next)
+                if active { reset(next) }
+                if cloudLogoutIncomplete {
+                    self.notice = "已从本机移除连接；未能联系账号服务注销云端会话，请稍后在官网或电脑端确认撤销。"
+                }
+            } catch {
+                self.error = error.localizedDescription
+            }
         }
     }
     func pair(url: String, code: String, name: String = "") async {

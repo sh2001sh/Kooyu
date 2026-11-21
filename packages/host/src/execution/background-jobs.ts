@@ -43,9 +43,11 @@ export function killProcessTree(pid: number): Promise<void> {
     });
   }
   return new Promise((done) => {
+    let group = true;
     try {
       process.kill(-pid, "SIGTERM");
     } catch {
+      group = false;
       try {
         process.kill(pid, "SIGTERM");
       } catch {
@@ -53,17 +55,33 @@ export function killProcessTree(pid: number): Promise<void> {
         return;
       }
     }
-    const timer = setTimeout(() => {
+    const isAlive = () => {
       try {
-        process.kill(-pid, "SIGKILL");
-      } catch {
-        try {
-          process.kill(pid, "SIGKILL");
-        } catch {}
+        process.kill(group ? -pid : pid, 0);
+        return true;
+      } catch (error) {
+        return (error as NodeJS.ErrnoException).code === "EPERM";
       }
-      done();
-    }, 800);
-    timer.unref();
+    };
+    const deadline = Date.now() + 800;
+    const poll = setInterval(() => {
+      if (!isAlive()) {
+        clearInterval(poll);
+        done();
+        return;
+      }
+      if (Date.now() >= deadline) {
+        clearInterval(poll);
+        try {
+          process.kill(-pid, "SIGKILL");
+        } catch {
+          try {
+            process.kill(pid, "SIGKILL");
+          } catch {}
+        }
+        done();
+      }
+    }, 25);
   });
 }
 
@@ -402,13 +420,14 @@ export class BackgroundJobManager {
       live.killing = (async () => {
         if (live.record.pid) await killProcessTree(live.record.pid);
         else live.child.kill("SIGKILL");
+        let fallbackTimer: ReturnType<typeof setTimeout> | undefined;
         await Promise.race([
           live.exited,
           new Promise<void>((done) => {
-            const t = setTimeout(done, 3000);
-            t.unref();
+            fallbackTimer = setTimeout(done, 3000);
           }),
         ]);
+        if (fallbackTimer) clearTimeout(fallbackTimer);
       })();
     }
     await live.killing;

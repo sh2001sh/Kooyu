@@ -173,13 +173,13 @@ private func computeBufferLevel(_ buffer: AVAudioPCMBuffer) -> Float {
         }
     }
 
-    func cancel() {
+    func cancel(deactivateSession: Bool = true) {
         generation += 1
         cancelled = true
         interim = ""
         error = ""
         task?.cancel()
-        cleanup()
+        cleanup(deactivateSession: deactivateSession)
     }
 
     func clearError() {
@@ -197,7 +197,7 @@ private func computeBufferLevel(_ buffer: AVAudioPCMBuffer) -> Float {
         }
     }
 
-    private func cleanup() {
+    private func cleanup(deactivateSession: Bool = true) {
         if let engine = audioEngine {
             if engine.isRunning { engine.stop() }
             engine.inputNode.removeTap(onBus: 0)
@@ -209,6 +209,8 @@ private func computeBufferLevel(_ buffer: AVAudioPCMBuffer) -> Float {
         task = nil
         listening = false
         level = 0.2
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        if deactivateSession {
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        }
     }
 }

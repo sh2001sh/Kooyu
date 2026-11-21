@@ -44,11 +44,42 @@ function protectedStorage() {
 }
 
 export async function forgetPairedDesktop() {
+  if (!protectedStorage()) throw new Error("系统凭据库不可用，无法读取已保存的远程连接。");
   const path = connectionFile();
-  const load = (): RemoteConnection => JSON.parse(safeStorage.decryptString(readFileSync(path)));
+  const load = (): RemoteConnection | undefined => {
+    try {
+      return JSON.parse(safeStorage.decryptString(readFileSync(path)));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+      throw error;
+    }
+  };
   const current = load();
-  await new DesktopAccount(new URL(current.base), current.credential).logout();
-  if (load().credential.key === current.credential.key) unlinkSync(path);
+  if (!current) throw new Error("尚未连接过远程电脑。");
+  let logoutError: unknown;
+  try {
+    await new DesktopAccount(new URL(current.base), current.credential).logout();
+  } catch (error) {
+    const revoked =
+      error instanceof Error &&
+      (error.message.includes("(401)") || error.message.includes("(403)"));
+    if (!revoked) logoutError = error;
+  }
+  if (load()?.credential.key === current.credential.key) {
+    try {
+      unlinkSync(path);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+  }
+  if (logoutError) {
+    throw new Error(
+      "已清除本机连接记录，但未能联系账号服务注销云端会话，请稍后在账号中心确认撤销。",
+      {
+        cause: logoutError,
+      },
+    );
+  }
 }
 
 export async function reopenPairedDesktop(localHost: string) {

@@ -127,8 +127,9 @@ try {
         { name: "Google", protocol: "google-generative-ai", baseUrl: "http://127.0.0.1:1" },
       ],
     });
-    for (const e of p.endpoints)
-      await api("/provider-models", {
+    const modelsByEndpoint = {};
+    for (const e of p.endpoints) {
+      modelsByEndpoint[e.name] = await api("/provider-models", {
         providerId: p.id,
         endpointId: e.id,
         model: `synthetic-${e.name}`,
@@ -140,20 +141,30 @@ try {
           input: ["text"],
         },
       });
-    await page.getByRole("button", { name: "Harness 与配置", exact: true }).first().click();
+    }
+    await page
+      .getByRole("button", { name: /^(设置|Harness 与配置)$/ })
+      .first()
+      .click();
+    const configNav = page.getByRole("navigation", { name: "配置导航" });
+    await configNav.waitFor({ timeout: 15000 });
+    await configNav.getByRole("button", { name: "高级", exact: true }).click();
     const config = page.getByRole("region", { name: "Provider 与模型配置" });
-    await config.getByRole("tab", { name: /^Harness 绑定/ }).click();
-    await config.getByText("按 Harness 一键配置", { exact: true }).click();
     report.providerBindings = [];
-    for (const [id, name] of [
-      ["deepseek-harness", "DeepSeek Harness"],
-      ["zcode", "ZCode"],
-      ["gemini", "Gemini CLI"],
-      ["kimi-code", "Kimi Code"],
-      ["grok-build", "Grok Build"],
+    for (const [id, endpointName] of [
+      ["deepseek-harness", "Responses"],
+      ["zcode", "Responses"],
+      ["gemini", "Google"],
+      ["kimi-code", "Responses"],
+      ["grok-build", "Responses"],
     ]) {
-      await config.getByRole("button", { name: `配置 ${name}`, exact: true }).click();
+      await config.getByRole("button", { name: "添加 Harness 绑定", exact: true }).click();
+      await config.getByLabel("目标 Harness", { exact: true }).selectOption(id);
+      await config.getByLabel("设为该 Harness 的新会话默认配置").check();
       await config.getByLabel("绑定名称", { exact: true }).fill(`Electron QA ${id}`);
+      await config
+        .getByLabel("Provider 与模型", { exact: true })
+        .selectOption(modelsByEndpoint[endpointName].id);
       await config.getByLabel("默认思考强度", { exact: true }).selectOption("high");
       await config.getByRole("button", { name: "保存 Harness 绑定", exact: true }).click();
       await config.getByText(`Electron QA ${id}`, { exact: true }).waitFor();
@@ -164,7 +175,9 @@ try {
         throw new Error(`Electron ${id} default was not applied.`);
       report.providerBindings.push({ harnessId: id, saved: true, appliedAsDefault: true });
     }
-    if (await config.getByRole("button", { name: "配置 Cursor", exact: true }).isEnabled())
+    await config.getByRole("button", { name: "添加 Harness 绑定", exact: true }).click();
+    await config.getByLabel("目标 Harness", { exact: true }).selectOption("cursor");
+    if (await config.getByRole("button", { name: "保存 Harness 绑定", exact: true }).isEnabled())
       throw new Error("Cursor custom Provider must remain unavailable.");
     report.cursorUnsupportedShown = true;
     await page.screenshot({ path: join(data, "provider-bindings.png"), fullPage: true });

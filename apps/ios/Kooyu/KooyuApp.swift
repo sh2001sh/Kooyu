@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import UniformTypeIdentifiers
 
 @main struct KooyuApp: App {
@@ -312,7 +313,7 @@ struct PairView: View {
                             .textContentType(.URL)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
-                        TextField("6 位配对码", text: $code)
+                        TextField("配对码", text: $code)
                             .textInputAutocapitalization(.characters)
                             .autocorrectionDisabled()
                         Button {

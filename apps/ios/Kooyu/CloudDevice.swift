@@ -45,7 +45,7 @@ actor CloudDevice {
             try await Task.sleep(nanoseconds: 5_000_000_000)
             result = try await d.pair("claim")
         }
-        if await d.relay != (try Self.configured("KooyuRelayOrigin")) {
+        if d.relay != (try Self.configured("KooyuRelayOrigin")) {
             guard let direct=result["directOrigin"]?.string, direct == d.relay.absoluteString, result["relayHostId"]?.string == base.lastPathComponent else {throw SecureTunnel.invalid}
             await d.setDirectOrigin(direct)
         }
@@ -135,6 +135,10 @@ actor CloudDevice {
         guard result["state"]?.string=="active",let renewal=result["renewal"]?.string else {throw SecureTunnel.invalid}
         stored.renewal=renewal;invitation=nil;until = .distantPast
         return stored
+    }
+    static func clearLocalRenewal(_ credential: CloudCredential) async {
+        let keyId = Data(SHA256.hash(data: credential.key))
+        try? await ConnectionVault.removeRenewal(keyId)
     }
     func logout() async throws {
         let challenge=try await nonce()
