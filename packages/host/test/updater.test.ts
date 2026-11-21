@@ -85,7 +85,9 @@ test("AppUpdater checks GitHub Releases, verifies SHA-256 on download, rejects t
   const installerPayload = Buffer.from("fake-kooyu-nsis-installer-binary-v0.3.0");
   const validSha = createHash("sha256").update(installerPayload).digest("hex");
   let serveCorrupt = false;
+  let pausedForUpdate = false;
   const launched: Array<{ path: string; platform: string }> = [];
+  const installNotified: string[] = [];
 
   const mockFetch: typeof fetch = async (input) => {
     const url =
@@ -154,7 +156,16 @@ test("AppUpdater checks GitHub Releases, verifies SHA-256 on download, rejects t
     currentVersion: "0.2.1",
     platform: "win32",
     arch: "x64",
-    launcher: (path, platform) => launched.push({ path, platform }),
+    launcher: (path, platform) => {
+      assert.equal(pausedForUpdate, true);
+      launched.push({ path, platform });
+    },
+    prepareInstall: async () => {
+      pausedForUpdate = true;
+    },
+    onInstallLaunched: (platform) => {
+      installNotified.push(platform);
+    },
   });
 
   try {
@@ -191,6 +202,7 @@ test("AppUpdater checks GitHub Releases, verifies SHA-256 on download, rejects t
     assert.equal(installRes.launched, true);
     assert.equal(launched.length, 1);
     assert.equal(launched[0]!.platform, "win32");
+    assert.deepEqual(installNotified, ["win32"]);
   } finally {
     updater.close();
     store.close();

@@ -183,7 +183,7 @@ private fun tabTransition(forward: Boolean): ContentTransform =
                         }
                     }
                 ) { padding ->
-                    Column(Modifier.fillMaxSize().padding(padding).imePadding()) {
+                    Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
                         // Offline errors live in the device pill and reconnect sheet instead of a banner (plan §5.1 A.1).
                         if (!inConversation && state.error.isNotBlank() && (state.connection == null || state.online)) {
                             InlineNotice(state.error, true) { model.dismissError() }
@@ -206,7 +206,7 @@ private fun tabTransition(forward: Boolean): ContentTransform =
                         }
                         if (state.connection == null) {
                             Column(Modifier.fillMaxSize().background(c.paper)) {
-                                PairScreen(state.busy) { address, code, name -> scope.launch { model.pair(address, code, name) } }
+                                PairScreen(state.busy, state.requestedCloudHost) { address, code, name -> scope.launch { model.pair(address, code, name) } }
                                 if (state.error.isNotBlank()) {
                                     TextButton(onClick = model::clearDamagedConnections, modifier = Modifier.align(Alignment.CenterHorizontally)) {
                                         Text("清除损坏的本机连接", color = c.textSecondary)
@@ -319,7 +319,7 @@ private fun tabTransition(forward: Boolean): ContentTransform =
             FullScreenPage("添加设备", { model.addDevice(false) }) { padding ->
                 Column(Modifier.padding(padding)) {
                     if (state.error.isNotBlank()) Text(state.error, color = c.destructive, modifier = Modifier.padding(16.dp))
-                    PairScreen(state.busy) { address, code, name -> scope.launch { model.pair(address, code, name) } }
+                    PairScreen(state.busy, state.requestedCloudHost) { address, code, name -> scope.launch { model.pair(address, code, name) } }
                 }
             }
         }

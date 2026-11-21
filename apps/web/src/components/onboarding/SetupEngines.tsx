@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Check, Download, ExternalLink, RefreshCw } from "lucide-react";
 import type { EngineInstallationOption, HarnessId, Snapshot } from "@kodo/protocol";
 import { api } from "../../lib/host-client";
-import { HarnessBadge } from "../KodoBrand";
+import { HarnessBadge } from "../KooyuBrand";
 
 const common: HarnessId[] = ["codex", "claude-code", "opencode", "deepseek-harness", "cursor"];
 

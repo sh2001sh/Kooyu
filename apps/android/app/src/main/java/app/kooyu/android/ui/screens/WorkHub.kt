@@ -141,7 +141,7 @@ internal fun planSchedule(trigger: JSONObject): String {
         data = value; if (value == null) error = "加载失败"
         loading = false
     }
-    LaunchedEffect(state.connection?.hostId, project, revision) { data = null; load() }
+    LaunchedEffect(state.connection?.hostId, project, revision) { model.dismissError(); data = null; load() }
     val tabs = listOf("进行中与目标", "交付成果", "自动计划")
     fun open(id: String) { if (state.sessions.any { it.id == id }) { model.select(id); close() } else error = "会话已移除" }
 
@@ -295,13 +295,11 @@ internal fun planSchedule(trigger: JSONObject): String {
             if (info != null) LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 when (tab) {
                     "进行中与目标" -> {
-                        val inbox = info.rows("inbox").filter { item -> state.sessions.firstOrNull { it.id == item.optString("sessionId") }?.title?.contains(search, true) == true }
                         val goals = info.rows("goals").filter { (it.optString("title") + it.optString("description")).contains(search, true) && (!attention || it.optString("status") in listOf("blocked", "awaiting-review")) }
-                        val running = info.rows("sessions").filter { session -> session.optString("runState") in listOf("running", "waiting-input") && session.optString("title").contains(search, true) && (!attention || session.optString("runState") == "waiting-input") && info.rows("inbox").none { it.optString("sessionId") == session.optString("id") } && info.rows("goals").none { g -> g.optString("controllerSessionId") == session.optString("id") || g.optJSONArray("sessionIds")?.let { ids -> (0 until ids.length()).any { ids.getString(it) == session.optString("id") } } == true } }
-                        items(inbox, key = { "inbox:" + it.optString("id") }) { item -> WorkRow(state.sessions.firstOrNull { it.id == item.optString("sessionId") }?.title ?: "对话", "待处理请求", { open(item.optString("sessionId")) }, Icons.Outlined.Inbox) }
+                        val running = info.rows("sessions").filter { session -> session.optString("runState") in listOf("running", "waiting-input") && session.optString("title").contains(search, true) && (!attention || session.optString("runState") == "waiting-input") && info.rows("goals").none { g -> g.optString("controllerSessionId") == session.optString("id") || g.optJSONArray("sessionIds")?.let { ids -> (0 until ids.length()).any { ids.getString(it) == session.optString("id") } } == true } }
                         items(goals, key = { it.optString("id") }) { item -> WorkRow(item.optString("title"), workStatus(item.optString("status")) + " · " + workStatus(item.optString("verificationStatus")), { goalId = item.optString("id") }, Icons.Outlined.Flag) }
                         items(running, key = { "session:" + it.optString("id") }) { item -> WorkRow(item.optString("title"), if (item.optString("runState") == "running") "执行中" else "等待输入", { open(item.optString("id")) }, Icons.Outlined.ChatBubbleOutline) }
-                        if (inbox.isEmpty() && goals.isEmpty() && running.isEmpty()) item { WorkEmpty("暂无进行中的工作或目标") { composing = "" } }
+                        if (goals.isEmpty() && running.isEmpty()) item { WorkEmpty("暂无进行中的工作或目标") { composing = "" } }
                     }
                     "交付成果" -> {
                         val entries = info.rows("artifacts").filter { val a = it.optJSONObject("artifact") ?: it; (a.optString("title") + a.optString("displayName")).contains(search, true) }

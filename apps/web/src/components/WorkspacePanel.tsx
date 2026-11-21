@@ -1,14 +1,24 @@
-import { useEffect, useRef, useState } from "react";
+import { WorkspaceTerminal } from "./WorkspaceTerminal";
+import { GitDelivery } from "./GitDelivery";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Markdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
+  AlertTriangle,
   ArrowLeft,
+  ChevronDown,
   ChevronRight,
+  Code2,
   Download,
+  ExternalLink,
+  Eye,
   File,
   Folder,
+  Globe,
+  MessageSquarePlus,
   RefreshCw,
   Search,
+  Share2,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
@@ -21,7 +31,22 @@ import type {
   WorkspaceFileDiff,
 } from "@kodo/protocol";
 import { api, apiPath } from "../lib/host-client";
+import { useT } from "../lib/i18n";
 import { involvedFiles, workspaceLinkPath, workspaceErrorMessage } from "../lib/workspace-files";
+
+function buildInteractiveArtifactDoc(name: string, content: string, token: string): string {
+  const shim = `<script>(function(){var T=${JSON.stringify(token)};function send(m){try{parent.postMessage({type:"kooyu-artifact-error",token:T,message:String(m)},"*");}catch(e){}}var orig=console.error;console.error=function(){try{send(Array.prototype.slice.call(arguments).map(function(a){return typeof a==="object"?JSON.stringify(a):String(a)}).join(" "));}catch(e){}return orig&&orig.apply(console,arguments);};window.addEventListener("error",function(ev){send(ev.message+(ev.lineno?" (line "+ev.lineno+")":""));});window.addEventListener("unhandledrejection",function(ev){send("Unhandled promise rejection: "+(ev.reason&&ev.reason.message||ev.reason));});})();</script>`;
+  if (/\.svg$/i.test(name)) {
+    return `<!doctype html><html><head><meta charset="utf-8">${shim}<style>html,body{margin:0;height:100%;display:grid;place-items:center;background:#fff;overflow:auto;}svg{max-width:100%;max-height:100%;}</style></head><body>${content}</body></html>`;
+  }
+  if (/<head[\s>]/i.test(content)) {
+    return content.replace(/<head([^>]*)>/i, `<head$1>${shim}`);
+  }
+  if (/<html[\s>]/i.test(content)) {
+    return content.replace(/<html([^>]*)>/i, `<html$1><head>${shim}</head>`);
+  }
+  return `<!doctype html><html><head><meta charset="utf-8">${shim}</head><body>${content}</body></html>`;
+}
 
 const labels = {
   added: "新增",
@@ -44,6 +69,7 @@ interface WorkspacePanelProps {
   requestedPath?: string;
   requestKey?: number;
   onOpenFile: (path: string) => void;
+  onSendToAgent?: (text: string) => void;
 }
 export function WorkspacePanel(props: WorkspacePanelProps) {
   if (!props.workspace)
@@ -65,7 +91,9 @@ function WorkspaceBrowser({
   requestedPath,
   requestKey = 0,
   onOpenFile,
+  onSendToAgent,
 }: WorkspacePanelProps & { workspace: Workspace }) {
+  const t = useT();
   const [directory, setDirectory] = useState("");
   const [listing, setListing] = useState<WorkspaceFileList>();
   const [changes, setChanges] = useState<WorkspaceChanges>();
@@ -74,6 +102,14 @@ function WorkspaceBrowser({
   const [selected, setSelected] = useState("");
   const [preview, setPreview] = useState<WorkspaceFilePreview>();
   const [diff, setDiff] = useState<WorkspaceFileDiff>();
+  const [sandbox, setSandbox] = useState("");
+  const [devOpen, setDevOpen] = useState(false);
+  const [devPort, setDevPort] = useState("");
+  const [devPreview, setDevPreview] = useState("");
+  const [devError, setDevError] = useState("");
+  const [liveMode, setLiveMode] = useState(false);
+  const [consoleErrors, setConsoleErrors] = useState<string[]>([]);
+  const previewToken = useMemo(() => crypto.randomUUID(), [selected, preview?.modifiedAt]);
   const [source, setSource] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [error, setError] = useState("");
@@ -164,7 +200,25 @@ function WorkspaceBrowser({
       ++openGeneration.current;
     };
   }, [base, selected, mode, revision, outputRevision, requestKey]);
+  useEffect(() => {
+    setConsoleErrors([]);
+    if (!liveMode) return;
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as { type?: string; token?: string; message?: string } | null;
+      if (data?.type !== "kooyu-artifact-error" || data.token !== previewToken || !data.message)
+        return;
+      setConsoleErrors((prev) =>
+        prev.includes(data.message!) ? prev : [...prev.slice(-9), data.message!],
+      );
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [liveMode, previewToken]);
+
   const open = (path: string) => {
+    setSandbox("");
+    setConsoleErrors([]);
+    setLiveMode(/\.(html?|svg)$/i.test(path));
     setSelected(path);
     setPreview(undefined);
     setDiff(undefined);
@@ -184,6 +238,9 @@ function WorkspaceBrowser({
     ? apiPath(base + "/files/content?path=" + encodeURIComponent(preview.path))
     : "";
   const markdown = /\.(md|markdown|mdown)$/i.test(preview?.name ?? "");
+  const interactiveArtifact = Boolean(
+    preview?.kind === "text" && /\.(html?|svg)$/i.test(preview.name),
+  );
   return (
     <div className="workspace-browser">
       <div className="workspace-browser__toolbar">
@@ -197,6 +254,89 @@ function WorkspaceBrowser({
           <RefreshCw size={15} />
         </button>
       </div>
+      <WorkspaceTerminal workspaceId={workspace.id} onSendToAgent={onSendToAgent} />
+      {mode === "files" && (
+        <section className="nx-card" aria-label={t("preview.devServer")}>
+          <button
+            type="button"
+            className="nx-card__toggle"
+            aria-expanded={devOpen}
+            onClick={() => setDevOpen((v) => !v)}
+          >
+            <span className="nx-card__toggle-lead">
+              <Globe size={15} />
+              <span>{t("preview.devServer")}</span>
+            </span>
+            {devOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+          </button>
+          {devOpen && (
+            <div className="nx-card__body">
+              <form
+                style={{ display: "flex", flexDirection: "column", gap: 8 }}
+                onSubmit={async (event) => {
+                  event.preventDefault();
+                  setDevError("");
+                  setDevPreview("");
+                  try {
+                    const share =
+                      (event.nativeEvent as SubmitEvent).submitter?.getAttribute("value") ===
+                      "share";
+                    const result = await api<{ url: string }>(base + "/preview", "POST", {
+                      port: Number(devPort),
+                      share,
+                    });
+                    setDevPreview(result.url);
+                  } catch (err) {
+                    setDevError(workspaceErrorMessage(err));
+                  }
+                }}
+              >
+                <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  <span className="nx-section-label">{t("preview.localPort")}</span>
+                  <input
+                    className="nx-input"
+                    type="number"
+                    min="1024"
+                    max="65535"
+                    placeholder="5173"
+                    required
+                    value={devPort}
+                    onChange={(event) => {
+                      setDevPort(event.target.value);
+                      setDevPreview("");
+                    }}
+                  />
+                </label>
+                <div className="delegation-card__actions">
+                  <button type="submit" className="nx-btn nx-btn--sm nx-btn--primary">
+                    <ExternalLink size={12} />
+                    {t("preview.openLink")}
+                  </button>
+                  <button type="submit" value="share" className="nx-btn nx-btn--sm">
+                    <Share2 size={12} />
+                    {t("preview.shareLink")}
+                  </button>
+                </div>
+              </form>
+              {devPreview && (
+                <a
+                  className="nx-feedback nx-feedback--ok"
+                  href={devPreview}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {t("preview.openTab")} · {devPreview}
+                </a>
+              )}
+              {devError && (
+                <p className="nx-feedback nx-feedback--error" role="alert">
+                  {devError}
+                </p>
+              )}
+            </div>
+          )}
+        </section>
+      )}
       {mode === "files" ? (
         <>
           <div className="workspace-browser__scope" aria-label="文件范围">
@@ -342,22 +482,77 @@ function WorkspaceBrowser({
           </div>
         </>
       )}
+      {mode === "changes" && changes?.git && (
+        <GitDelivery
+          key={workspace.id + selected}
+          base={base}
+          path={selected}
+          refresh={() => setRevision((n) => n + 1)}
+          onSendToAgent={onSendToAgent}
+        />
+      )}
       {selected && (
         <section className="workspace-preview" aria-label="文件预览" aria-busy={opening}>
           <div className="workspace-preview__header">
             <strong title={selected}>{preview?.name ?? selected}</strong>
-            <button
-              type="button"
-              onClick={() => {
-                setSelected("");
-                setPreview(undefined);
-                setDiff(undefined);
-                if (mode === "files") onOpenFile("");
-              }}
-            >
-              收起
-            </button>
+            <div className="delegation-card__actions">
+              {interactiveArtifact && (
+                <div className="nx-segmented" role="group" aria-label="预览切换">
+                  <button type="button" aria-pressed={!liveMode} onClick={() => setLiveMode(false)}>
+                    <Code2 size={11} style={{ verticalAlign: "-1px", marginRight: 3 }} />
+                    {t("preview.code")}
+                  </button>
+                  <button type="button" aria-pressed={liveMode} onClick={() => setLiveMode(true)}>
+                    <Eye size={11} style={{ verticalAlign: "-1px", marginRight: 3 }} />
+                    {t("preview.live")}
+                  </button>
+                </div>
+              )}
+              {/\.(html?|svg)$/i.test(selected) && (
+                <button
+                  type="button"
+                  className="nx-btn nx-btn--sm"
+                  onClick={async () => {
+                    try {
+                      const next = (
+                        await api<{ url: string }>(base + "/preview", "POST", { path: selected })
+                      ).url;
+                      setSandbox(next);
+                    } catch (e) {
+                      setPreviewError(workspaceErrorMessage(e));
+                    }
+                  }}
+                >
+                  <ExternalLink size={11} />
+                  {t("preview.isolated")}
+                </button>
+              )}
+              <button
+                type="button"
+                className="nx-btn nx-btn--sm nx-btn--ghost"
+                onClick={() => {
+                  setSelected("");
+                  setPreview(undefined);
+                  setDiff(undefined);
+                  setSandbox("");
+                  setConsoleErrors([]);
+                  if (mode === "files") onOpenFile("");
+                }}
+              >
+                收起
+              </button>
+            </div>
           </div>
+          {sandbox && (
+            <a
+              className="nx-feedback nx-feedback--ok"
+              href={sandbox}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {t("preview.openTab")} · {sandbox}
+            </a>
+          )}
           {opening && !preview && !diff ? (
             <p className="workspace-browser__note">正在加载预览…</p>
           ) : previewError ? (
@@ -433,7 +628,53 @@ function WorkspaceBrowser({
                   )}
                 </div>
                 {preview.kind === "text" ? (
-                  markdown && !source ? (
+                  interactiveArtifact && liveMode ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      <iframe
+                        key={previewToken}
+                        title={preview.name}
+                        className="nx-live-frame"
+                        sandbox="allow-scripts"
+                        srcDoc={buildInteractiveArtifactDoc(
+                          preview.name,
+                          preview.text ?? "",
+                          previewToken,
+                        )}
+                      />
+                      {consoleErrors.length > 0 && (
+                        <div className="nx-console-tray" role="alert">
+                          <div className="nx-row">
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 5,
+                                fontWeight: 600,
+                              }}
+                            >
+                              <AlertTriangle size={13} />
+                              <span>Console Errors ({consoleErrors.length})</span>
+                            </span>
+                            {onSendToAgent && (
+                              <button
+                                type="button"
+                                className="nx-btn nx-btn--sm nx-btn--coral"
+                                onClick={() =>
+                                  onSendToAgent(
+                                    `实时预览 \`${preview.path}\` 时捕获到前端控制台报错，请定位并修复：\n\`\`\`\n${consoleErrors.join("\n")}\n\`\`\``,
+                                  )
+                                }
+                              >
+                                <MessageSquarePlus size={12} />
+                                {t("preview.sendConsoleErr")}
+                              </button>
+                            )}
+                          </div>
+                          <pre>{consoleErrors.join("\n")}</pre>
+                        </div>
+                      )}
+                    </div>
+                  ) : markdown && !source ? (
                     <PreviewMarkdown file={preview} base={base} onOpenFile={onOpenFile} />
                   ) : (
                     <pre className="workspace-preview__code">{preview.text}</pre>

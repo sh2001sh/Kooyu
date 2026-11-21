@@ -4,8 +4,7 @@ import { resolve } from "node:path";
 
 test.use({ locale: "zh-CN" });
 
-const SCREENSHOT_DIR =
-  "C:/Users/admin/.gemini/antigravity/brain/caf3214e-ad51-4064-be34-697d7f06adc8/screenshots";
+const SCREENSHOT_DIR = process.env.KOOYU_SCREENSHOT_DIR ?? resolve("test-results", "splash-mobius");
 
 test("verify splash opening screen and response waiting mobius animation", async ({
   page,

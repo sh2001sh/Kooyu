@@ -22,8 +22,6 @@ struct NativeSettingsView: View {
                 NavigationLink(kooyuT("settings.providers")) { ModelConfigurationView(model: model) }
                 NavigationLink(kooyuT("settings.import")) { ImportSessionsView(model: model) }
                 NavigationLink(kooyuT("settings.memory")) { GlobalMemorySettingsView(model: model) }
-                NavigationLink(kooyuT("settings.usage")) { UsageView(model: model) }
-                NavigationLink(kooyuT("settings.projects")) { ProjectsView(model: model) }
             }
             Section(kooyuT("settings.section.preferences")) {
                 NavigationLink {
@@ -38,6 +36,7 @@ struct NativeSettingsView: View {
                             Button("注册后台提醒") { Task { await model.push.enable(c) } }.disabled(model.push.working || !model.online)
                             Button("关闭后台提醒", role: .destructive) { Task { await model.push.disable(c) } }.disabled(model.push.working || !model.online)
                             if model.push.working { ProgressView() }
+                            BarkSettingsSection(connection: c, online: model.online).id(c.hostId + ":" + c.deviceId)
                         }
                     }.navigationTitle(kooyuT("settings.notifications"))
                 }
@@ -97,7 +96,7 @@ struct InboxView: View {
     }
 
     private var inboxContent: some View {
-        let items = model.snapshot?.inbox.filter { !$0.resolved } ?? []
+        let items = model.snapshot?.inbox.filter { !$0.resolved && $0.read != true } ?? []
         let anomalySessions = (model.snapshot?.sessions ?? []).filter { !$0.archived && ["error", "unknown"].contains($0.runState) }
         let recentNotices = notices.reversed().filter { notice in !items.contains { $0.id == notice["inboxItemId"].string } }
 
@@ -190,6 +189,11 @@ struct InboxView: View {
             if !embedded {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("完成") { dismiss() }
+                }
+            }
+            if !items.isEmpty {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("全部已读") { Task { await model.markAllInboxRead() } }
                 }
             }
         }

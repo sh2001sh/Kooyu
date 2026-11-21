@@ -76,7 +76,7 @@ export class NotificationDispatcher {
           this.deliveries.put({ ...d, status: "cancelled" });
     });
   }
-  async configure(deviceId: string, value: unknown) {
+  async configure(deviceId: string, value: unknown, local = false) {
     const p = schema.parse(value);
     if ((p.endpoint && p.kind !== "bark") || (p.deviceToken && p.kind !== "apns"))
       throw new KodoError("INVALID_INPUT", "通知凭据与通道类型不一致。");
@@ -130,14 +130,20 @@ export class NotificationDispatcher {
     if (p.kind === "bark" && p.endpoint) {
       const u = new URL(p.endpoint);
       if (
-        u.origin !== "https://api.day.app" ||
+        u.protocol !== "https:" ||
+        (!local &&
+          u.origin !== "https://api.day.app" &&
+          u.origin !== process.env.KOOYU_BARK_ORIGIN) ||
         u.username ||
         u.password ||
         u.search ||
         u.hash ||
         !/^\/[A-Za-z0-9_-]{8,200}$/.test(u.pathname)
       )
-        throw new KodoError("INVALID_INPUT", "仅支持 https://api.day.app/设备密钥 的 Bark 通道。");
+        throw new KodoError(
+          "INVALID_INPUT",
+          "请使用 HTTPS Bark 设备地址。自建服务可在本机桌面配置。",
+        );
       ref = "notification:" + randomUUID();
       await this.vault.set(ref, u.href);
     }
@@ -373,10 +379,15 @@ export class NotificationDispatcher {
               body: c.preview ? (item.preview ?? "Kooyu 有新事项") : "请打开 Kooyu 查看",
               group: "Kooyu",
               deduplication_key: item.id,
-              ...(process.env.KODO_PUBLIC_ORIGIN?.startsWith("https://")
+              ...((process.env.KOOYU_PUBLIC_ORIGIN ?? process.env.KODO_PUBLIC_ORIGIN)?.startsWith(
+                "https://",
+              )
                 ? {
                     url:
-                      process.env.KODO_PUBLIC_ORIGIN.replace(/\/$/, "") +
+                      (process.env.KOOYU_PUBLIC_ORIGIN ?? process.env.KODO_PUBLIC_ORIGIN)!.replace(
+                        /\/$/,
+                        "",
+                      ) +
                       "/?hostId=" +
                       encodeURIComponent(item.link.hostId) +
                       "&notificationId=" +

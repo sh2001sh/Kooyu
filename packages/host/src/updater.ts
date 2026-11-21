@@ -235,21 +235,27 @@ function emptyDownload(): AppUpdateDownloadState {
 }
 
 export interface AppUpdaterOptions {
+  prepareInstall?: () => Promise<void>;
+  rollbackInstall?: () => void;
   fetcher?: typeof fetch;
   currentVersion?: string;
   platform?: string;
   arch?: string;
   launcher?: (localPath: string, platform: string) => void;
+  onInstallLaunched?: (platform: string) => void;
 }
 
 export class AppUpdater {
   private readonly npmDistribution = process.env.KOOYU_DISTRIBUTION === "npm";
+  private readonly prepareInstall?: () => Promise<void>;
+  private readonly rollbackInstall?: () => void;
   private readonly fetcher: typeof fetch;
   private readonly currentVersion: string;
   private readonly platform: string;
   private readonly arch: string;
   private readonly updatesDir: string;
   private readonly launcher?: (localPath: string, platform: string) => void;
+  private readonly onInstallLaunched?: (platform: string) => void;
 
   private state: AppUpdateStatus["state"] = "idle";
   private checkedAt: string | null = null;
@@ -270,6 +276,9 @@ export class AppUpdater {
     this.arch = options.arch ?? process.arch;
     this.updatesDir = join(dataDir, "updates");
     this.launcher = options.launcher;
+    this.prepareInstall = options.prepareInstall;
+    this.rollbackInstall = options.rollbackInstall;
+    this.onInstallLaunched = options.onInstallLaunched;
     this.hydrateFromStore();
   }
 
@@ -701,29 +710,48 @@ export class AppUpdater {
       }
     }
 
-    if (this.launcher) {
-      this.launcher(resolvedPath, this.platform);
-    } else if (this.platform === "win32") {
-      const child = spawn(resolvedPath, [], { detached: true, stdio: "ignore" });
-      child.unref();
-    } else if (this.platform === "darwin") {
-      const child = spawn("open", [resolvedPath], { detached: true, stdio: "ignore" });
-      child.unref();
-    } else {
-      if (resolvedPath.toLowerCase().endsWith(".appimage")) {
-        chmodSync(resolvedPath, 0o755);
+    // Only Windows exits Host to unlock resources/runtime/node.exe for NSIS.
+    // macOS DMG and Linux folder launches keep Host running, so they must not freeze dispatch.
+    const shouldPrepare = this.platform === "win32";
+    if (shouldPrepare) await this.prepareInstall?.();
+    try {
+      if (this.launcher) {
+        this.launcher(resolvedPath, this.platform);
+      } else if (this.platform === "win32") {
+        const child = spawn(resolvedPath, [], {
+          detached: true,
+          windowsHide: false,
+          stdio: "ignore",
+        });
+        child.unref();
+      } else if (this.platform === "darwin") {
+        const child = spawn("open", [resolvedPath], { detached: true, stdio: "ignore" });
+        child.unref();
+      } else {
+        if (resolvedPath.toLowerCase().endsWith(".appimage")) {
+          chmodSync(resolvedPath, 0o755);
+        }
+        const child = spawn("xdg-open", [dirname(resolvedPath)], {
+          detached: true,
+          stdio: "ignore",
+        });
+        child.unref();
       }
-      const child = spawn("xdg-open", [dirname(resolvedPath)], { detached: true, stdio: "ignore" });
-      child.unref();
+    } catch (err) {
+      if (shouldPrepare) this.rollbackInstall?.();
+      throw err;
     }
 
     this.downloadState = { ...this.downloadState, state: "installing" };
+    if (this.onInstallLaunched) {
+      this.onInstallLaunched(this.platform);
+    }
     return {
       launched: true,
       localPath: resolvedPath,
       message:
         this.platform === "win32"
-          ? "已启动 Kooyu 安装程序，请按提示完成升级。"
+          ? "已启动 Kooyu 安装程序，Host 将自动退出以释放安装目录，请按提示完成升级。"
           : this.platform === "darwin"
             ? "已打开 Kooyu 安装镜像（DMG），请将 Kooyu 拖入「应用程序」覆盖升级。"
             : "已打开更新包目录，请运行或安装新版本。",

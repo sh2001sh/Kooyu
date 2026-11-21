@@ -9,7 +9,7 @@ import { SessionService } from "../packages/host/dist/session-service.js";
 import { Pairing } from "../packages/host/dist/devices/pairing.js";
 import { RelayConnector } from "../packages/host/dist/devices/relay.js";
 import { createHostServer } from "../packages/host/dist/http/server.js";
-import { createRelay } from "../services/relay/src/server.mjs";
+import { createRelay } from "../services/relay/test/protocol-fixture.mjs";
 async function freePort() {
   const s = createServer();
   s.listen(0, "127.0.0.1");

@@ -43,7 +43,13 @@ for (const width of [1440, 390])
       .getByRole("navigation", { name: width < 600 ? "配置页面" : "配置导航" })
       .getByRole("button", { name: "模型来源", exact: true })
       .click();
-    const record = page
+    const providerCard = page.locator("section.sx-section").filter({
+      has: page
+        .locator(".sx-provider-name")
+        .filter({ hasText: new RegExp(`^Synthetic priced Provider ${width}$`) }),
+    });
+    await providerCard.locator(".sx-provider-models__toggle").click();
+    const record = providerCard
       .getByRole("table", { name: "模型列表" })
       .locator("tbody tr")
       .filter({ hasText: modelName });

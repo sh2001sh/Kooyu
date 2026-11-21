@@ -47,7 +47,7 @@ try {
     workspaceId: workspace.id,
     ...(["kodo", "pi", "deepseek-harness"].includes(harness)
       ? {
-          model: `${harness === "deepseek-harness" ? "deepseek-official" : "codegoai"}/deepseek-v4-flash`,
+          model: `${harness === "deepseek-harness" ? "deepseek-official" : (process.env.KODO_VERIFY_PROVIDER ?? "openai")}/${process.env.KODO_VERIFY_MODEL ?? "deepseek-v4-flash"}`,
         }
       : {}),
   });

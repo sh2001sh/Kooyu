@@ -529,6 +529,12 @@ struct WorkspaceBrowserView: View {
                 Text(workspace.rootPath)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                if let connection = model.connection {
+                    NavigationLink("打开终端") {
+                        WorkspaceTerminalView(connection: connection, workspaceID: workspace.id)
+                            .id(connection.deviceId + workspace.id)
+                    }
+                }
                 Picker("浏览内容", selection: $section) {
                     Text("文件目录").tag("files")
                     Text("Git 变更").tag("changes")
@@ -648,6 +654,7 @@ struct SettingsDetailView: View {
                             .disabled(model.push.working || !model.online)
                         if model.push.working { ProgressView("正在同步…") }
                     }
+                    BarkSettingsSection(connection: c, online: model.online).id(c.hostId + ":" + c.deviceId)
                 }
             } else if section == "engines" {
                 ForEach(model.snapshot?.harnesses ?? []) { engine in

@@ -18,7 +18,10 @@ const none: NativeDefaults = { model: null, reasoning: null, permission: null };
 export function nativeConfigLocations(
   harnessId: HarnessId,
   env: NodeJS.ProcessEnv = process.env,
-  kodoRoot = join(env.KODO_DATA_DIR ?? join(homeDirectory(), ".kodo"), "kodo"),
+  kodoRoot = join(
+    env.KOOYU_DATA_DIR ?? env.KODO_DATA_DIR ?? join(homeDirectory(), ".kooyu"),
+    "kodo",
+  ),
   home = homedir(),
 ): { path: string; exists: boolean }[] {
   const pi = env.PI_CODING_AGENT_DIR ?? join(home, ".pi", "agent");
@@ -113,7 +116,10 @@ const CLAUDE_PERMISSIONS: Record<string, string> = {
 export function nativeDefaults(
   harnessId: HarnessId,
   env: NodeJS.ProcessEnv = process.env,
-  kodoRoot = join(env.KODO_DATA_DIR ?? join(homeDirectory(), ".kodo"), "kodo"),
+  kodoRoot = join(
+    env.KOOYU_DATA_DIR ?? env.KODO_DATA_DIR ?? join(homeDirectory(), ".kooyu"),
+    "kodo",
+  ),
 ): NativeDefaults {
   try {
     if (harnessId === "codex") {

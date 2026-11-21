@@ -4,17 +4,32 @@ struct GlobalMemorySettingsView: View {
     @Bindable var model: Workbench
     @State private var settings: JSONValue?
     @State private var entries: [JSONValue] = []
+    @State private var docs: [JSONValue] = []
+    @State private var activeDocName = "SOUL.md"
+    @State private var docDraft = ""
+    @State private var docDirty = false
     @State private var loading = false
     @State private var saving = false
     @State private var editing = false
     @State private var selected: JSONValue = .null
     @State private var notice = ""
+
+    private var activeDoc: JSONValue? {
+        docs.first { $0["name"].string == activeDocName }
+    }
+
     private func reload() async {
         loading = true
         settings = await model.read("/memory/settings")
         entries = await model.read("/memory")?.array.filter { $0["scope"].string == "user" } ?? []
+        let loadedDocs = await model.read("/memory/docs")?.array ?? []
+        docs = loadedDocs
+        if !docDirty {
+            docDraft = loadedDocs.first { $0["name"].string == activeDocName }?["content"].string ?? ""
+        }
         loading = false
     }
+
     private func save(_ enabled: Bool, _ automatic: Bool) async {
         guard let settings else { return }
         saving = true
@@ -22,9 +37,76 @@ struct GlobalMemorySettingsView: View {
         if let result = await model.execute("/memory/settings", method: "PATCH", values: fields) { self.settings = result; notice = "已保存，下轮生效。" }
         saving = false
     }
+
+    private func saveActiveDoc() async {
+        guard let doc = activeDoc else { return }
+        saving = true
+        let fields: [String: JSONValue] = [
+            "expectedRevision": doc["revision"],
+            "content": .string(docDraft),
+        ]
+        if await model.execute("/memory/docs/\(activeDocName)", method: "PATCH", values: fields) != nil {
+            docDirty = false
+            notice = "\(activeDocName) 已保存，下轮生效。"
+            await reload()
+        }
+        saving = false
+    }
+
     var body: some View {
         Form {
             StatusView(model: model)
+
+            if !docs.isEmpty {
+                Section {
+                    Picker("文档", selection: $activeDocName) {
+                        Text("SOUL.md").tag("SOUL.md")
+                        Text("USER.md").tag("USER.md")
+                        Text("MEMORY.md").tag("MEMORY.md")
+                        Text("RULES.md").tag("RULES.md")
+                        Text("HEARTBEAT.md").tag("HEARTBEAT.md")
+                        Text("AGENTS.md").tag("AGENTS.md")
+                        Text("ROUTING.md").tag("ROUTING.md")
+                    }
+                    .pickerStyle(.menu)
+                    .onChange(of: activeDocName) { _, next in
+                        docDraft = docs.first { $0["name"].string == next }?["content"].string ?? ""
+                        docDirty = false
+                    }
+
+                    TextEditor(text: $docDraft)
+                        .font(KYFont.mono)
+                        .foregroundStyle(KY.text)
+                        .frame(minHeight: 160)
+                        .disabled(!model.canWrite || saving || loading)
+                        .onChange(of: docDraft) { _, next in
+                            docDirty = next != (activeDoc?["content"].string ?? "")
+                        }
+
+                    Button {
+                        Task { await saveActiveDoc() }
+                    } label: {
+                        HStack {
+                            Spacer()
+                            if saving {
+                                ProgressView().tint(KY.onAccent)
+                            } else {
+                                Text("保存 \(activeDocName)")
+                            }
+                            Spacer()
+                        }
+                    }
+                    .buttonStyle(.kooyuPrimary)
+                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                    .disabled(!model.canWrite || saving || loading || !docDirty)
+                } header: {
+                    Text("主代理文档 · SOUL.md & MEMORY.md")
+                } footer: {
+                    Text("保存后自动写入本机 Host 目录，并在下一轮对话即时热加载。")
+                        .foregroundStyle(KY.textSecondary)
+                }
+            }
+
             Section {
                 if loading { ProgressView("正在读取全局记忆…") }
                 if let settings {
@@ -53,7 +135,7 @@ struct GlobalMemorySettingsView: View {
             } header: { Text("已保存的全局记忆") } footer: { Text("可在对话中说“记住我偏好……”或“忘记……”。项目资料放在项目约定，临时进度不进入全局记忆。") }
             if !model.error.isEmpty { Text(model.error).foregroundStyle(KY.destructive) }
         }
-        .navigationTitle("全局记忆")
+        .navigationTitle("人格与记忆")
         .task(id: model.connection?.hostId) { await reload() }
         .refreshable { await reload() }
         .sheet(isPresented: $editing, onDismiss: { Task { await reload() } }) { WorkMemoryEditor(model: model, memory: selected, project: "") }

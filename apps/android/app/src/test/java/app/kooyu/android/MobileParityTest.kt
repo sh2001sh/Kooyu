@@ -116,7 +116,7 @@ class MobileParityTest {
     @Test fun formatWorkspaceLabelSanitizesPathsAcrossPlatforms() {
         assertEquals("", formatWorkspaceLabel(null))
         assertEquals("", formatWorkspaceLabel("   "))
-        assertEquals("Coding/agent-harness", formatWorkspaceLabel("e:\\sh\\Coding\\agent-harness"))
+        assertEquals("Coding/agent-harness", formatWorkspaceLabel("D:\\dev\\Coding\\agent-harness"))
         assertEquals("repos/agent-harness", formatWorkspaceLabel("/Users/dev/repos/agent-harness/"))
         assertEquals("/", formatWorkspaceLabel("/"))
     }

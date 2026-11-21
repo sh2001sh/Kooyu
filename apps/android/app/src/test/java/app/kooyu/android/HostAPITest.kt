@@ -13,6 +13,13 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class HostAPITest {
+    @Test fun legacyOfficialPairingRequiresNewApproval() {
+        val relay = "https://relay.example.test"
+        val url = HostAPI.origin(relay + "/h/" + "a".repeat(64))
+        assertEquals(401, assertThrows(HostError::class.java) { HostAPI.requireAccountPairing(url, false, relay) }.status)
+        HostAPI.requireAccountPairing(url, true, relay)
+        HostAPI.requireAccountPairing(HostAPI.origin("https://private.example.test"), false, relay)
+    }
     @Test fun onlyReadsRecoverTransportFailuresAndShareConnections() {
         val read = HostAPI.clientFor("GET")
         val write = HostAPI.clientFor("POST")
@@ -48,10 +55,10 @@ class HostAPITest {
         assertEquals(listOf(RowRole.ASSISTANT to "完整回答", RowRole.THINKING to "内部思考"), rows.map { it.role to it.text })
     }
     @Test fun relayPrefixIsPreserved() {
-        val address = "https://relay.kooyu.app/h/" + "a".repeat(64)
+        val address = "https://relay.example.com/h/" + "a".repeat(64)
         val base = HostAPI.origin(address)
         assertEquals(address + "/api/sessions?tail=300", HostAPI.apiUrl(base, "/sessions?tail=300").toString())
-        assertThrows(IllegalArgumentException::class.java) { HostAPI.origin("https://relay.kooyu.app/h/not-a-host") }
+        assertThrows(IllegalArgumentException::class.java) { HostAPI.origin("https://relay.example.com/h/not-a-host") }
         assertThrows(IllegalArgumentException::class.java) { HostAPI.apiUrl(base, "/../../healthz") }
     }
     @Test fun pendingRequestKeepsItsIdentityAcrossProcessDeath() {

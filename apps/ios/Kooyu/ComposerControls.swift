@@ -16,6 +16,8 @@ struct NativeComposerControls: View {
     var submit: () -> Void
     @State private var options: JSONValue?
     @State private var permissions: JSONValue?
+    @State private var startCallAfterMenu = false
+    @State private var callOpen = false
     @State private var plusOpen = false
     @State private var showModels = false
     @State private var modelSheetTab = "model"
@@ -82,7 +84,7 @@ struct NativeComposerControls: View {
             text: $text,
             placeholder: session.bindingUnavailable == true ? "会话配置不可用" : "发送消息给 \(descriptor?.name ?? session.harnessId)…",
             enabled: session.bindingUnavailable != true,
-            sendEnabled: model.canWrite && !uploading && error.isEmpty && session.bindingUnavailable != true && (!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty) && text.count <= 200000,
+            sendEnabled: (model.canWrite || (model.canMail && attachments.isEmpty && text.utf16.count <= 16000)) && !uploading && error.isEmpty && session.bindingUnavailable != true && (!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty) && text.count <= 200000,
             stop: showStop,
             stopEnabled: model.canWrite && (supervised || cancelSupported),
             stopAccessibilityLabel: supervised ? "停止或暂停托管" : "中断当前回合",
@@ -110,9 +112,11 @@ struct NativeComposerControls: View {
         .task(id: "\(session.id):\(session.settingsRevision ?? 0)") {
             await load(false); permissions = await model.read("/sessions/\(session.id)/permissions")
         }
-        .sheet(isPresented: $plusOpen) {
+        .sheet(isPresented: $callOpen) { ConversationCall(model:model,sessionID:session.id) }
+        .sheet(isPresented: $plusOpen, onDismiss:{ if startCallAfterMenu { startCallAfterMenu = false; callOpen = true } }) {
             NavigationStack {
                 Form {
+                    Button("语音通话") { startCallAfterMenu = true; plusOpen = false }.disabled(!model.canWrite)
                     Section("附件") {
                         Button {
                             plusOpen = false

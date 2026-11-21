@@ -12,7 +12,7 @@ import {
   shortModelLabel,
 } from "../lib/harnesses";
 import { useT } from "../lib/i18n";
-import { HarnessBadge } from "./KodoBrand";
+import { HarnessBadge } from "./KooyuBrand";
 import { SegmentedControl } from "./SegmentedControl";
 
 type Wire = Record<string, any>;

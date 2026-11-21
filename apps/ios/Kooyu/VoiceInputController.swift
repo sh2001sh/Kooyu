@@ -60,6 +60,7 @@ private func computeBufferLevel(_ buffer: AVAudioPCMBuffer) -> Float {
     private var audioEngine: AVAudioEngine?
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
+    private var generation = 0
     private var cancelled = false
     private var delivered = false
     private var onFinal: ((String) -> Void)?
@@ -72,7 +73,9 @@ private func computeBufferLevel(_ buffer: AVAudioPCMBuffer) -> Float {
         }
     }
 
-    func start(onResult: @escaping (String) -> Void) async {
+    func start(conversation: Bool = false, onResult: @escaping (String) -> Void) async {
+        generation += 1
+        let cycle = generation
         error = ""
         interim = ""
         cancelled = false
@@ -89,6 +92,7 @@ private func computeBufferLevel(_ buffer: AVAudioPCMBuffer) -> Float {
             return
         }
         let micGranted = await AVAudioApplication.requestRecordPermission()
+        guard generation == cycle, !Task.isCancelled else { return }
         guard micGranted else {
             error = kooyuT("voice.err.permission")
             return
@@ -103,7 +107,11 @@ private func computeBufferLevel(_ buffer: AVAudioPCMBuffer) -> Float {
         cleanup()
         let audioSession = AVAudioSession.sharedInstance()
         do {
-            try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
+            if conversation {
+                try audioSession.setCategory(.playAndRecord, mode:.voiceChat, options:[.defaultToSpeaker,.allowBluetooth])
+            } else {
+                try audioSession.setCategory(.record, mode:.measurement, options:.duckOthers)
+            }
             try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
         } catch {
             self.error = kooyuT("voice.err.unavailable")
@@ -114,6 +122,10 @@ private func computeBufferLevel(_ buffer: AVAudioPCMBuffer) -> Float {
         let recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
         recognitionRequest.shouldReportPartialResults = true
         let inputNode = engine.inputNode
+        if conversation {
+            do { try inputNode.setVoiceProcessingEnabled(true) }
+            catch { cleanup(); self.error = kooyuT("voice.err.unavailable"); return }
+        }
         let format = inputNode.outputFormat(forBus: 0)
 
         installSpeechAudioTap(on: inputNode, format: format, request: recognitionRequest) { [weak self] lv in
@@ -132,7 +144,7 @@ private func computeBufferLevel(_ buffer: AVAudioPCMBuffer) -> Float {
             let isFinal = result?.isFinal == true
             let hasError = err != nil
             Task { @MainActor [weak self] in
-                guard let self else { return }
+                guard let self, self.generation == cycle, self.listening else { return }
                 if !text.isEmpty { self.interim = text }
                 if isFinal || hasError {
                     let finalText = text.isEmpty ? self.interim.trimmingCharacters(in: .whitespacesAndNewlines) : text
@@ -162,6 +174,7 @@ private func computeBufferLevel(_ buffer: AVAudioPCMBuffer) -> Float {
     }
 
     func cancel() {
+        generation += 1
         cancelled = true
         interim = ""
         error = ""

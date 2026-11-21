@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, createPublicKey, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { KodoError } from "@kodo/protocol";
 import type { Store } from "../storage/store.js";
 const hash = (s: string) => createHash("sha256").update(s).digest("hex");
@@ -9,12 +9,39 @@ export class Pairing {
     private readonly store: Store,
     private readonly now = Date.now,
   ) {}
+  private approved?: { id: string; code: string; expires: number };
+  approveTransaction(id: string) {
+    const invitation = this.create();
+    this.approved = { id, code: invitation.code, expires: Date.parse(invitation.expiresAt) };
+  }
+  transactionCode(id: string) {
+    return this.approved?.id === id && this.approved.expires > this.now()
+      ? this.approved.code
+      : undefined;
+  }
   create() {
+    this.approved = undefined;
     const code = randomBytes(16).toString("hex").toUpperCase();
     this.invitation = { digest: hash(code), expiresAt: this.now() + 120000, attempts: 0 };
     return { code, expiresAt: new Date(this.invitation.expiresAt).toISOString() };
   }
-  pair(code: string, name: string) {
+  pair(code: string, name: string, mailboxVerifyPubKey?: string) {
+    if (mailboxVerifyPubKey !== undefined) {
+      try {
+        const key = createPublicKey({
+          key: Buffer.from(mailboxVerifyPubKey, "base64"),
+          type: "spki",
+          format: "der",
+        });
+        if (
+          key.asymmetricKeyType !== "ed25519" ||
+          key.export({ type: "spki", format: "der" }).toString("base64") !== mailboxVerifyPubKey
+        )
+          throw Error("Invalid key");
+      } catch {
+        throw new KodoError("INVALID_INPUT", "离线信箱需要有效的 Ed25519 设备公钥。");
+      }
+    }
     const i = this.invitation;
     if (
       !i ||
@@ -29,6 +56,7 @@ export class Pairing {
       device = {
         id,
         name: name.slice(0, 100) || "手机",
+        ...(mailboxVerifyPubKey ? { mailboxVerifyPubKey } : {}),
         createdAt: new Date(this.now()).toISOString(),
         expiresAt: new Date(this.now() + DEVICE_TOKEN_TTL_MS).toISOString(),
       };

@@ -3,12 +3,21 @@ import type { OnboardingState } from "@kodo/protocol";
 import { api, remoteClient } from "../../lib/host-client";
 import { SetupWizard } from "./SetupWizard";
 import { SplashScreen } from "../SplashScreen";
+import { NativeWindowFrame } from "../NativeWindowFrame";
 import "../../styles/onboarding.css";
 
 const local = !remoteClient && ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname);
 
 /** Host-owned state: clearing a browser or opening a second window is not a first launch. */
 export function FirstRun({ children }: { children: ReactNode }) {
+  return (
+    <NativeWindowFrame>
+      <FirstRunContent>{children}</FirstRunContent>
+    </NativeWindowFrame>
+  );
+}
+
+function FirstRunContent({ children }: { children: ReactNode }) {
   const [state, setState] = useState<OnboardingState>();
   const [error, setError] = useState("");
   const [reopened, setReopened] = useState(false);

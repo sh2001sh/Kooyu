@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { once } from "node:events";
+import { createServer, get } from "node:http";
+import type { AddressInfo } from "node:net";
+import { PreviewService } from "../src/workspaces/preview.js";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, renameSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -16,6 +19,7 @@ import {
 import { workspaceLinkPath, involvedFiles } from "../../../apps/web/src/lib/workspace-files.js";
 import { Store } from "../src/storage/store.js";
 import { SessionService } from "../src/session-service.js";
+import { workspaceGit } from "../src/workspaces/git.js";
 import { createHostServer } from "../src/http/server.js";
 
 function fixture() {
@@ -25,6 +29,119 @@ function fixture() {
   const workspace: Workspace = { id: "test", hostId: "test", projectId: null, rootPath: root };
   return { dir, root, workspace, close: () => rmSync(dir, { recursive: true, force: true }) };
 }
+
+test("concurrent previews share the listener limit and cannot finish opening after disposal", async () => {
+  const previews = new PreviewService();
+  try {
+    const results = await Promise.allSettled(
+      Array.from({ length: 17 }, () => previews.openPort(8123, undefined)),
+    );
+    assert.equal(results.filter((r) => r.status === "fulfilled").length, 16);
+    assert.equal(results[16]?.status, "rejected");
+  } finally {
+    previews.dispose();
+  }
+  const closing = new PreviewService();
+  const opening = closing.openPort(8123, undefined);
+  closing.dispose();
+  await assert.rejects(opening, /预览服务已关闭/);
+});
+
+test("development previews serve the selected loopback port without forwarding credentials or redirects", async () => {
+  const previews = new PreviewService();
+  const upstream = createServer((req, res) => {
+    assert.equal(req.headers.cookie, undefined);
+    assert.equal(req.headers.authorization, undefined);
+    if (req.url === "/redirect") res.writeHead(302, { location: "https://example.invalid/" }).end();
+    else
+      res.writeHead(200, { "content-type": "text/html", "set-cookie": "secret=1" }).end("preview");
+  });
+  upstream.listen(0, "127.0.0.1");
+  await once(upstream, "listening");
+  try {
+    const port = (upstream.address() as AddressInfo).port;
+    assert.throws(() => previews.openPort(port, port));
+    const { url } = await previews.openPort(port, undefined);
+    const address = new URL(url);
+    for (const path of ["/", "/redirect"]) {
+      const req = get({
+        hostname: "127.0.0.1",
+        port: address.port,
+        path,
+        headers: { host: address.host, cookie: "private=1", authorization: "Bearer private" },
+      });
+      const [res] = await once(req, "response");
+      assert.equal(res.statusCode, path === "/" ? 200 : 404);
+      assert.equal(res.headers["set-cookie"], undefined);
+      assert.equal(res.headers.location, undefined);
+      assert.match(res.headers["content-security-policy"], /sandbox allow-scripts/);
+      res.resume();
+    }
+  } finally {
+    previews.dispose();
+    upstream.closeAllConnections();
+    await new Promise<void>((resolve) => upstream.close(() => resolve()));
+  }
+});
+
+test("Git delivery stages one hunk, rejects stale edits and fast-forwards a clean parent", async () => {
+  const f = fixture();
+  const store = new Store(join(f.dir, "git-delivery.sqlite"));
+  const service = new SessionService(store, { dataDir: f.dir, adapters: [] });
+  const git = (root: string, ...args: string[]) =>
+    execFileSync("git", ["-C", root, ...args], { encoding: "utf8", windowsHide: true }).trim();
+  try {
+    git(f.root, "init", "-q");
+    git(f.root, "config", "user.name", "Delivery Test");
+    git(f.root, "config", "user.email", "git@example.invalid");
+    git(f.root, "config", "core.autocrlf", "false");
+    const lines = Array.from({ length: 40 }, (_, i) => String(i)).join("\n") + "\n";
+    const filename = join(f.root, "lines.txt");
+    writeFileSync(filename, lines);
+    git(f.root, "add", ".");
+    git(f.root, "commit", "-qm", "initial");
+    const workspace = service.addWorkspace(null, f.root);
+    const run = (action: string, body: unknown) =>
+      workspaceGit(service, workspace, action, body, "desktop");
+    const edited = lines.replace("10\n", "first\n").replace("30\n", "second\n");
+    writeFileSync(filename, edited);
+    const hunks = (await run("hunks", { path: "lines.txt" })) as { id: string }[];
+    assert.equal(hunks.length, 2);
+    await run("stage-hunk", { path: "lines.txt", id: hunks[0]!.id });
+    assert.match(git(f.root, "diff", "--cached"), /\+first/);
+    assert.doesNotMatch(git(f.root, "diff", "--cached"), /\+second/);
+    writeFileSync(filename, edited.replace("second", "third"));
+    await assert.rejects(
+      run("discard-hunk", { path: "lines.txt", id: hunks[1]!.id, confirmed: true }),
+      /刷新/,
+    );
+    const [remaining] = (await run("hunks", { path: "lines.txt" })) as { id: string }[];
+    await run("discard-hunk", { path: "lines.txt", id: remaining!.id, confirmed: true });
+    await run("commit", { message: "partial" });
+    const created = await service.worktrees.create(workspace, {
+      rootPath: join(f.dir, "worker"),
+      branchName: "delivery-test",
+    });
+    assert.equal(created.kind, "worktree");
+    if (created.kind !== "worktree") return;
+    const wt = created.workspace;
+    writeFileSync(join(wt.rootPath, "delivery.txt"), "done");
+    git(wt.rootPath, "add", ".");
+    git(wt.rootPath, "commit", "-qm", "worker");
+    assert.deepEqual(await run("branches", {}), [
+      { workspaceId: wt.id, branchName: "delivery-test" },
+    ]);
+    writeFileSync(join(f.root, "untracked"), "preserve");
+    await assert.rejects(run("merge", { worktreeId: wt.id, mode: "ff" }), /DIRTY/);
+    rmSync(join(f.root, "untracked"));
+    await run("merge", { worktreeId: wt.id, mode: "ff" });
+    assert.equal(git(f.root, "rev-parse", "HEAD"), git(wt.rootPath, "rev-parse", "HEAD"));
+  } finally {
+    await service.dispose();
+    store.close();
+    f.close();
+  }
+});
 
 test("workspace file browsing handles Unicode, dot names, directories and missing files", async () => {
   const f = fixture();

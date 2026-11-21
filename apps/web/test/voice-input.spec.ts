@@ -115,10 +115,10 @@ test.describe("Multi-platform voice input (live SpeechRecognition + Host Whisper
             providers: [
               {
                 providerId: "prov-openai",
-                providerName: "codego",
+                providerName: "custom-openai",
                 endpointId: "ep-1",
                 protocol: "openai-responses",
-                baseUrl: "https://codegoai.com/v1",
+                baseUrl: "https://api.example.com/v1",
                 hasCredential: true,
               },
             ],
@@ -140,7 +140,7 @@ test.describe("Multi-platform voice input (live SpeechRecognition + Host Whisper
           body: JSON.stringify({
             text: "把导航栏改成极简黑白风格",
             providerId: "prov-openai",
-            providerName: "codego",
+            providerName: "custom-openai",
             model: "gpt-4o-mini-transcribe",
             durationMs: 140,
           }),

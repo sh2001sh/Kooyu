@@ -137,15 +137,13 @@ struct WorkHubView: View {
         }
     }
     @ViewBuilder private func work(_ data: JSONValue) -> some View {
-        let inbox = data["inbox"].array.filter { item in matches(model.snapshot?.sessions.first { $0.id == item["sessionId"].string }?.title ?? "") }
         let goals = data["goals"].array.filter { matches($0["title"].string + $0["description"].string) && (!attention || ["blocked", "awaiting-review"].contains($0["status"].string)) }
         let running = data["sessions"].array.filter { session in
-            ["running", "waiting-input"].contains(session["runState"].string) && matches(session["title"].string) && (!attention || session["runState"].string == "waiting-input") && !data["inbox"].array.contains { $0["sessionId"].string == session["id"].string } && !data["goals"].array.contains { $0["controllerSessionId"].string == session["id"].string || $0["sessionIds"].array.contains { $0.string == session["id"].string } }
+            ["running", "waiting-input"].contains(session["runState"].string) && matches(session["title"].string) && (!attention || session["runState"].string == "waiting-input") && !data["goals"].array.contains { $0["controllerSessionId"].string == session["id"].string || $0["sessionIds"].array.contains { $0.string == session["id"].string } }
         }
-        ForEach(Array(inbox.enumerated()), id: \.offset) { _, item in Button { source(item["sessionId"].string) } label: { WorkRow(title: model.snapshot?.sessions.first { $0.id == item["sessionId"].string }?.title ?? "对话", subtitle: "等待回答或权限确认") }.buttonStyle(.plain) }
         ForEach(Array(goals.enumerated()), id: \.offset) { _, goal in Button { sheet = WorkSheet(kind: "goal", value: goal) } label: { WorkRow(title: goal["title"].string, subtitle: workStatus(goal["status"].string) + " · " + workStatus(goal["verificationStatus"].string)) }.buttonStyle(.plain) }
         ForEach(Array(running.enumerated()), id: \.offset) { _, session in Button { source(session["id"].string) } label: { WorkRow(title: session["title"].string, subtitle: session["runState"].string == "running" ? "正在运行" : "等待输入") }.buttonStyle(.plain) }
-        if inbox.isEmpty && goals.isEmpty && running.isEmpty { ContentUnavailableView("暂无匹配工作", systemImage: "square.stack.3d.up", description: Text("在主对话中交代目标，过程、成果和验收会汇集到这里。")); Button("开始对话") { compose("") } }
+        if goals.isEmpty && running.isEmpty { ContentUnavailableView("暂无匹配工作", systemImage: "square.stack.3d.up", description: Text("在主对话中交代目标，过程、成果和验收会汇集到这里。")); Button("开始对话") { compose("") } }
     }
     @ViewBuilder private func artifacts(_ data: JSONValue) -> some View {
         let entries = data["artifacts"].array.filter { matches($0["artifact"]["title"].string + $0["artifact"]["displayName"].string) }

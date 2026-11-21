@@ -1,4 +1,5 @@
-relay.kooyu.app {
+# Replace relay.example.com with your own Relay hostname.
+relay.example.com {
     encode gzip {
         match {
             header Content-Type application/json*

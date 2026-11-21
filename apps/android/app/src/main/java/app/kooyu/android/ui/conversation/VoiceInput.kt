@@ -94,6 +94,7 @@ fun rememberVoiceInputController(
     var error by remember { mutableStateOf("") }
     var recognizer by remember { mutableStateOf<SpeechRecognizer?>(null) }
     var cancelled by remember { mutableStateOf(false) }
+    val disposed = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
 
     fun releaseRecognizer() {
         try {
@@ -154,6 +155,7 @@ fun rememberVoiceInputController(
             override fun onBufferReceived(buffer: ByteArray?) {}
             override fun onEndOfSpeech() {}
             override fun onError(errCode: Int) {
+                if (recognizer !== sr || disposed.get()) return
                 val partial = interim.trim()
                 interim = ""
                 releaseRecognizer()
@@ -166,6 +168,7 @@ fun rememberVoiceInputController(
                 }
             }
             override fun onResults(results: Bundle?) {
+                if (recognizer !== sr || disposed.get()) return
                 val best = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim().orEmpty()
                 val finalText = best.ifEmpty { interim.trim() }
                 interim = ""
@@ -175,6 +178,7 @@ fun rememberVoiceInputController(
                 }
             }
             override fun onPartialResults(partialResults: Bundle?) {
+                if (recognizer !== sr || disposed.get()) return
                 val part = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim().orEmpty()
                 if (part.isNotEmpty()) interim = part
             }
@@ -192,11 +196,13 @@ fun rememberVoiceInputController(
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) startRecognition() else error = permDeniedMsg
+        if (!disposed.get() && !cancelled) {
+            if (granted) startRecognition() else error = permDeniedMsg
+        }
     }
 
     DisposableEffect(Unit) {
-        onDispose { releaseRecognizer() }
+        onDispose { disposed.set(true); cancelled = true; releaseRecognizer() }
     }
 
     return VoiceInputController(
@@ -215,6 +221,7 @@ fun rememberVoiceInputController(
                     if (partial.isNotEmpty()) latestOnTranscript(partial)
                 }
             } else {
+                cancelled = false
                 val hasPerm = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
                 if (hasPerm) startRecognition() else permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
             }

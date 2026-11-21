@@ -68,12 +68,13 @@ internal fun notificationCursor(frame: NotificationFrame, hostId: String): Long?
 }
 
 /** Uses platform TLS validation, keeps Relay prefixes and never follows a redirect. */
-internal class NotificationStream(private val client: OkHttpClient = OkHttpClient.Builder()
+internal class NotificationStream(private val client: OkHttpClient = OkHttpClient.Builder().addInterceptor(SecureTunnel).addInterceptor(CloudDevice)
     .followRedirects(false).followSslRedirects(false).retryOnConnectionFailure(false)
     .connectTimeout(10, TimeUnit.SECONDS).readTimeout(45, TimeUnit.SECONDS).callTimeout(0, TimeUnit.SECONDS).build()) {
     fun events(connection: Connection, after: Long?): Flow<NotificationFrame> = callbackFlow {
         val path = "/notifications/events" + (after?.let { "?after=$it" } ?: "")
-        val request = Request.Builder().url(HostAPI.apiUrl(HostAPI.origin(connection.url), path))
+        CloudDevice.restore(connection)
+        val request = Request.Builder().tag(TunnelKey::class.java,connection.tunnelKey?.let(::TunnelKey)).url(HostAPI.apiUrl(HostAPI.origin(connection.url), path))
             .header("Authorization", "Bearer " + connection.token)
             .header("X-Kooyu-Protocol", HostAPI.PROTOCOL_VERSION.toString())
             .header("Accept", "text/event-stream").build()
@@ -100,3 +101,4 @@ internal class NotificationStream(private val client: OkHttpClient = OkHttpClien
         awaitClose { call.cancel() }
     }
 }
+

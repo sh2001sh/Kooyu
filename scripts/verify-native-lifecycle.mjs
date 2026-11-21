@@ -41,7 +41,9 @@ try {
     projectId: p.id,
     workspaceId: w.id,
     ...(["kodo", "pi"].includes(harness)
-      ? { model: "codegoai/deepseek-v4-flash" }
+      ? {
+          model: `${process.env.KODO_VERIFY_PROVIDER ?? "openai"}/${process.env.KODO_VERIFY_MODEL ?? "gpt-4o-mini"}`,
+        }
       : harness === "deepseek-harness"
         ? { model: "deepseek-official/deepseek-v4-flash" }
         : {}),

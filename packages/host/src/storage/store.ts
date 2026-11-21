@@ -20,6 +20,7 @@ import {
   SCHEMA_V7,
   SCHEMA_V8,
   SCHEMA_V9,
+  SCHEMA_V10,
 } from "./schema.js";
 
 export class Store {
@@ -35,9 +36,9 @@ export class Store {
         "PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;",
       );
       const version = this.db.prepare("PRAGMA user_version").get()?.user_version;
-      if (typeof version !== "number" || version > 9)
+      if (typeof version !== "number" || version > 10)
         throw new Error("Unsupported database schema version.");
-      if (path !== ":memory:" && version > 0 && version < 9) {
+      if (path !== ":memory:" && version > 0 && version < 10) {
         // A consistent SQLite snapshot includes committed WAL data. Never migrate without it.
         const backupPath =
           path + ".pre-v" + version + "-" + Date.now() + "-" + randomUUID() + ".sqlite";
@@ -59,6 +60,13 @@ export class Store {
         if (version < 7) this.db.exec(SCHEMA_V7);
         if (version < 8) this.db.exec(SCHEMA_V8);
         if (version < 9) this.db.exec(SCHEMA_V9);
+        if (version < 10) this.migrateV10();
+        else {
+          // Ensure pre-release v10 dev databases also have secure_requests without runtime DDL.
+          this.db.exec(
+            "CREATE TABLE IF NOT EXISTS secure_requests(id TEXT PRIMARY KEY, expires INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS secure_requests_expiry ON secure_requests(expires);",
+          );
+        }
         if (this.db.prepare("PRAGMA foreign_key_check").all().length)
           throw new Error("Database migration failed foreign key validation.");
         this.db
@@ -76,6 +84,23 @@ export class Store {
       this.db.close();
       throw error;
     }
+  }
+
+  /** Install V10 tables and backfill monotonic revision/generation/revoked on project grants. */
+  private migrateV10(): void {
+    for (const row of this.db
+      .prepare("SELECT id,data FROM records WHERE kind='project-grant'")
+      .all()) {
+      const data = JSON.parse(String(row.data)) as Record<string, unknown>;
+      const next = {
+        ...data,
+        revision: typeof data.revision === "number" ? data.revision : 1,
+        generation: typeof data.generation === "number" ? data.generation : 1,
+        revoked: typeof data.revoked === "boolean" ? data.revoked : false,
+      };
+      this.put("project-grant", String(row.id), next);
+    }
+    this.db.exec(SCHEMA_V10);
   }
 
   /** The SDK kernel is named Kodo; its tool-restriction modes drop the old pi prefix. */

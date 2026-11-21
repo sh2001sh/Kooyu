@@ -60,7 +60,7 @@ CREATE TABLE sessions_v3 (
   CHECK ((scope = 'global' AND project_id IS NULL) OR (scope = 'project' AND project_id IS NOT NULL))
 );
 INSERT INTO sessions_v3 SELECT id,
-  CASE WHEN kind='supervisor' AND title IN ('与 pi 对话','pi 主对话') THEN '与 Kodo 对话' ELSE title END,
+  CASE WHEN kind='supervisor' AND title IN ('与 pi 对话','pi 主对话') THEN '与 Kooyu 对话' ELSE title END,
   CASE WHEN kind='supervisor' THEN 'kodo' ELSE harness_id END,
   kind,scope,project_id,workspace_id,host_id,created_at FROM sessions;
 DROP TABLE sessions;
@@ -193,4 +193,88 @@ CREATE TABLE IF NOT EXISTS outbound_messages(id TEXT PRIMARY KEY, data TEXT NOT 
 CREATE TABLE IF NOT EXISTS executors(id TEXT PRIMARY KEY, data TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS control_leases(id TEXT PRIMARY KEY, data TEXT NOT NULL);
 PRAGMA user_version = 9;
+`;
+
+// Next-gen delegation tickets, managed Git worktrees, background jobs, unified intake & IM channels.
+export const SCHEMA_V10 = `
+CREATE TABLE IF NOT EXISTS workspace_worktrees (
+  workspace_id TEXT PRIMARY KEY REFERENCES workspaces(id),
+  parent_workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+  project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+  branch_name TEXT NOT NULL,
+  base_ref TEXT,
+  base_commit TEXT,
+  lifecycle_state TEXT NOT NULL CHECK (
+    lifecycle_state IN ('preparing', 'ready', 'failed', 'deleting', 'archived')
+  ),
+  last_error TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  data TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS workspace_worktrees_parent
+  ON workspace_worktrees(parent_workspace_id, lifecycle_state);
+
+CREATE TABLE IF NOT EXISTS delegation_tickets (
+  id TEXT PRIMARY KEY,
+  batch_id TEXT,
+  controller_session_id TEXT NOT NULL REFERENCES sessions(id),
+  worker_session_id TEXT REFERENCES sessions(id),
+  watch_id TEXT REFERENCES watches(id),
+  goal_id TEXT,
+  status TEXT NOT NULL CHECK (
+    status IN ('provisioning', 'running', 'awaiting-review', 'completed', 'blocked', 'cancelled', 'failed')
+  ),
+  wait_policy TEXT NOT NULL DEFAULT 'all' CHECK (wait_policy IN ('any', 'all')),
+  mandate TEXT NOT NULL,
+  provisioning_step TEXT NOT NULL,
+  report TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS one_active_ticket_per_worker
+  ON delegation_tickets(worker_session_id)
+  WHERE worker_session_id IS NOT NULL AND status IN ('provisioning', 'running', 'awaiting-review');
+CREATE INDEX IF NOT EXISTS delegation_tickets_controller
+  ON delegation_tickets(controller_session_id, created_at);
+CREATE INDEX IF NOT EXISTS delegation_tickets_batch
+  ON delegation_tickets(batch_id) WHERE batch_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS background_jobs (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL REFERENCES sessions(id),
+  workspace_id TEXT REFERENCES workspaces(id),
+  status TEXT NOT NULL CHECK (status IN ('running', 'exited', 'killed', 'lost')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  data TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS background_jobs_session ON background_jobs(session_id, status);
+
+CREATE TABLE IF NOT EXISTS intake_events (
+  id TEXT PRIMARY KEY,
+  source_kind TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  external_id TEXT NOT NULL,
+  disposition TEXT NOT NULL CHECK (disposition IN ('context-only', 'observed', 'proposed', 'dispatched', 'dropped')),
+  created_at TEXT NOT NULL,
+  data TEXT NOT NULL,
+  UNIQUE(source_kind, source_id, external_id)
+);
+CREATE INDEX IF NOT EXISTS intake_events_created ON intake_events(created_at);
+
+CREATE TABLE IF NOT EXISTS im_channels (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  status TEXT NOT NULL,
+  data TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS secure_requests (
+  id TEXT PRIMARY KEY,
+  expires INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS secure_requests_expiry ON secure_requests(expires);
+
+PRAGMA user_version = 10;
 `;

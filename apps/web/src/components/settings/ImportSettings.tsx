@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   ExternalLink,
@@ -19,7 +19,7 @@ import { HARNESS_IDS } from "@kodo/protocol/client";
 import { api } from "../../lib/host-client";
 import { HARNESS_NAMES, formatDate, shortModelLabel } from "../../lib/harnesses";
 import { useT } from "../../lib/i18n";
-import { HarnessBadge } from "../KodoBrand";
+import { HarnessBadge } from "../KooyuBrand";
 import { SettingsPage, SettingsSection } from "./SettingsKit";
 
 type Action = (work: () => Promise<unknown>) => Promise<void>;
@@ -58,9 +58,21 @@ export function ImportSettings({
   const [error, setError] = useState("");
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [lastResult, setLastResult] = useState<NativeImportResult | null>(null);
+  const scanGeneration = useRef(0);
+
+  const resetScan = () => {
+    scanGeneration.current++;
+    setDiscovery(null);
+    setSelected(new Set());
+    setLastResult(null);
+    setError("");
+    setScanning(false);
+  };
 
   const scan = useCallback(
     async (projId = projectFilter, hId = harnessFilter) => {
+      if (!projId || !snapshot.projects.some((p) => p.id === projId)) return;
+      const generation = ++scanGeneration.current;
       setScanning(true);
       setError("");
       try {
@@ -69,6 +81,7 @@ export function ImportSettings({
         if (hId) params.set("harnessId", hId);
         const qs = params.toString();
         const data = await api<NativeImportDiscovery>(`/native-imports${qs ? `?${qs}` : ""}`);
+        if (generation !== scanGeneration.current) return;
         setDiscovery(data);
         setSelected((prev) => {
           const valid = new Set(
@@ -79,17 +92,20 @@ export function ImportSettings({
           return next;
         });
       } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
+        if (generation === scanGeneration.current)
+          setError(err instanceof Error ? err.message : String(err));
       } finally {
-        setScanning(false);
+        if (generation === scanGeneration.current) setScanning(false);
       }
     },
-    [projectFilter, harnessFilter],
+    [projectFilter, harnessFilter, snapshot.projects],
   );
 
   useEffect(() => {
-    void scan(projectFilter, harnessFilter);
-  }, [projectFilter, harnessFilter, scan]);
+    return () => {
+      scanGeneration.current++;
+    };
+  }, []);
 
   const projectNames = useMemo(
     () => new Map(snapshot.projects.map((p) => [p.id, p.name])),
@@ -173,7 +189,7 @@ export function ImportSettings({
   const runImport = async () => {
     const all = discovery?.candidates ?? [];
     const chosen = all.filter((c) => !c.alreadyImported && selected.has(candidateKey(c)));
-    if (!chosen.length || importing) return;
+    if (!projectFilter || !chosen.length || importing) return;
     setImporting(true);
     setError("");
     setLastResult(null);
@@ -199,7 +215,21 @@ export function ImportSettings({
       if (result) {
         setLastResult(result);
         setSelected(new Set());
-        await scan(projectFilter, harnessFilter);
+        const importedKeys = new Set(chosen.map(candidateKey));
+        setDiscovery(
+          (current) =>
+            current && {
+              ...current,
+              candidates: current.candidates.map((c) => {
+                const imported = result!.imported.find(
+                  (s) => s.harnessId === c.harnessId && s.nativeSessionId === c.nativeSessionId,
+                );
+                return importedKeys.has(candidateKey(c)) && imported
+                  ? { ...c, alreadyImported: true, existingSessionId: imported.id }
+                  : c;
+              }),
+            },
+        );
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -218,7 +248,7 @@ export function ImportSettings({
         <button
           type="button"
           className="quiet-btn"
-          disabled={scanning}
+          disabled={scanning || importing || !projectFilter}
           onClick={() => void scan(projectFilter, harnessFilter)}
         >
           <RefreshCw size={13} className={scanning ? "spin" : ""} />
@@ -233,12 +263,13 @@ export function ImportSettings({
             <select
               aria-label={t("import.projectFilter")}
               value={projectFilter}
+              disabled={importing}
               onChange={(e) => {
+                resetScan();
                 setProjectFilter(e.target.value);
-                setLastResult(null);
               }}
             >
-              <option value="">{t("import.allProjects")}</option>
+              <option value="">{t("import.chooseProject")}</option>
               {snapshot.projects.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
@@ -252,9 +283,10 @@ export function ImportSettings({
             <select
               aria-label={t("import.engineFilter")}
               value={harnessFilter}
+              disabled={importing}
               onChange={(e) => {
+                resetScan();
                 setHarnessFilter(e.target.value);
-                setLastResult(null);
               }}
             >
               <option value="">{t("import.allEngines")}</option>
@@ -365,8 +397,8 @@ export function ImportSettings({
         ) : visibleCandidates.length === 0 ? (
           <div className="sx-import-empty">
             <Import size={20} />
-            <strong>{t("import.emptyTitle")}</strong>
-            <p>{t("import.emptyDesc")}</p>
+            <strong>{t(discovery ? "import.emptyTitle" : "import.readyTitle")}</strong>
+            <p>{t(discovery ? "import.emptyDesc" : "import.readyDesc")}</p>
           </div>
         ) : (
           <div className="sx-import-groups">
@@ -484,7 +516,7 @@ export function ImportSettings({
           <button
             type="button"
             className="primary sx-import-submit"
-            disabled={selectedCount === 0 || importing}
+            disabled={!projectFilter || selectedCount === 0 || importing || scanning}
             onClick={() => void runImport()}
           >
             <Import size={14} />

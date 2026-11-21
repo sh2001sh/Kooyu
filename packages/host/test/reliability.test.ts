@@ -13,6 +13,7 @@ function setup(
   options: {
     connectGate?: Promise<void>;
     sendGate?: Promise<void>;
+    holdMessage?: (text: string) => Promise<void> | undefined;
     sendError?: boolean;
     partial?: boolean;
     steer?: boolean;
@@ -46,6 +47,7 @@ function setup(
           sends.push(text);
           if (mode === "steer") return { nativeRunId: null };
           await options.sendGate;
+          await options.holdMessage?.(text);
           if (options.sendError) throw new Error("connection lost after native write");
           ctx.emit("turn-ended", { outcome: "completed" });
           ctx.emit("settled", { outcome: "completed" });
@@ -1521,6 +1523,215 @@ test("wake input carries goal, target status, last reply and limits for Kodo's j
     assert.equal(body.target.status, "turn-ended");
     assert.equal(body.supervision.limits.maxContinuations, 5);
     assert.match(body.note, /不代表用户目标已完成/);
+  } finally {
+    await f.close();
+  }
+});
+
+test("delegated workers produce one batch report with Host evidence and unverified claims", async () => {
+  const f = setup();
+  try {
+    const project = f.service.createProject({ name: "Batch" });
+    const controller = f.draft("supervisor");
+    f.service.grantProject(controller.id, project.id, { mode: "create-and-control" });
+    const result = await f.service.delegations.delegateBatch({
+      controllerSessionId: controller.id,
+      callId: randomUUID(),
+      tasks: ["first", "second"].map((task) => ({
+        task,
+        title: task,
+        projectId: project.id,
+        harnessId: "pi",
+        isolation: "shared",
+      })),
+    });
+    assert.equal(result.delegations.length, 2);
+    assert.equal(f.store.watches().length, 2);
+    const deadline = Date.now() + 8000;
+    while (!f.sends.some((t) => t.includes("harness-batch-report")) && Date.now() < deadline)
+      await turn();
+    const reports = f.sends
+      .filter((t) => t.includes("harness-batch-report"))
+      .map((t) => JSON.parse(t));
+    assert.equal(reports.length, 1);
+    assert.equal(reports[0].reports.length, 2);
+    assert.ok(
+      reports[0].reports.every(
+        (r: { workerClaim: { verification: string } }) =>
+          r.workerClaim.verification === "unverified-worker-claim",
+      ),
+    );
+    const watch = result.delegations[0]!.watch;
+    f.service.changeWatch(watch.id, "paused");
+    assert.equal(f.service.delegations.findByWatchId(watch.id)?.status, "blocked");
+  } finally {
+    await f.close();
+  }
+});
+
+test("a human controller turn starts while every background execution slot is held", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((done) => {
+    release = done;
+  });
+  const f = setup({ holdMessage: (text) => (text.startsWith("held worker ") ? gate : undefined) });
+  try {
+    const controller = f.draft("supervisor");
+    const project = f.service.createProject({ name: "Busy workers" });
+    f.service.grantProject(controller.id, project.id, { mode: "create-and-control" });
+    const count = f.service.capacity.limit;
+    for (let i = 0; i < count + 1; i++) {
+      await f.service.delegations.delegateBatch({
+        controllerSessionId: controller.id,
+        callId: randomUUID(),
+        tasks: [
+          { task: "held worker " + i, projectId: project.id, harnessId: "pi", isolation: "shared" },
+        ],
+      });
+    }
+    const waitUntil = async (check: () => boolean) => {
+      const deadline = Date.now() + 3000;
+      while (!check() && Date.now() < deadline) await turn();
+      assert.ok(
+        check(),
+        JSON.stringify({
+          capacity: f.service.capacity.snapshot(),
+          sends: f.sends.map((s) => s.slice(0, 80)),
+        }),
+      );
+    };
+    await waitUntil(() => f.service.capacity.snapshot().backgroundActive.length === count);
+    const human = "human foreground turn";
+    f.service.acceptSend(controller.id, { requestId: randomUUID(), text: human, mode: "new" });
+    await waitUntil(() => f.sends.includes(human));
+    assert.equal(f.service.capacity.snapshot().backgroundActive.length, count);
+    assert.equal(f.sends.filter((text) => text.startsWith("held worker ")).length, count);
+  } finally {
+    release();
+    await turn();
+    await f.close();
+  }
+});
+
+for (const releaseReason of ["timeout", "takeover"] as const) {
+  test("batch all flushes the ready worker on " + releaseReason, async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((done) => {
+      release = done;
+    });
+    const f = setup({ holdMessage: (text) => (text === "slow worker" ? gate : undefined) });
+    try {
+      const project = f.service.createProject({ name: "Join" });
+      const controller = f.draft("supervisor");
+      f.service.grantProject(controller.id, project.id, { mode: "create-and-control" });
+      const result = await f.service.delegations.delegateBatch({
+        controllerSessionId: controller.id,
+        callId: randomUUID(),
+        waitPolicy: "all",
+        tasks: ["fast worker", "slow worker"].map((task) => ({
+          task,
+          projectId: project.id,
+          harnessId: "pi",
+          isolation: "shared",
+        })),
+      });
+      const deadline = Date.now() + 8000;
+      const db = f.store.db;
+      while (
+        !db.prepare("SELECT id FROM wakes WHERE state='pending'").get() &&
+        Date.now() < deadline
+      )
+        await turn();
+      const pending = db.prepare("SELECT id,data FROM wakes WHERE state='pending'").get();
+      assert.ok(pending);
+      assert.equal(
+        f.sends.some((t) => t.includes("harness-batch-report")),
+        false,
+      );
+      // Advance the stored age across the join threshold without sleeping for 30 minutes.
+      const age = releaseReason === "timeout" ? 1800001 : 2000;
+      db.prepare("UPDATE wakes SET data=? WHERE id=?").run(
+        JSON.stringify({
+          ...JSON.parse(String(pending.data)),
+          createdAt: new Date(Date.now() - age).toISOString(),
+        }),
+        pending.id!,
+      );
+      if (releaseReason === "takeover")
+        f.service.changeWatch(result.delegations[1]!.watch.id, "paused");
+      while (!f.sends.some((t) => t.includes("harness-batch-report")) && Date.now() < deadline)
+        await turn();
+      const reports = f.sends
+        .filter((t) => t.includes("harness-batch-report"))
+        .map((t) => JSON.parse(t));
+      assert.equal(reports.length, 1);
+      assert.equal(reports[0].reports.length, 1);
+      assert.equal(reports[0].members.length, 2);
+      if (releaseReason === "takeover")
+        assert.ok(reports[0].members.some((m: { status: string }) => m.status === "blocked"));
+    } finally {
+      release();
+      await turn();
+      await f.close();
+    }
+  });
+}
+
+test("handing off one project worker grants only that session and retries preserve its controller", async () => {
+  const f = setup();
+  try {
+    const project = f.service.createProject({ name: "Handoff" });
+    const worker = () =>
+      f.service.createDraft({
+        kind: "direct",
+        title: "Worker",
+        harnessId: "pi",
+        projectId: project.id,
+      });
+    const selected = worker(),
+      sibling = worker();
+    const handoff = f.service.delegations.escalateDirectSession({ workerSessionId: selected.id });
+    assert.equal(handoff.ticket.mandate.grantScope, "worker");
+    assert.throws(() => f.service.requireGrant(handoff.controller, sibling));
+    const rival = f.draft("supervisor");
+    assert.throws(() =>
+      f.service.delegations.escalateDirectSession({
+        workerSessionId: selected.id,
+        controllerSessionId: rival.id,
+      }),
+    );
+    assert.throws(() => f.service.requireGrant(rival, selected));
+    assert.equal(
+      f.service.delegations.escalateDirectSession({ workerSessionId: selected.id }).ticket.id,
+      handoff.ticket.id,
+    );
+    f.service.changeWatch(handoff.watch.id, "paused");
+    const resumed = f.service.delegations.handback(handoff.ticket.id);
+    assert.deepEqual(f.service.delegations.revalidateMandate(resumed.ticket), { ok: true });
+  } finally {
+    await f.close();
+  }
+});
+
+test("bundled MCP connectors list real stdio tools and revocation prevents reuse", async () => {
+  const f = setup();
+  try {
+    for (const [applicationId, tool] of [
+      ["mcp-memory", "read_graph"],
+      ["mcp-sequential-thinking", "sequentialthinking"],
+    ] as const) {
+      const c = await f.service.applications.connect({
+        requestId: randomUUID(),
+        applicationId,
+        version: "1.0.0",
+        name: applicationId,
+      });
+      assert.ok(c);
+      const tools = await f.service.applications.tools(c.id);
+      assert.ok(tools.some((item) => item.name === tool));
+      f.service.applications.revoke(c.id, c.revision);
+      await assert.rejects(f.service.applications.tools(c.id));
+    }
   } finally {
     await f.close();
   }

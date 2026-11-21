@@ -4,7 +4,7 @@ import { once } from "node:events";
 import { createServer, request } from "node:http";
 import { generateKeyPairSync, sign, createHash } from "node:crypto";
 import WebSocket from "ws";
-import { createRelay } from "../src/server.mjs";
+import { createRelay } from "./protocol-fixture.mjs";
 
 async function fixture() {
   const probe = createServer();
@@ -18,21 +18,23 @@ async function fixture() {
   await once(relay.server, "listening");
   return { relay, origin };
 }
-async function enroll(origin, keys = generateKeyPairSync("ed25519")) {
-  const ws = new WebSocket(origin.replace("http:", "ws:") + "/v1/host");
+async function enroll(origin, keys = generateKeyPairSync("ed25519"), version = 1) {
+  const ws = new WebSocket(origin.replace("http:", "ws:") + "/v" + version + "/host");
+  const decode = (raw) => JSON.parse(version === 2 ? raw.subarray(6) : raw);
   const [raw] = await once(ws, "message"),
-    challenge = JSON.parse(raw);
+    challenge = decode(raw);
   const der = keys.publicKey.export({ format: "der", type: "spki" });
   const ready = once(ws, "message");
+  const auth = JSON.stringify({
+    type: "authenticate",
+    publicKey: der.toString("base64"),
+    signature: sign(null, Buffer.from(challenge.challenge), keys.privateKey).toString("base64"),
+  });
   ws.send(
-    JSON.stringify({
-      type: "authenticate",
-      publicKey: der.toString("base64"),
-      signature: sign(null, Buffer.from(challenge.challenge), keys.privateKey).toString("base64"),
-    }),
+    version === 2 ? Buffer.concat([Buffer.from([1, 0, 0, 0, 0, 0]), Buffer.from(auth)]) : auth,
   );
   await ready;
-  return { ws, keys, id: createHash("sha256").update(der).digest("hex") };
+  return { ws, keys, decode, id: createHash("sha256").update(der).digest("hex") };
 }
 test("Relay rejects invalid Host, cross-origin calls, invalid signatures and browser enrollment", async () => {
   const { relay, origin } = await fixture();
@@ -124,3 +126,33 @@ test("Relay restricts response content and cookies to enrolled Host; ignores cro
     await relay.close();
   }
 });
+
+for (const version of [1, 2])
+  test(
+    `v${version} congestion rejects new work and still cancels an admitted request`,
+    { timeout: 10000 },
+    async () => {
+      const { relay, origin } = await fixture();
+      try {
+        const { ws, id, decode } = await enroll(origin, undefined, version);
+        const host = relay.hosts.get(id);
+        const url = origin + "/h/" + id + "/api/snapshot";
+        const admitted = once(ws, "message");
+        const controller = new AbortController();
+        const response = fetch(url, { signal: controller.signal }).catch((error) => error);
+        const request = decode((await admitted)[0]);
+        Object.defineProperty(host.ws, "bufferedAmount", { value: 5 * 1024 * 1024 });
+        const refused = await fetch(url);
+        assert.equal(refused.status, 503);
+        assert.equal((await refused.json()).error.code, "RELAY_BUSY");
+        assert.equal(host.requests.size, 1);
+        const cancelled = once(ws, "message");
+        controller.abort();
+        assert.equal((await response).name, "AbortError");
+        assert.deepEqual(decode((await cancelled)[0]), { type: "cancel", id: request.id });
+        assert.equal(host.requests.size, 0);
+      } finally {
+        await relay.close();
+      }
+    },
+  );

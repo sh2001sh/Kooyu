@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { Type } from "@sinclair/typebox";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
@@ -27,6 +28,7 @@ export const HARNESS_TOOL_NAMES = [
   "harness_handoff",
   "harness_update",
   "harness_project",
+  "harness_delegate",
 ] as const;
 export function stableRequestId(namespace: string, value: string): string {
   const h = createHash("sha256").update(`${namespace}:${value}`).digest("hex");
@@ -150,8 +152,107 @@ export function createHarnessTools(service: SessionService, controller: Session)
     budgetUsd: Type.Optional(
       Type.Number({ minimum: 0, description: "0 means unlimited (default)." }),
     ),
+    maxTotalTokens: Type.Optional(
+      Type.Integer({
+        minimum: 0,
+        description:
+          "0 means unlimited (default). Applies to all providers even when USD price is unknown.",
+      }),
+    ),
   });
+  const delegateTaskSchema = Type.Object({
+    harnessId: Type.Union(NATIVE_HARNESS_IDS.map((id) => Type.Literal(id))),
+    title: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+    task: Type.String({ minLength: 1, maxLength: 200000 }),
+    goal: Type.Optional(Type.String({ maxLength: 10000 })),
+    goalId: Type.Optional(Type.String()),
+    projectId: Type.Optional(Type.String()),
+    workspaceId: Type.Optional(Type.String()),
+    workerSessionId: Type.Optional(Type.String()),
+    readOnly: Type.Optional(
+      Type.Boolean({ description: "Restrict Codex or Claude Code to read-only review." }),
+    ),
+    isolation: Type.Optional(
+      Type.Union([Type.Literal("worktree"), Type.Literal("shared"), Type.Literal("auto")]),
+    ),
+    branchName: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+    baseRef: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+    limits: Type.Optional(limits),
+    executorId: Type.Optional(Type.String()),
+    model: Type.Optional(Type.String()),
+    reasoning: Type.Optional(Type.String()),
+  });
+  const workspace =
+    controller.workspaceId &&
+    service.store.workspaces().find((w) => w.id === controller.workspaceId);
+  const jobInput = Type.Object({ jobId: Type.String({ format: "uuid" }) });
+  const ownJob = (jobId: string) => {
+    const job = service.backgroundJobs.get(jobId);
+    if (job.sessionId !== controller.id)
+      throw new KodoError("UNAUTHORIZED", "该作业属于其他会话。");
+    return job;
+  };
+  const journal = (callId: string, params: Wire, run: () => Promise<unknown>) =>
+    service.actions.run(
+      {
+        sessionId: controller.id,
+        actor: controller.harnessId,
+        toolCallId: callId,
+        turnId:
+          service.store.record<{ id: string }>("active-tool-turn", controller.id)?.id ?? "initial",
+      },
+      params,
+      run,
+    );
   return [
+    ...(workspace && controller.harnessId === "kodo"
+      ? [
+          make(
+            "shell_exec",
+            "Run a project shell command. Returns a job ID if it continues in the background.",
+            Type.Object({
+              command: Type.String({ minLength: 1 }),
+              cwd: Type.Optional(Type.String()),
+              yieldMs: Type.Optional(Type.Integer({ minimum: 0 })),
+              background: Type.Optional(Type.Boolean()),
+              notifyOnExit: Type.Optional(Type.Boolean()),
+            }),
+            (p, id) =>
+              journal(id, { tool: "shell_exec", params: p }, () =>
+                service.backgroundJobs.exec({
+                  sessionId: controller.id,
+                  workspaceId: workspace.id,
+                  command: p.command,
+                  cwd: resolve(workspace.rootPath, p.cwd ?? "."),
+                  yieldMs: p.yieldMs,
+                  background: p.background,
+                  notifyOnExit: p.notifyOnExit,
+                }),
+              ),
+          ),
+          make("job_status", "Inspect a shell job in this conversation.", jobInput, (p) =>
+            ownJob(p.jobId),
+          ),
+          make(
+            "job_output",
+            "Read recent shell job output.",
+            Type.Object({
+              jobId: Type.String({ format: "uuid" }),
+              tailBytes: Type.Optional(Type.Integer({ minimum: 1, maximum: 262144 })),
+            }),
+            (p) => service.backgroundJobs.output(ownJob(p.jobId).id, p.tailBytes),
+          ),
+          make(
+            "job_kill",
+            "Stop a running process tree owned by this conversation.",
+            jobInput,
+            (p, id) =>
+              journal(id, { tool: "job_kill", params: p }, () =>
+                service.backgroundJobs.kill(ownJob(p.jobId).id),
+              ),
+          ),
+        ]
+      : []),
     make(
       "harness_project",
       "Create a project from the GLOBAL main conversation after in-conversation user approval. Supply the user's project name and optionally an existing absolute directory. Returns the project and its workspaces. Does not create directories, move this conversation, start execution or grant control. Project-scoped conversations cannot create projects outside their scope. Use harness_grant separately before creating execution sessions.",
@@ -584,6 +685,123 @@ export function createHarnessTools(service: SessionService, controller: Session)
           scopedTarget(p.sessionId);
         }
         return { status: "updated", session: service.updateSession(p.sessionId, change) };
+      },
+    ),
+    make(
+      "harness_delegate",
+      "Delegate one task (or a parallel tasks[] batch) to clean-context worker harness session(s) in isolated Git worktree(s), with an immutable Mandate, authoritative Watch, and compact DelegationReport wake-up. Requests project create-and-control approval in chat before provisioning if missing. Pass tasks[] for parallel workers with waitPolicy=all|any (default all) to receive a single coalesced batch report.",
+      Type.Object({
+        harnessId: Type.Optional(Type.Union(NATIVE_HARNESS_IDS.map((id) => Type.Literal(id)))),
+        title: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+        task: Type.Optional(Type.String({ minLength: 1, maxLength: 200000 })),
+        goal: Type.Optional(Type.String({ maxLength: 10000 })),
+        goalId: Type.Optional(Type.String()),
+        projectId: Type.Optional(Type.String()),
+        workspaceId: Type.Optional(Type.String()),
+        workerSessionId: Type.Optional(Type.String()),
+        readOnly: Type.Optional(
+          Type.Boolean({ description: "Restrict Codex or Claude Code to read-only review." }),
+        ),
+        isolation: Type.Optional(
+          Type.Union([Type.Literal("worktree"), Type.Literal("shared"), Type.Literal("auto")]),
+        ),
+        branchName: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+        baseRef: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+        limits: Type.Optional(limits),
+        executorId: Type.Optional(Type.String()),
+        model: Type.Optional(Type.String()),
+        reasoning: Type.Optional(Type.String()),
+        waitPolicy: Type.Optional(Type.Union([Type.Literal("all"), Type.Literal("any")])),
+        tasks: Type.Optional(Type.Array(delegateTaskSchema, { minLength: 1, maxLength: 8 })),
+      }),
+      async (p, id) => {
+        const tasks =
+          Array.isArray(p.tasks) && p.tasks.length > 0
+            ? p.tasks.map((item: Wire) => ({
+                harnessId: item.harnessId,
+                title: item.title,
+                task: item.task,
+                goal: item.goal ?? p.goal,
+                goalId: item.goalId ?? p.goalId,
+                projectId: item.projectId ?? p.projectId,
+                workspaceId: item.workspaceId ?? p.workspaceId,
+                workerSessionId: item.workerSessionId,
+                readOnly: item.readOnly ?? p.readOnly,
+                isolation: item.isolation ?? p.isolation,
+                branchName: item.branchName,
+                baseRef: item.baseRef ?? p.baseRef,
+                limits: item.limits ?? p.limits,
+                executorId: item.executorId ?? p.executorId,
+                model: item.model,
+                reasoning: item.reasoning,
+              }))
+            : p.harnessId && p.task
+              ? [
+                  {
+                    harnessId: p.harnessId,
+                    title: p.title,
+                    task: p.task,
+                    goal: p.goal,
+                    goalId: p.goalId,
+                    projectId: p.projectId,
+                    workspaceId: p.workspaceId,
+                    workerSessionId: p.workerSessionId,
+                    readOnly: p.readOnly,
+                    isolation: p.isolation,
+                    branchName: p.branchName,
+                    baseRef: p.baseRef,
+                    limits: p.limits,
+                    executorId: p.executorId,
+                    model: p.model,
+                    reasoning: p.reasoning,
+                  },
+                ]
+              : null;
+        if (!tasks)
+          throw new KodoError(
+            "INVALID_INPUT",
+            "请提供 harnessId 与 task，或提供非空 tasks[] 委派列表。",
+          );
+        const batch = await service.delegations.delegateBatch({
+          controllerSessionId: controller.id,
+          callId: id,
+          tasks,
+          waitPolicy: p.waitPolicy,
+          confirmGrant: async (projectId, projectName) => {
+            await confirm(id, {
+              action: "授权 Kooyu 在项目中委派并自动控制子 Harness",
+              project: projectName,
+              projectId,
+              mode: "create-and-control",
+              tasks: tasks.map((t: Wire) => ({
+                harnessId: t.harnessId,
+                title: t.title ?? t.harnessId,
+                isolation: t.isolation ?? "auto",
+              })),
+            });
+            service.grantProject(controller.id, projectId, {
+              mode: "create-and-control",
+              goal: p.goal ?? tasks[0]?.goal ?? "",
+              limits: p.limits ?? {},
+            });
+          },
+        });
+        return {
+          batchId: batch.batchId,
+          waitPolicy: batch.waitPolicy,
+          delegations: batch.delegations.map((d) => ({
+            ticketId: d.ticket.id,
+            workerSessionId: d.session.id,
+            harnessId: d.session.harnessId,
+            title: d.session.title,
+            watchId: d.watch.id,
+            isolation: d.ticket.mandate.isolation,
+            branchName: d.worktree?.branchName ?? null,
+            worktreePath: d.worktree?.rootPath ?? null,
+            fallbackNote: d.fallbackNote,
+            status: d.ticket.status,
+          })),
+        };
       },
     ),
   ];

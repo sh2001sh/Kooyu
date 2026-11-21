@@ -1,7 +1,7 @@
 import { randomUUID, createHash } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { chromium, type BrowserContext, type Page } from "playwright";
+import { chromium, type BrowserContext, type CDPSession, type Cookie, type Page } from "playwright";
 import { z } from "zod";
 import { KodoError } from "@kodo/protocol";
 import type { SessionService } from "../session-service.js";
@@ -22,7 +22,40 @@ export class BrowserService {
   private readonly leases = new Map<string, Lease>();
   private readonly opening = new Map<string, Promise<BrowserContext>>();
   private readonly pages = new Map<string, Page>();
+  private readonly casts = new Map<
+    string,
+    {
+      session: CDPSession;
+      page: Page;
+      frame: string;
+      sequence: number;
+      generation: number;
+      steps?: string[];
+    }
+  >();
   private closed = false;
+  private executable() {
+    const explicit = process.env.KOOYU_CHROMIUM_PATH;
+    if (explicit) return existsSync(explicit) ? explicit : undefined;
+    const candidates = [
+      chromium.executablePath(),
+      "/usr/bin/google-chrome",
+      "/usr/bin/chromium",
+      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    ];
+    for (const root of [
+      process.env.PROGRAMFILES,
+      process.env["PROGRAMFILES(X86)"],
+      process.env.LOCALAPPDATA,
+    ]) {
+      if (root)
+        candidates.push(
+          join(root, "Google/Chrome/Application/chrome.exe"),
+          join(root, "Microsoft/Edge/Application/msedge.exe"),
+        );
+    }
+    return candidates.find((path) => existsSync(path));
+  }
   constructor(private readonly service: SessionService) {
     // Persist a monotonic fence but never revive a lease after process restart.
     for (const e of service.store.records<BrowserEnvironment>("browser-environment"))
@@ -36,7 +69,7 @@ export class BrowserService {
   }
   status() {
     return {
-      available: existsSync(process.env.KOOYU_CHROMIUM_PATH ?? chromium.executablePath()),
+      available: Boolean(this.executable()),
       backend: "playwright-chromium",
       persistentProfiles: true,
       isolated: false,
@@ -96,7 +129,7 @@ export class BrowserService {
     if (!e) throw new KodoError("NOT_FOUND", "浏览器环境不存在。");
     return e;
   }
-  private async context(id: string, headed = false): Promise<BrowserContext> {
+  private async context(id: string): Promise<BrowserContext> {
     if (this.closed) throw new KodoError("UNAVAILABLE", "浏览器服务已关闭。");
     const pending = this.opening.get(id);
     if (pending) return pending;
@@ -110,10 +143,8 @@ export class BrowserService {
       );
     const job = chromium
       .launchPersistentContext(join(this.service.dataDir, "browser-profiles", id), {
-        headless: !headed,
-        ...(process.env.KOOYU_CHROMIUM_PATH
-          ? { executablePath: process.env.KOOYU_CHROMIUM_PATH }
-          : {}),
+        headless: true,
+        executablePath: this.executable(),
         acceptDownloads: false,
         viewport: { width: 1280, height: 900 },
         serviceWorkers: "block",
@@ -123,8 +154,19 @@ export class BrowserService {
           await context.close();
           throw new Error("Browser service closed");
         }
+        await this.loadSharedCookies(context, e.origins);
         await context.route("**/*", (route) => {
-          const url = route.request().url();
+          const request = route.request();
+          if (!request.isNavigationRequest()) return route.continue();
+          try {
+            if (request.frame().parentFrame()) return route.continue();
+          } catch {
+            /* First popup navigation has no frame yet. */
+          }
+          const url = request.url();
+          const lease = this.leases.get(id);
+          if (lease?.owner === "user" && lease.expiresAt > Date.now() && /^https?:/.test(url))
+            return route.continue();
           if (url.startsWith("data:") || url === "about:blank") return route.continue();
           try {
             if (e.origins.includes(new URL(url).origin)) return route.continue();
@@ -170,29 +212,345 @@ export class BrowserService {
     )
       throw new KodoError("CONFLICT", "浏览器控制租约已过期或用户已接管。");
   }
-  private async closeContext(id: string) {
-    await this.opening.get(id)?.catch(() => {});
-    await this.contexts.get(id)?.close();
+  private userCast(id: string, generation: number) {
+    const lease = this.leases.get(id);
+    const cast = this.casts.get(id);
+    if (
+      !lease ||
+      lease.owner !== "user" ||
+      lease.expiresAt <= Date.now() ||
+      lease.generation !== generation ||
+      cast?.generation !== generation
+    )
+      throw new KodoError("CONFLICT", "用户控制租约已失效。");
+    return cast;
   }
+
   async humanControl(id: string, expectedGeneration: number) {
     const release = this.service.lifecycle.enter();
     try {
       const lease = this.acquire(id, "user", expectedGeneration, 600);
-      await this.closeContext(id);
-      await this.context(id, true);
+      const context = await this.context(id);
+      const page = context.pages().at(-1) ?? (await context.newPage());
+      if (page.url() === "about:blank")
+        await page.goto(this.get(id).origins[0]!, { waitUntil: "domcontentloaded" });
+      await this.castPage(id, context, page, lease);
       return lease;
     } finally {
       release();
     }
   }
-  async returnControl(id: string, expectedGeneration: number) {
-    const release = this.service.lifecycle.enter();
+  private async castPage(id: string, context: BrowserContext, page: Page, lease: Lease) {
+    const old = this.casts.get(id);
+    const session = await context.newCDPSession(page);
+    if (
+      this.leases.get(id) !== lease ||
+      lease.expiresAt <= Date.now() ||
+      this.casts.get(id) !== old
+    ) {
+      await session.detach().catch(() => {});
+      throw new KodoError("CONFLICT", "浏览器页面或控制权已改变。");
+    }
+    const cast = {
+      session,
+      page,
+      generation: lease.generation,
+      frame: "",
+      sequence: (old?.sequence ?? -1) + 1,
+      steps: old?.generation === lease.generation ? old.steps : undefined,
+    };
+    this.casts.set(id, cast);
+    session.on("Page.screencastFrame", (event) => {
+      if (
+        this.casts.get(id) === cast &&
+        this.leases.get(id)?.generation === cast.generation &&
+        lease.expiresAt > Date.now()
+      ) {
+        cast.frame = event.data;
+        cast.sequence++;
+        this.notifyFrame(id, cast.generation);
+      }
+      void session.send("Page.screencastFrameAck", { sessionId: event.sessionId }).catch(() => {});
+    });
     try {
-      const lease = this.acquire(id, "agent", expectedGeneration);
-      await this.closeContext(id);
-      return lease;
+      await session.send("Page.startScreencast", { format: "jpeg", quality: 65 });
     } finally {
-      release();
+      await old?.session.detach().catch(() => {});
+    }
+  }
+  async selectTab(id: string, generation: number, pageId: string) {
+    this.userCast(id, generation);
+    const context = this.contexts.get(id),
+      page = this.pages.get(pageId);
+    if (!page || !context?.pages().includes(page))
+      throw new KodoError("NOT_FOUND", "浏览器标签页已关闭。");
+    await this.castPage(id, context, page, this.leases.get(id)!);
+    return { pageId };
+  }
+  private readonly frameSubscribers = new Map<string, Set<() => void>>();
+
+  private notifyFrame(id: string, generation: number) {
+    const subs = this.frameSubscribers.get(`${id}:${generation}`);
+    if (!subs) return;
+    for (const fn of subs) fn();
+  }
+
+  subscribeFrame(id: string, generation: number, listener: () => void): () => void {
+    this.userCast(id, generation);
+    const key = `${id}:${generation}`;
+    let subs = this.frameSubscribers.get(key);
+    if (!subs) {
+      subs = new Set();
+      this.frameSubscribers.set(key, subs);
+    }
+    subs.add(listener);
+    return () => {
+      subs?.delete(listener);
+      if (subs && subs.size === 0) this.frameSubscribers.delete(key);
+    };
+  }
+
+  frame(id: string, generation: number, after: number) {
+    const cast = this.userCast(id, generation);
+    return {
+      sequence: cast.sequence,
+      frame: after === cast.sequence ? "" : cast.frame,
+      pageId: this.pageId(cast.page),
+      tabs: (this.contexts.get(id)?.pages() ?? []).map((page) => ({
+        id: this.pageId(page),
+        origin: new URL(page.url()).origin,
+      })),
+    };
+  }
+  record(id: string, generation: number, start: boolean) {
+    const cast = this.userCast(id, generation);
+    if (start) {
+      cast.steps ??= [];
+      return { recording: true };
+    }
+    if (!cast.steps?.length) throw new KodoError("INVALID_INPUT", "请先录制至少一个操作。");
+    const recordingId = randomUUID();
+    const markdown = [
+      "---",
+      "name: browser-demonstration",
+      "description: 在受管浏览器重现已录制的操作。",
+      "---",
+      "",
+      ...cast.steps.map((step, i) => i + 1 + ". " + step),
+    ].join("\n");
+    this.service.store.put("browser-demonstration", recordingId, {
+      recordingId,
+      environmentId: id,
+      markdown,
+    });
+    delete cast.steps;
+    return { recording: false, recordingId, markdown };
+  }
+
+  scheduleRecording(id: string, value: unknown) {
+    const input = z
+      .object({
+        requestId: z.string().uuid(),
+        recordingId: z.string().uuid(),
+        name: z.string().trim().min(1).max(150),
+        time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+        timeZone: z.string().min(1).max(100),
+      })
+      .strict()
+      .parse(value);
+    const demo = this.service.store.record<{ environmentId: string; markdown: string }>(
+      "browser-demonstration",
+      input.recordingId,
+    );
+    if (demo?.environmentId !== id) throw new KodoError("NOT_FOUND", "找不到此浏览器的示教录制。");
+    const controllerSessionId = this.get(id).controllerSessionId;
+    return this.service.store.transaction(() => {
+      const grant = this.service.automations.authorize(controllerSessionId, input.requestId);
+      return this.service.automations.save({
+        requestId: input.requestId,
+        name: input.name,
+        controllerSessionId,
+        grantId: grant.id,
+        promptTemplate:
+          "在受管浏览器 " +
+          id +
+          " 中根据以下已脱敏示教执行。遇到人工登录或缺少参数时暂停并询问。\n" +
+          demo.markdown,
+        trigger: { kind: "calendar", frequency: "daily", time: input.time },
+        timeZone: input.timeZone,
+      });
+    });
+  }
+  async userInput(id: string, generation: number, value: unknown) {
+    const cast = this.userCast(id, generation);
+    const input = z
+      .discriminatedUnion("type", [
+        z.object({
+          type: z.literal("click"),
+          x: z.number().min(0).max(1280),
+          y: z.number().min(0).max(900),
+        }),
+        z.object({ type: z.literal("text"), text: z.string().max(2048) }),
+        z.object({
+          type: z.literal("key"),
+          key: z.enum([
+            "Enter",
+            "Tab",
+            "Backspace",
+            "Escape",
+            "ArrowLeft",
+            "ArrowRight",
+            "ArrowUp",
+            "ArrowDown",
+          ]),
+        }),
+      ])
+      .parse(value);
+    let step: string | undefined;
+    const steps = cast.steps;
+    if (steps && steps.length < 120) {
+      const origin = new URL(cast.page.url()).origin;
+      if (!this.get(id).origins.includes(origin)) step = "{{需要人工登录或授权环境}}";
+      else {
+        // Persist structural selectors only. Labels, field values, URLs with paths,
+        // browser storage, network headers and cross-frame inputs never enter a recording.
+        const selector = await cast.page.evaluate(
+          (point) => {
+            let el = point ? document.elementFromPoint(point.x, point.y) : document.activeElement;
+            if (
+              !el ||
+              el.matches('iframe,input[type=password],input[autocomplete~="one-time-code"]')
+            )
+              return null;
+            const parts: string[] = [];
+            while (el && el !== document.documentElement && parts.length < 20) {
+              const tag = el.localName;
+              if (!/^[a-z][a-z0-9]*$/.test(tag)) return null;
+              const siblings = Array.from(el.parentElement?.children ?? []).filter(
+                (node) => node.localName === tag,
+              );
+              parts.unshift(tag + ":nth-of-type(" + (siblings.indexOf(el) + 1) + ")");
+              el = el.parentElement;
+            }
+            return el === document.documentElement && parts.length ? parts.join(" > ") : null;
+          },
+          input.type === "click" ? { x: input.x, y: input.y } : null,
+        );
+        step = selector
+          ? origin +
+            " · " +
+            (input.type === "click"
+              ? "点击 "
+              : input.type === "text"
+                ? "输入 {{用户提供的文本}} 到 "
+                : "按 " + input.key + " 于 ") +
+            selector
+          : "{{需要人工登录或授权环境}}";
+      }
+      this.userCast(id, generation);
+    }
+    if (input.type === "text") await cast.session.send("Input.insertText", { text: input.text });
+    else if (input.type === "key") {
+      await cast.session.send("Input.dispatchKeyEvent", { type: "keyDown", key: input.key });
+      this.userCast(id, generation);
+      await cast.session.send("Input.dispatchKeyEvent", { type: "keyUp", key: input.key });
+    } else {
+      for (const type of ["mousePressed", "mouseReleased"] as const) {
+        this.userCast(id, generation);
+        await cast.session.send("Input.dispatchMouseEvent", {
+          type,
+          x: input.x,
+          y: input.y,
+          button: "left",
+          clickCount: 1,
+        });
+      }
+    }
+    if (
+      step &&
+      steps &&
+      steps === cast.steps &&
+      (input.type === "click" || steps.at(-1) !== step) &&
+      steps.length < 120
+    ) {
+      if (steps.join("\n").length + step.length < 17000) steps.push(step);
+    }
+    return { ok: true };
+  }
+  async returnControl(id: string, expectedGeneration: number) {
+    const allowed = this.get(id).origins;
+    for (const page of this.contexts.get(id)?.pages() ?? []) {
+      if (page.url() !== "about:blank" && !allowed.includes(new URL(page.url()).origin))
+        throw new KodoError("CONFLICT", "请先返回已授权站点，再交还主控。");
+    }
+    const lease = this.acquire(id, "agent", expectedGeneration);
+    const cast = this.casts.get(id);
+    this.casts.delete(id);
+    await cast?.session.detach().catch(() => {});
+    const ctx = this.contexts.get(id);
+    if (ctx) {
+      await this.persistAndBroadcastSharedCookies(id, ctx, allowed).catch(() => {});
+    }
+    return lease;
+  }
+  private sharedCookiesPath(): string {
+    return join(this.service.dataDir, "kodo", "browser-shared-cookies.json");
+  }
+  private readSharedCookies(): Cookie[] {
+    const file = this.sharedCookiesPath();
+    if (!existsSync(file)) return [];
+    try {
+      const parsed = JSON.parse(readFileSync(file, "utf8"));
+      return Array.isArray(parsed) ? (parsed as Cookie[]) : [];
+    } catch {
+      return [];
+    }
+  }
+  private cookieMatchesOrigins(cookie: Cookie, origins: string[]): boolean {
+    const cookieDomain = cookie.domain.replace(/^\./, "").toLowerCase();
+    return origins.some((origin) => {
+      try {
+        const host = new URL(origin).hostname.toLowerCase();
+        return host === cookieDomain || host.endsWith(`.${cookieDomain}`);
+      } catch {
+        return false;
+      }
+    });
+  }
+  private async loadSharedCookies(context: BrowserContext, origins: string[]): Promise<void> {
+    const matching = this.readSharedCookies().filter((c) => this.cookieMatchesOrigins(c, origins));
+    if (matching.length) {
+      await context.addCookies(matching).catch(() => {});
+    }
+  }
+  private async persistAndBroadcastSharedCookies(
+    sourceEnvId: string,
+    sourceContext: BrowserContext,
+    origins: string[],
+  ): Promise<void> {
+    const fresh = (await sourceContext.cookies(origins)).filter((c) =>
+      this.cookieMatchesOrigins(c, origins),
+    );
+    if (!fresh.length) return;
+    const existing = this.readSharedCookies();
+    const keyOf = (c: Cookie) => `${c.domain}|${c.path}|${c.name}`;
+    const merged = new Map<string, Cookie>(existing.map((c) => [keyOf(c), c]));
+    for (const c of fresh) merged.set(keyOf(c), c);
+    const all = [...merged.values()];
+    const target = this.sharedCookiesPath();
+    mkdirSync(join(this.service.dataDir, "kodo"), { recursive: true });
+    const tmp = `${target}.${randomUUID().slice(0, 8)}.tmp`;
+    writeFileSync(tmp, JSON.stringify(all), { encoding: "utf8", mode: 0o600 });
+    renameSync(tmp, target);
+
+    // Push newly acquired cookies to any other live browser contexts sharing those origins
+    for (const [otherId, otherCtx] of this.contexts.entries()) {
+      if (otherId === sourceEnvId) continue;
+      try {
+        const otherOrigins = this.get(otherId).origins;
+        const forOther = fresh.filter((c) => this.cookieMatchesOrigins(c, otherOrigins));
+        if (forOther.length) await otherCtx.addCookies(forOther).catch(() => {});
+      } catch {}
     }
   }
   private pageId(page: Page) {
@@ -210,7 +568,7 @@ export class BrowserService {
       context.pages().map(async (page) => ({
         id: this.pageId(page),
         url: page.url(),
-        title: await page.title(),
+        title: await page.title().catch(() => ""),
       })),
     );
   }

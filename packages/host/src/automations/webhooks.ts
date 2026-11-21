@@ -14,7 +14,7 @@ interface HookConnection {
   repositories: string[];
   actors: string[];
   events: string[];
-  mode: "off" | "observe" | "auto";
+  mode: "off" | "observe" | "propose" | "auto";
   revision: number;
   generation: number;
 }
@@ -55,7 +55,7 @@ const schema = z
         ]),
       )
       .min(1),
-    mode: z.enum(["off", "observe", "auto"]).default("observe"),
+    mode: z.enum(["off", "observe", "propose", "auto"]).default("observe"),
     expectedRevision: z.number().int().positive().optional(),
   })
   .strict();
@@ -227,7 +227,25 @@ export class WebhookService {
       generation: c.generation,
       status: c.mode === "auto" && allowed ? "pending" : "observed",
     };
-    this.service.store.transaction(() => this.events.put(stored));
+    const disposition = !allowed
+      ? "dropped"
+      : c.mode === "propose"
+        ? "proposed"
+        : stored.status === "pending"
+          ? "dispatched"
+          : "observed";
+    this.service.intake.accept(
+      {
+        sourceKind: "github",
+        sourceId: c.id,
+        externalId: delivery,
+        fingerprint: hash,
+        disposition,
+        controllerId: this.service.automations.definitions.get(c.automationId).controllerSessionId,
+        summary: `${actor} · ${event} · ${resource}`,
+      },
+      () => this.events.put(stored),
+    );
     reply(202, { id: stored.id, status: stored.status });
   }
   assertGeneration(id: string, generation: number) {

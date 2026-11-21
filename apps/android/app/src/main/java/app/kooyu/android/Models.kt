@@ -48,9 +48,9 @@ fun messageText(value: Any?): String {
     value.optJSONArray("content")?.let { return it.objects().filter { p -> p.optString("type") in listOf("text", "output_text") }.joinToString("\n") { p -> p.optString("text") } }
     return if (value.has("message")) messageText(value.opt("message")) else ""
 }
-data class Connection(val url: String, val hostId: String, val deviceId: String, val token: String, val expiresAt: String, val pending: JSONObject? = null, val name: String = "我的设备") {
-    fun json(): JSONObject = JSONObject().put("url", url).put("hostId", hostId).put("deviceId", deviceId).put("token", token).put("expiresAt", expiresAt).put("pending", pending).put("name", name)
-    companion object { fun parse(o: JSONObject) = Connection(o.getString("url"), o.getString("hostId"), o.getString("deviceId"), o.getString("token"), o.getString("expiresAt"), o.optJSONObject("pending"), o.optString("name", "我的设备").ifBlank { "我的设备" }.let { if (it == "我的电脑") "我的设备" else if (Regex("^电脑\\s*\\d+$").matches(it)) "设备" + it.removePrefix("电脑") else it }) }
+data class Connection(val url: String, val hostId: String, val deviceId: String, val token: String, val expiresAt: String, val pending: JSONObject? = null, val name: String = "我的设备", val tunnelKey: String? = null, val mailboxSeed: String? = null, val cloud:JSONObject? = null) {
+    fun json(): JSONObject = JSONObject().put("url", url).put("hostId", hostId).put("deviceId", deviceId).put("token", token).put("expiresAt", expiresAt).put("pending", pending).put("name", name).put("tunnelKey", tunnelKey).put("mailboxSeed", mailboxSeed).put("cloud",cloud)
+    companion object { fun parse(o: JSONObject) = Connection(o.getString("url"), o.getString("hostId"), o.getString("deviceId"), o.getString("token"), o.getString("expiresAt"), o.optJSONObject("pending"), o.optString("name", "我的设备").ifBlank { "我的设备" }.let { if (it == "我的电脑") "我的设备" else if (Regex("^电脑\\s*\\d+$").matches(it)) "设备" + it.removePrefix("电脑") else it }, o.optString("tunnelKey").takeIf { it.isNotEmpty() }, o.optString("mailboxSeed").takeIf { it.isNotEmpty() },o.optJSONObject("cloud")) }
 }
 
 /**
@@ -72,3 +72,4 @@ fun formatWorkspaceLabel(path: String?): String {
         else -> "${parts[parts.size - 2]}/${parts[parts.size - 1]}"
     }
 }
+

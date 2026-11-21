@@ -19,7 +19,8 @@ async function port() {
   await new Promise<void>((done) => server.close(() => done()));
   return value;
 }
-const relayModule = new URL("../../../services/relay/src/server.mjs", import.meta.url).href;
+const relayModule = new URL("../../../services/relay/test/protocol-fixture.mjs", import.meta.url)
+  .href;
 const { createRelay } = await import(relayModule);
 async function until(check: () => boolean, timeout = 8000) {
   const end = Date.now() + timeout;

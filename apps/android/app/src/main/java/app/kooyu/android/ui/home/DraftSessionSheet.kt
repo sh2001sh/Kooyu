@@ -404,11 +404,92 @@ val QUICK_PROMPTS = listOf(
         }
     }
 
-    if (menu == "directory") DirectoryPicker(model, customPath, { menu = "context" }) { customPath = it; workspace = ""; menu = "context" }
-    if (menu == "project") ComposerPicker("所属项目", listOf(ComposerOption("", "全局会话", leadingIcon = { Icon(Icons.Outlined.FolderOpen, null, tint = c.textSecondary, modifier = Modifier.size(20.dp)) })) + state.projects.map { ComposerOption(it.first, it.second, leadingIcon = { Icon(Icons.Outlined.FolderOpen, null, tint = c.accent, modifier = Modifier.size(20.dp)) }) }, project, { menu = "" }) {
+    if (menu == "directory") DirectoryPicker(model, customPath, { menu = "" }) { customPath = it; workspace = ""; menu = "" }
+    if (menu == "new_project") {
+        CreateProjectDialog(
+            state = state,
+            model = model,
+            onDismiss = { menu = "" },
+            onCreated = { createdProjectId, createdWorkspaceId ->
+                if (createdProjectId.isNotBlank()) project = createdProjectId
+                workspace = createdWorkspaceId.orEmpty()
+                customPath = ""
+                menu = ""
+            }
+        )
+    }
+    if (menu == "project") ComposerPicker(
+        title = "所属项目",
+        options = listOf(ComposerOption("", "全局会话", leadingIcon = { Icon(Icons.Outlined.FolderOpen, null, tint = c.textSecondary, modifier = Modifier.size(20.dp)) })) +
+            state.projects.map { ComposerOption(it.first, it.second, leadingIcon = { Icon(Icons.Outlined.FolderOpen, null, tint = c.accent, modifier = Modifier.size(20.dp)) }) },
+        current = project,
+        close = { menu = "" },
+        headerExtra = {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = c.brandCoralTint,
+                border = BorderStroke(0.5.dp, c.brandCoral.copy(alpha = 0.35f)),
+                modifier = Modifier.fillMaxWidth().clickable(enabled = state.canWrite) { menu = "new_project" }
+            ) {
+                Row(
+                    Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Outlined.CreateNewFolder, null, tint = c.brandCoral, modifier = Modifier.size(18.dp))
+                    Text("新建项目并选择目录…", fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, color = c.brandCoral, modifier = Modifier.weight(1f))
+                    Icon(Icons.Outlined.ChevronRight, null, tint = c.brandCoral, modifier = Modifier.size(16.dp))
+                }
+            }
+        }
+    ) {
         project = it; workspace = state.workspaces.firstOrNull { w -> w.projectId == it }?.id ?: ""; menu = ""
     }
-    if (menu == "workspace") ComposerPicker("工作目录", listOf(ComposerOption("", "未绑定目录", leadingIcon = { Icon(Icons.Outlined.Folder, null, tint = c.textSecondary, modifier = Modifier.size(20.dp)) })) + state.workspaces.filter { (project.isEmpty() || it.projectId == project) && (if (executor == "local") (it.hostId == null || it.hostId == state.connection?.hostId) else it.hostId == executors.firstOrNull { e -> e.optString("id") == executor }?.optString("hostId")) }.map { ComposerOption(it.id, formatWorkspaceLabel(it.path), it.path, leadingIcon = { Icon(Icons.Outlined.Folder, null, tint = c.accent, modifier = Modifier.size(20.dp)) }) }, workspace, { menu = "" }) { workspace = it; customPath = ""; menu = "" }
+    if (menu == "workspace") ComposerPicker(
+        title = "工作目录",
+        options = listOf(ComposerOption("", "未绑定目录", leadingIcon = { Icon(Icons.Outlined.Folder, null, tint = c.textSecondary, modifier = Modifier.size(20.dp)) })) +
+            state.workspaces.filter { (project.isEmpty() || it.projectId == project) && (if (executor == "local") (it.hostId == null || it.hostId == state.connection?.hostId) else it.hostId == executors.firstOrNull { e -> e.optString("id") == executor }?.optString("hostId")) }.map { ComposerOption(it.id, formatWorkspaceLabel(it.path), it.path, leadingIcon = { Icon(Icons.Outlined.Folder, null, tint = c.accent, modifier = Modifier.size(20.dp)) }) },
+        current = workspace,
+        close = { menu = "" },
+        headerExtra = {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = c.brandCoralTint,
+                    border = BorderStroke(0.5.dp, c.brandCoral.copy(alpha = 0.35f)),
+                    modifier = Modifier.weight(1f).clickable(enabled = state.canWrite) { menu = "new_project" }
+                ) {
+                    Row(
+                        Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(Icons.Outlined.CreateNewFolder, null, tint = c.brandCoral, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("新建项目", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = c.brandCoral)
+                    }
+                }
+                if (executor == "local") {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = c.sunken,
+                        border = BorderStroke(0.5.dp, c.borderSubtle),
+                        modifier = Modifier.weight(1f).clickable { menu = "directory" }
+                    ) {
+                        Row(
+                            Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(Icons.Outlined.FolderOpen, null, tint = c.textSecondary, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("浏览电脑目录", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = c.text)
+                        }
+                    }
+                }
+            }
+        }
+    ) { workspace = it; customPath = ""; menu = "" }
     if (menu == "harness") ComposerPicker("执行引擎", state.harnesses.map { ComposerOption(it.id, if (it.id == "kodo") "Kooyu · 主对话" else it.name, leadingIcon = { EngineBadge(it.id, 24.dp, circle = false) }) }, harness, { menu = "" }) {
         harness = it
         kind = if (it == "kodo") "supervisor" else "direct"

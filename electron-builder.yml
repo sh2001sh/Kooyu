@@ -1,4 +1,4 @@
-appId: app.kodo.desktop
+appId: app.kooyu.desktop
 productName: Kooyu
 directories:
   output: release/desktop
@@ -19,6 +19,8 @@ extraResources:
     filter: "**/*"
   - from: .local/desktop-stage/runtime
     to: runtime
+  - from: .local/desktop-stage/upgrade-host.mjs
+    to: upgrade-host.mjs
 mac:
   category: public.app-category.developer-tools
   icon: brand/icons/kooyu-app.icns

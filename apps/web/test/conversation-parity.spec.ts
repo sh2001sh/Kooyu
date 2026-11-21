@@ -237,7 +237,11 @@ for (const width of [1440, 390]) {
       .getByRole("navigation", { name: width < 600 ? "配置页面" : "配置导航", exact: true })
       .getByRole("button", { name: "模型来源", exact: true })
       .click();
-    const row = page.locator("tbody tr").filter({ hasText: saved.model });
+    const section = page
+      .locator("section.sx-section")
+      .filter({ has: page.getByText(provider.name, { exact: true }) });
+    await section.getByRole("button", { name: /模型列表/ }).click();
+    const row = section.locator("tbody tr").filter({ hasText: saved.model });
     await row.getByRole("button", { name: "修改", exact: true }).click();
     await page.getByLabel("输入模态", { exact: true }).selectOption("image");
     const editorBox = await page.locator("form.sx-model-editor").boundingBox();

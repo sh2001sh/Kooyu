@@ -13,6 +13,13 @@ final class HostAPITests: XCTestCase {
             XCTAssertFalse(HostAPI.canRecoverRead("GET", URLError(code)))
         }
     }
+    func testLegacyOfficialPairingRequiresNewApproval() throws {
+        let relay = "https://relay.example.test"
+        let base = try HostAPI.origin(relay + "/h/" + String(repeating: "a", count: 64))
+        XCTAssertThrowsError(try HostAPI.requireAccountPairing(base, paired: false, relay: relay))
+        XCTAssertNoThrow(try HostAPI.requireAccountPairing(base, paired: true, relay: relay))
+        XCTAssertNoThrow(try HostAPI.requireAccountPairing(HostAPI.origin("https://private.example.test"), paired: false, relay: relay))
+    }
     func testOnlyHTTPSOriginsAreAccepted() throws {
         XCTAssertEqual(try HostAPI.origin("https://example.com").host, "example.com")
         for address in ["http://example.com", "https://user:password@example.com", "https://example.com/api", "https://example.com?token=secret", "https://example.com#fragment"] {
@@ -26,10 +33,10 @@ final class HostAPITests: XCTestCase {
         XCTAssertEqual(event.text, "继续")
     }
     func testRelayPrefixIsPreserved() throws {
-        let address = "https://relay.kooyu.app/h/" + String(repeating: "a", count: 64)
+        let address = "https://relay.example.com/h/" + String(repeating: "a", count: 64)
         let base = try HostAPI.origin(address)
         XCTAssertEqual(try HostAPI.apiURL(base, path: "/sessions?tail=300").absoluteString, address + "/api/sessions?tail=300")
-        XCTAssertThrowsError(try HostAPI.origin("https://relay.kooyu.app/h/not-a-host"))
+        XCTAssertThrowsError(try HostAPI.origin("https://relay.example.com/h/not-a-host"))
         XCTAssertThrowsError(try HostAPI.apiURL(base, path: "/../../healthz"))
         XCTAssertThrowsError(try HostAPI.apiURL(base, path: "/%2e%2e/healthz"))
         XCTAssertThrowsError(try HostAPI.apiURL(base, path: "/sessions/./healthz"))

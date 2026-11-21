@@ -11,6 +11,7 @@ import type { SessionService } from "../session-service.js";
 import { DomainTable } from "../storage/self-hosted.js";
 import { digest } from "../execution/actions.js";
 import { nextOccurrence, previewSchedule, validateSchedule } from "./schedule.js";
+import { runCheckScript } from "./check-script.js";
 import { stableRequestId } from "../kodo/tools.js";
 import { describeAutomationSchedule } from "@kodo/protocol";
 
@@ -314,7 +315,62 @@ export class AutomationService {
           continue;
         }
         try {
-          await this.activate(a.id, "time:" + a.nextDueAt, a.nextDueAt, undefined, now);
+          if (a.checkScript) {
+            const checkResult = await runCheckScript(
+              a.checkScript,
+              this.service.memory.docs?.dir ?? process.cwd(),
+            );
+            this.store.put("automation-health", a.id, {
+              at: now.toISOString(),
+              lastCheckOutcome: checkResult.outcome,
+              ...(checkResult.reason ? { error: checkResult.reason } : {}),
+            });
+            if (checkResult.outcome === "quiet") {
+              // Zero-Token short-circuit: nothing changed, advance schedule silently.
+              this.definitions.put({ ...a, nextDueAt: nextOccurrence(a, now) });
+              continue;
+            }
+            if (checkResult.outcome === "failed") {
+              this.service.inbox(
+                `auto-check-err:${a.id}:${a.nextDueAt}`,
+                a.controllerSessionId,
+                "notification",
+                {
+                  source: "automation-check",
+                  automationId: a.id,
+                  title: `定时预检失败：${a.name}`,
+                  message: checkResult.reason ?? "预检脚本异常退出",
+                },
+              );
+              this.definitions.put({ ...a, nextDueAt: nextOccurrence(a, now) });
+              continue;
+            }
+            if (a.checkScript.onHit === "notify") {
+              // Direct zero-Token notification on hit without waking LLM.
+              this.service.inbox(
+                `auto-check-hit:${a.id}:${a.nextDueAt}`,
+                a.controllerSessionId,
+                "notification",
+                {
+                  source: "automation-check",
+                  automationId: a.id,
+                  title: `定时巡检命中：${a.name}`,
+                  message: checkResult.output,
+                },
+              );
+              this.definitions.put({ ...a, nextDueAt: nextOccurrence(a, now) });
+              continue;
+            }
+            await this.activate(
+              a.id,
+              "time:" + a.nextDueAt,
+              a.nextDueAt,
+              { checkOutput: checkResult.output },
+              now,
+            );
+          } else {
+            await this.activate(a.id, "time:" + a.nextDueAt, a.nextDueAt, undefined, now);
+          }
         } catch (e) {
           this.store.put("automation-health", a.id, {
             at: now.toISOString(),

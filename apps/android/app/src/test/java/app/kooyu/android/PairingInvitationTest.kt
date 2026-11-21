@@ -17,7 +17,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PairingInvitationTest {
-    private val address = "https://relay.kooyu.app/h/" + "a".repeat(64)
+    private val address = "https://relay.example.com/h/" + "a".repeat(64)
     private val code = "0123456789abcdef0123456789abcdef"
 
     @Test fun preservesRelayIdentityAndNormalizesInvitation() {
@@ -39,11 +39,11 @@ class PairingInvitationTest {
             address, address + "?pair=" + code, address + "#pair=1234", address + "#pair=" + "g".repeat(32),
             address + "?extra=1#pair=" + code, address + "#pair=" + code + "&pair=" + code,
             address + "#pair=" + code + "#more", address + "#pair=%30" + code.drop(1),
-            "https://user:password@relay.kooyu.app/#pair=" + code,
-            "https://relay.kooyu.app/h/not-a-host/#pair=" + code,
+            "https://user:password@relay.example.com/#pair=" + code,
+            "https://relay.example.com/h/not-a-host/#pair=" + code,
             address + "/../#pair=" + code, address + "/%2e%2e/#pair=" + code,
-            "https://relay.kooyu.app/api/#pair=" + code,
-            "https://relay.kooyu.app/#pair=" + code + "x".repeat(2048)
+            "https://relay.example.com/api/#pair=" + code,
+            "https://relay.example.com/#pair=" + code + "x".repeat(2048)
         )
         invalid.forEach { value -> assertThrows(IllegalArgumentException::class.java) { PairingInvitation.parse(value) } }
     }

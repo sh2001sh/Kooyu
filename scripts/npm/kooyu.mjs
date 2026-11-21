@@ -19,19 +19,70 @@ try {
     console.log(`Kooyu ${pkg.version} — local Web workbench
 
 Usage: kooyu [start] [options]
+       kooyu account login|logout [--port <local Host port>]
 
   -h, --help          Show this help
   -v, --version       Show the installed version
-  -p, --port <port>   Web port (default: 4310 or KODO_HOST_PORT)
-  --host <address>   Bind address (default: 127.0.0.1 or KODO_BIND)
+  -p, --port <port>   Web port (default: 4310 or KOOYU_HOST_PORT)
+  --host <address>   Bind address (default: 127.0.0.1 or KOOYU_BIND)
   --data-dir <path>  Persistent data directory (defaults to the existing Kooyu Host directory)
 
 Open the URL printed on startup. Press Ctrl+C to stop.
-Non-loopback binding requires KODO_TLS_CERT and KODO_TLS_KEY.
+Non-loopback binding requires KOOYU_TLS_CERT and KOOYU_TLS_KEY.
 Update a global install with: npm install -g kooyu@latest
 For a one-off run: npx kooyu@latest`);
   } else if (values.version) {
     console.log(pkg.version);
+  } else if (["account login", "account logout"].includes(positionals.join(" "))) {
+    const port = Number(
+      values.port ?? process.env.KOOYU_HOST_PORT ?? process.env.KODO_HOST_PORT ?? 4310,
+    );
+    if (!Number.isInteger(port) || port < 1 || port > 65535) throw Error("Invalid local Host port");
+    const endpoint = "http://127.0.0.1:" + port + "/api/remote/account/";
+    async function post(action) {
+      const r = await fetch(endpoint + action, {
+        method: "POST",
+        redirect: "error",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+        signal: AbortSignal.timeout(12000),
+      });
+      if (!r.ok) throw Error("Account authorization failed (" + r.status + ").");
+      return r.json();
+    }
+    if (positionals[1] === "logout") {
+      await post("logout");
+      console.log("Host signed out.");
+    } else {
+      const start = await post("start");
+      console.log(
+        "Open " +
+          start.verificationUri +
+          " and approve code " +
+          start.userCode +
+          " before " +
+          new Date(start.expiresAt).toISOString(),
+      );
+      const cancel = () => void post("cancel").finally(() => process.exit(130));
+      process.once("SIGINT", cancel);
+      try {
+        let interval = 5,
+          bound = false;
+        while (Date.now() < start.expiresAt) {
+          await new Promise((resolve) => setTimeout(resolve, interval * 1000));
+          const next = await post("poll");
+          if (next.state === "approved") {
+            bound = true;
+            break;
+          }
+          interval = next.interval ?? 5;
+        }
+        if (!bound) throw Error("Authorization expired");
+        console.log("Host bound to Kooyu account.");
+      } finally {
+        process.off("SIGINT", cancel);
+      }
+    }
   } else {
     if (positionals.length > 1 || (positionals.length === 1 && positionals[0] !== "start"))
       throw new Error("Unknown command. Use kooyu --help.");
@@ -40,12 +91,12 @@ For a one-off run: npx kooyu@latest`);
       throw new Error(
         "Kooyu requires Node.js >=24.13.0. Install a supported Node.js version first.",
       );
-    const port = values.port ?? process.env.KODO_HOST_PORT ?? "4310";
+    const port = values.port ?? process.env.KOOYU_HOST_PORT ?? process.env.KODO_HOST_PORT ?? "4310";
     if (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65535)
       throw new Error("Port must be an integer between 1 and 65535.");
-    process.env.KODO_HOST_PORT = port;
-    if (values.host) process.env.KODO_BIND = values.host;
-    if (values["data-dir"]) process.env.KODO_DATA_DIR = resolve(values["data-dir"]);
+    process.env.KOOYU_HOST_PORT = port;
+    if (values.host) process.env.KOOYU_BIND = values.host;
+    if (values["data-dir"]) process.env.KOOYU_DATA_DIR = resolve(values["data-dir"]);
     process.env.KOOYU_DISTRIBUTION = "npm";
     process.env.KOOYU_APP_VERSION = pkg.version;
     await import("../runtime/packages/host/dist/main.js");

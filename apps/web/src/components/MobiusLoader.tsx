@@ -1,4 +1,4 @@
-import { KodoMark } from "./KodoBrand";
+import { KooyuBrandMark } from "./KooyuBrand";
 
 export interface MobiusLoaderProps {
   size?: number;
@@ -21,7 +21,7 @@ export function MobiusLoader({
       aria-label={label}
       style={{ width: size, height: Math.round((size * 704) / 848) }}
     >
-      <KodoMark size={size} className="mobius-loader-svg" />
+      <KooyuBrandMark size={size} className="mobius-loader-svg" />
     </div>
   );
 }

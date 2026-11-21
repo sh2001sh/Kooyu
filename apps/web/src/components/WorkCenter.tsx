@@ -1,5 +1,8 @@
+import { BrowserControl } from "./BrowserControl";
+import { GitHubLogin } from "./GitHubLogin";
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Plus } from "lucide-react";
+import QRCode from "qrcode";
 import type { AuthorizationGrant, Session, Snapshot } from "@kodo/protocol";
 import { DateTimeSelection } from "./DateTimeSelection";
 import { api, hostPath } from "../lib/host-client";
@@ -29,6 +32,7 @@ const permissionNames: Record<string, string> = {
   "github.comments.create": "发表评论",
   "slack.history.read": "读取频道历史",
   "slack.messages.create": "发送频道消息",
+  "telegram.messages.create": "回复已绑定的 Telegram 会话",
 };
 const words = (value: string) =>
   value
@@ -137,7 +141,7 @@ export function WorkCenter({ snapshot }: { snapshot: Snapshot }) {
     version: "1.0.0",
     name: "",
     token: "",
-    auth: "token",
+    auth: "oauth",
   });
   const [grant, setGrant] = useState({
     connectionId: "",
@@ -147,6 +151,8 @@ export function WorkCenter({ snapshot }: { snapshot: Snapshot }) {
   });
   const [oauthLink, setOAuthLink] = useState<string | null>(null);
   const [appModalOpen, setAppModalOpen] = useState(false);
+  const [weixinQr, setWeixinQr] = useState<{ id: string; image: string }>();
+  const [weixinCode, setWeixinCode] = useState("");
   const [grantModalOpen, setGrantModalOpen] = useState(false);
   const controllers = snapshot.sessions.filter((s) => s.kind === "supervisor" && !s.archived);
   if (createdController && !controllers.some((s) => s.id === createdController.id))
@@ -396,7 +402,7 @@ export function WorkCenter({ snapshot }: { snapshot: Snapshot }) {
                         version: "1.0.0",
                         name: "",
                         token: "",
-                        auth: "token",
+                        auth: "oauth",
                       });
                       setAppModalOpen(true);
                     }}
@@ -407,18 +413,239 @@ export function WorkCenter({ snapshot }: { snapshot: Snapshot }) {
                 ) : undefined
               }
             >
+              {local && <GitHubLogin onConnected={load} />}
               {!connections.length && (
                 <Empty>
                   还没有连接应用。需要读取 GitHub Issue 或使用 Slack 时，再添加对应连接。
                 </Empty>
               )}
+              {local && (
+                <div
+                  className="work-row"
+                  style={{ flexDirection: "column", alignItems: "stretch", gap: 10 }}
+                >
+                  <div className="nx-row">
+                    <div>
+                      <strong>微信 ClawBot</strong>
+                      <p>微信扫码绑定到当前主对话，无需配置回调域名。</p>
+                    </div>
+                    <button
+                      type="button"
+                      className="nx-btn nx-btn--primary"
+                      disabled={busy || !controller}
+                      onClick={() =>
+                        void perform(async () => {
+                          const result = await api<{ id: string; qrContent: string }>(
+                            "/im/weixin/qr",
+                            "POST",
+                            { controllerId: controller },
+                          );
+                          setWeixinQr({
+                            id: result.id,
+                            image: await QRCode.toDataURL(result.qrContent),
+                          });
+                          setWeixinCode("");
+                        }, "请用微信扫描二维码")
+                      }
+                    >
+                      微信扫码连接
+                    </button>
+                  </div>
+                  {weixinQr && (
+                    <div className="nx-card">
+                      <div className="nx-card__body" style={{ alignItems: "center" }}>
+                        <img
+                          src={weixinQr.image}
+                          alt="微信机器人配对二维码"
+                          style={{
+                            width: 176,
+                            height: 176,
+                            borderRadius: 12,
+                            background: "#fff",
+                            padding: 6,
+                          }}
+                        />
+                        <div
+                          style={{
+                            width: "100%",
+                            maxWidth: 280,
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 8,
+                          }}
+                        >
+                          <Field label="微信验证码（如有）">
+                            <input
+                              className="nx-input"
+                              value={weixinCode}
+                              onChange={(e) => setWeixinCode(e.target.value)}
+                            />
+                          </Field>
+                          <button
+                            type="button"
+                            className="nx-btn nx-btn--coral"
+                            disabled={busy}
+                            onClick={() =>
+                              void perform(async () => {
+                                const result = await api<{ status: string }>(
+                                  "/im/weixin/status",
+                                  "POST",
+                                  { id: weixinQr.id, code: weixinCode || undefined },
+                                );
+                                if (result.status === "binded_redirect") {
+                                  setWeixinQr(undefined);
+                                  setWeixinCode("");
+                                  throw new Error(
+                                    "微信提示此机器人已绑定。请查看已有连接，或用另一个机器人扫码。",
+                                  );
+                                }
+                                if (
+                                  result.status === "expired" ||
+                                  result.status === "verify_code_blocked"
+                                ) {
+                                  setWeixinQr(undefined);
+                                  setWeixinCode("");
+                                  throw new Error("本次扫码已失效，请重新获取二维码。");
+                                }
+                                if (result.status === "need_verifycode")
+                                  throw new Error("请填写微信显示的验证码，再检查扫码结果。");
+                                if (result.status !== "confirmed")
+                                  throw new Error("请在微信完成扫码确认后再次检查。");
+                                setWeixinQr(undefined);
+                                setWeixinCode("");
+                              }, "微信会话已绑定")
+                            }
+                          >
+                            检查扫码结果
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              {local &&
+                versions
+                  .filter((v) => v.manifest.stdio?.command?.startsWith("kooyu-bundled:"))
+                  .map(({ manifest }) => (
+                    <div className="work-row" key={manifest.id}>
+                      <div>
+                        <strong>{manifest.name}</strong>
+                        <p>{manifest.description}</p>
+                      </div>
+                      <button
+                        type="button"
+                        className="nx-btn"
+                        disabled={
+                          busy ||
+                          connections.some((c) => c.applicationId === manifest.id && c.enabled)
+                        }
+                        onClick={() =>
+                          void perform(
+                            () =>
+                              api("/applications/connections", "POST", {
+                                requestId: crypto.randomUUID(),
+                                applicationId: manifest.id,
+                                version: manifest.version,
+                                name: manifest.name,
+                              }),
+                            "本地 MCP 已启用",
+                          )
+                        }
+                      >
+                        {connections.some((c) => c.applicationId === manifest.id && c.enabled)
+                          ? "已启用"
+                          : "启用本地 MCP"}
+                      </button>
+                    </div>
+                  ))}
               {connections.map((c) => (
                 <div className="work-row" key={c.id}>
-                  <div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <strong>{c.name}</strong>
                     <p>
                       {c.applicationId} · {c.version} · {c.enabled ? "启用" : "已停用"}
                     </p>
+                    {local &&
+                      c.enabled &&
+                      ["telegram", "wecom", "feishu"].includes(c.applicationId) && (
+                        <form
+                          className="work-form"
+                          style={{ marginTop: 10 }}
+                          onSubmit={(event) => {
+                            const fields = new FormData(event.currentTarget);
+                            const groupChat = fields.get("groupChat") === "on";
+                            const triggerPrefix = String(fields.get("triggerPrefix") ?? "").trim();
+                            submit(
+                              event,
+                              () =>
+                                api("/im/bindings", "POST", {
+                                  connectionId: c.id,
+                                  controllerId: controller,
+                                  ownerExternalUserId: fields.get("owner"),
+                                  chatId: fields.get("chat"),
+                                  intakeMode: fields.get("intakeMode") || "propose",
+                                  groupChat,
+                                  ...(groupChat && triggerPrefix ? { triggerPrefix } : {}),
+                                  ...(fields.get("appId") ? { appId: fields.get("appId") } : {}),
+                                }),
+                              "已绑定，消息将按准入策略接入当前主对话",
+                            );
+                          }}
+                        >
+                          {c.applicationId !== "telegram" && (
+                            <Field label="机器人应用 ID">
+                              <input name="appId" required />
+                            </Field>
+                          )}
+                          <Field label="允许接收的用户 ID">
+                            <input name="owner" required />
+                          </Field>
+                          <Field label="会话 / 群组 ID">
+                            <input name="chat" required />
+                          </Field>
+                          <Field label="准入模式">
+                            <select name="intakeMode" defaultValue="propose">
+                              <option value="observe">仅观察记录</option>
+                              <option value="propose">建议（进入收件箱待批准）</option>
+                              <option value="auto">自动派发执行</option>
+                            </select>
+                          </Field>
+                          <label className="work-check">
+                            <input type="checkbox" name="groupChat" />
+                            群聊模式（未 @ 时 0-Token 静默缓存上下文）
+                          </label>
+                          <Field label="群聊触发前缀（群聊模式生效）">
+                            <input
+                              name="triggerPrefix"
+                              defaultValue="@Kooyu"
+                              placeholder="@Kooyu"
+                            />
+                          </Field>
+                          <div className="delegation-card__actions">
+                            <button
+                              type="submit"
+                              className="nx-btn nx-btn--primary"
+                              disabled={busy || !controller}
+                            >
+                              绑定到当前主对话
+                            </button>
+                            <button
+                              type="button"
+                              className="nx-btn"
+                              disabled={busy}
+                              onClick={() =>
+                                void perform(
+                                  () => api("/im/bindings/" + c.id, "DELETE"),
+                                  "已解除绑定",
+                                )
+                              }
+                            >
+                              解除绑定
+                            </button>
+                          </div>
+                        </form>
+                      )}
                   </div>
                   <div className="work-actions">
                     <button
@@ -485,7 +712,12 @@ export function WorkCenter({ snapshot }: { snapshot: Snapshot }) {
                           value={app.applicationId + "@" + app.version}
                           onChange={(e) => {
                             const [applicationId, version] = e.target.value.split("@");
-                            setApp({ ...app, applicationId, version });
+                            setApp({
+                              ...app,
+                              applicationId,
+                              version,
+                              auth: applicationId === "github" ? "oauth" : "token",
+                            });
                           }}
                         >
                           {versions.map((v) => (
@@ -505,13 +737,25 @@ export function WorkCenter({ snapshot }: { snapshot: Snapshot }) {
                         />
                       </Field>
                     </div>
+                    {app.applicationId === "github" && app.auth === "oauth" && (
+                      <GitHubLogin
+                        onConnected={async () => {
+                          await load();
+                          setAppModalOpen(false);
+                        }}
+                      />
+                    )}
                     <Field label="认证方式">
                       <select
                         value={app.auth}
                         onChange={(e) => setApp({ ...app, auth: e.target.value })}
                       >
                         <option value="token">访问令牌</option>
-                        <option value="oauth">浏览器授权（需管理员先配置 OAuth）</option>
+                        <option value="oauth">
+                          {app.applicationId === "github"
+                            ? "GitHub 浏览器登录"
+                            : "浏览器授权（需管理员先配置 OAuth）"}
+                        </option>
                       </select>
                     </Field>
                     {app.auth === "token" && (
@@ -531,7 +775,10 @@ export function WorkCenter({ snapshot }: { snapshot: Snapshot }) {
                       <button type="button" onClick={() => setAppModalOpen(false)}>
                         取消
                       </button>
-                      <button disabled={busy} className="primary">
+                      <button
+                        disabled={busy || (app.applicationId === "github" && app.auth === "oauth")}
+                        className="primary"
+                      >
                         {app.id ? "更新连接并撤销旧授权" : "保存应用连接"}
                       </button>
                     </div>
@@ -584,7 +831,7 @@ export function WorkCenter({ snapshot }: { snapshot: Snapshot }) {
                 </details>
               )}
               {connections
-                .filter((c) => c.enabled)
+                .filter((c) => c.enabled && c.applicationId !== "github")
                 .map((c) => (
                   <button
                     key={c.id}
@@ -864,6 +1111,9 @@ export function WorkCenter({ snapshot }: { snapshot: Snapshot }) {
                     <div className="work-row" key={b.id}>
                       <div>
                         <strong>{b.name}</strong>
+                        {local && b.lease?.owner === "user" && (
+                          <BrowserControl key={b.generation} id={b.id} generation={b.generation} />
+                        )}
                         <p>{b.origins.join("、")}</p>
                         <small>
                           {b.lease?.owner === "user"
@@ -883,7 +1133,7 @@ export function WorkCenter({ snapshot }: { snapshot: Snapshot }) {
                                 api("/browsers/" + b.id + "/control", "POST", {
                                   expectedGeneration: b.generation,
                                 }),
-                              "已暂停 Agent 浏览器写入，请在 Host 浏览器窗口登录",
+                              "已接管浏览器，请在实时画面中登录",
                             )
                           }
                         >

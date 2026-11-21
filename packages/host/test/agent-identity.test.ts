@@ -105,7 +105,7 @@ test("v2 pi supervisors migrate to Kodo without changing native identity, receip
   try {
     assert.equal(store.session(controller).harnessId, "kodo");
     assert.equal(store.session(target).harnessId, "pi");
-    assert.equal(store.session(controller).title, "与 Kodo 对话");
+    assert.equal(store.session(controller).title, "与 Kooyu 对话");
     assert.equal(store.session(target).title, "preserved direct");
     for (const id of [controller, target]) {
       assert.equal(store.session(id).nativeSessionId, `native:${id}`);
@@ -185,6 +185,16 @@ test("Kodo alone receives management tools; standalone pi retains a separate ins
         "files",
         "automation",
         "memory",
+        "rules",
+        "ask_user",
+        "heartbeat",
+        "update_todos",
+        "save_job_as_skill",
+        "knowledge",
+        "show_page",
+        "routing",
+        "harness_arena",
+        "checkpoint",
         "applications",
         "outbound",
         ...(service.browser.status().available ? ["browser"] : []),

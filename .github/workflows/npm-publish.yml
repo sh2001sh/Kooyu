@@ -39,6 +39,9 @@ jobs:
       - run: npm ci
       - run: npm run package:npm
         env:
+          KOOYU_OFFICIAL_RELEASE: "1"
+          KOOYU_OFFICIAL_ACCOUNT_ORIGIN: ${{ vars.KOOYU_OFFICIAL_ACCOUNT_ORIGIN }}
+          KOOYU_OFFICIAL_RELAY_ORIGIN: ${{ secrets.KOOYU_OFFICIAL_RELAY_ORIGIN }}
           KOOYU_NPM_VERSION: ${{ steps.metadata.outputs.version }}
       - name: Pack the publishable archive
         working-directory: release/npm

@@ -17,11 +17,13 @@ import Observation
     var composerAttachments: [ManagedAttachment] = []
     var usageLoading = false
     var loadingHistory = false
+    var requestedCloudHost: UUID?
     var addingDevice = false
     var error = ""
     var notice = ""
     var online = false
     var busy = false
+    var canMail: Bool { !online && !busy && connection?.mailboxSeed != nil && connection?.pending == nil }
     var canWrite: Bool { connection != nil && online && !busy && connection?.pending == nil }
     private var refreshing = false
     private var epoch = 0
@@ -48,7 +50,19 @@ import Observation
     }
     func removeDevice(_ id: String) {
         guard !busy else { return }
-        do { let active = book.activeHostId == id; var next = book; next.remove(id); try commit(next); if active { reset(next) } } catch { self.error = error.localizedDescription }
+        guard let connection = book.devices.first(where: {$0.hostId==id}) else {return}
+        busy=true
+        Task {
+            defer {busy=false}
+            do {
+                if let credential=connection.cloud {
+                    let account=try CloudDevice(base:HostAPI.origin(connection.url),stored:credential)
+                    try await account.logout()
+                }
+                let active=book.activeHostId==id
+                var next=book;next.remove(id);try commit(next);if active {reset(next)}
+            } catch {self.error=error.localizedDescription}
+        }
     }
     func pair(url: String, code: String, name: String = "") async {
         guard !busy else { return }; busy = true; defer { busy = false }
@@ -71,7 +85,7 @@ import Observation
             guard current(c, generation) else { return }
             let reconnecting = !online && snapshot != nil
             snapshot = next; if !online { error = "" }; online = true
-            if reconnecting { notice = "连接已恢复 · \(next.inbox.filter { !$0.resolved }.count) 项待处理，可在「待办」查看。" }
+            if reconnecting { notice = "连接已恢复 · \(next.inbox.filter { !$0.resolved && $0.read != true }.count) 项待处理，可在「待办」查看。" }
             refreshSettings(c, generation)
             if let id = selected {
                 let cursor = page?.events.map(\.sequence).max()
@@ -83,7 +97,19 @@ import Observation
             }
             if let op = c.pending {
                 let path: String? = op.management == true ? "/client/operations/\(op.id)" : op.path.hasSuffix("/send") || op.path.hasSuffix("/stop") ? "/commands/\(op.id)" : op.path.hasSuffix("/settings") || op.path.contains("/commands/") && op.method == "PATCH" ? op.path + "?requestId=\(op.id)" : nil
-                if let path, let receipt: JSONValue = try? await api.get(path), current(c, generation), connection?.pending?.id == op.id, op.management != true || ["confirmed", "failed"].contains(receipt["status"].string) { try clearPending(); notice = receipt["status"].string == "failed" ? receipt["error"]["message"].string : "已从设备核对操作回执。" }
+                if path == nil {
+                    if current(c, generation), connection?.pending?.id == op.id { try? clearPending() }
+                } else if let path {
+                    do {
+                        let receipt: JSONValue = try await api.get(path)
+                        if current(c, generation), connection?.pending?.id == op.id, op.management != true || ["confirmed", "failed", "unknown"].contains(receipt["status"].string) {
+                            try? clearPending()
+                            notice = ["failed", "unknown"].contains(receipt["status"].string) ? receipt["error"]["message"].string : "已从设备核对操作回执。"
+                        }
+                    } catch let err as APIError where err.status == 404 {
+                        if current(c, generation), connection?.pending?.id == op.id { try? clearPending() }
+                    } catch { }
+                }
             }
         } catch is CancellationError { }
         catch {
@@ -134,6 +160,30 @@ import Observation
     }
     func send(_ text: String, mode: String? = nil, attachmentIds: [String] = []) async -> Bool {
         guard let id = selected, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachmentIds.isEmpty, text.count <= 200000 else { return false }
+        if canMail, attachmentIds.isEmpty, var c = connection {
+            let generation = epoch, command = UUID().uuidString.lowercased()
+            busy = true
+            defer { if current(c,generation) { busy = false } }
+            do {
+                let envelope = try SecureTunnel.mail(c,session:id,text:text,command:command)
+                c.pending = PendingOperation(id:command,path:"/sessions/\(id)/send",body:.object([:]),method:"POST",management:false)
+                var next = book
+                next.put(c)
+                try commit(next)
+                try await HostAPI(connection:c).postMail(envelope)
+                guard current(c,generation) else { return false }
+                try clearPending()
+                composerDraft = ""
+                notice = "已投递离线信箱，设备上线后接收。"
+                return true
+            } catch {
+                if current(c,generation) {
+                    if let failure = error as? APIError, (400...499).contains(failure.status) { try? clearPending() }
+                    self.error = error.localizedDescription
+                }
+                return false
+            }
+        }
         let sent = await execute("/sessions/\(id)/send", values: ["text": .string(text), "mode": .string(mode ?? composerSendMode(snapshot?.sessions.first { $0.id == id }?.runState ?? "unknown")), "attachmentIds": .array(attachmentIds.map { .string($0) })]) != nil
         if sent && selected == id { composerDraft = ""; composerAttachments = [] }
         return sent
@@ -151,33 +201,65 @@ import Observation
         let id = item.id.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? item.id
         _ = await execute("/interactions/\(id)", values: ["answer": action.answer])
     }
+    func markInboxRead(_ id: String) async {
+        guard let c = connection else { return }
+        let encodedId = id.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? id
+        do {
+            let _: JSONValue = try await HostAPI(connection: c).perform("/inbox/\(encodedId)/read", method: "POST", body: .object([:]))
+            notice = "已标为已读。"
+            await refresh()
+        } catch { self.error = error.localizedDescription }
+    }
+    func markAllInboxRead() async {
+        guard let c = connection else { return }
+        do {
+            let _: JSONValue = try await HostAPI(connection: c).perform("/inbox/read-all", method: "POST", body: .object([:]))
+            notice = "已全部标为已读。"
+            await refresh()
+        } catch { self.error = error.localizedDescription }
+    }
+    func deleteInboxItem(_ id: String) async {
+        guard let c = connection else { return }
+        let encodedId = id.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? id
+        do {
+            let _: JSONValue = try await HostAPI(connection: c).perform("/inbox/\(encodedId)", method: "DELETE", body: nil)
+            notice = "已删除消息。"
+            await refresh()
+        } catch { self.error = error.localizedDescription }
+    }
     func execute(_ path: String, method: String = "POST", values: [String: JSONValue] = [:], refreshAfter: Bool = true) async -> JSONValue? {
         guard var c = connection, canWrite else { return nil }; let generation = epoch
         busy = true; defer { if current(c, generation) { busy = false } }
         let id = UUID().uuidString.lowercased(); var fields = values
         let management = path.hasPrefix("/automations") && path != "/automations/preview" || path.hasPrefix("/memory") || path.hasPrefix("/goals/") && path.hasSuffix("/review")
-        if path.hasSuffix("/send") || path.hasSuffix("/stop") || path.hasSuffix("/settings") || path.hasSuffix("/branch") || path.hasPrefix("/interactions/") || path.contains("/commands/") && method == "PATCH" { fields["requestId"] = .string(id) }
+        let hasReceipt = management || path.hasSuffix("/send") || path.hasSuffix("/stop") || path.hasSuffix("/settings") || (path.contains("/commands/") && method == "PATCH")
+        if path.hasSuffix("/send") || path.hasSuffix("/stop") || path.hasSuffix("/settings") || path.hasSuffix("/branch") || path.hasPrefix("/interactions/") || (path.contains("/commands/") && method == "PATCH") || path == "/providers" || path == "/provider-models" || path == "/harness-bindings" || path == "/harness-provider-bindings" {
+            if fields["requestId"] == nil { fields["requestId"] = .string(id) }
+        }
         let body = JSONValue.object(fields)
-        c.pending = PendingOperation(id: id, path: path, body: body, method: method, management: management)
         do {
-            var next = book; next.put(c); try commit(next)
+            if hasReceipt {
+                c.pending = PendingOperation(id: id, path: path, body: body, method: method, management: management)
+                var next = book; next.put(c); try commit(next)
+            }
             var result: JSONValue = try await HostAPI(connection: c).perform(management ? "/client/operations" : path, method: management ? "POST" : method, body: management ? .object(["requestId": .string(id), "path": .string("/api" + path), "method": .string(method), "body": body]) : method == "DELETE" ? nil : body)
             guard current(c, generation) else { return nil }
             if management {
                 if result["status"].string != "confirmed" {
-                    if result["status"].string == "failed" { try clearPending() }
-                    self.error = result["error"]["message"].string.isEmpty ? "操作结果待核对，不会自动重发。" : result["error"]["message"].string
+                    if ["failed", "unknown"].contains(result["status"].string) { try? clearPending() }
+                    self.error = result["error"]["message"].string.isEmpty ? "操作未完成，请核对后重试。" : result["error"]["message"].string
                     return nil
                 }
                 result = result["result"]
             }
-            try clearPending(); notice = "设备已保存操作。"
+            if hasReceipt { try clearPending() }
+            notice = "设备已保存操作。"
             if path == "/app-settings" && method == "PATCH" { appSettings = result }
             if refreshAfter { await refresh() }; return result
         } catch {
             guard current(c, generation) else { return nil }
-            if let failure = error as? APIError, (400..<500).contains(failure.status) { try? clearPending() }
-            self.error = "\(error.localizedDescription)\n结果未知时请先核对，应用不会自动重发。"; return nil
+            if !hasReceipt || ((error as? APIError).map { (400..<500).contains($0.status) } ?? false) { try? clearPending() }
+            self.error = "\(error.localizedDescription)\(hasReceipt ? "\n结果未知时请先核对，应用不会自动重发。" : "")"; return nil
         }
     }
     func clearPending() throws { guard var c = connection else { return }; c.pending = nil; var next = book; next.put(c); try commit(next) }

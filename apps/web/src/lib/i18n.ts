@@ -129,6 +129,8 @@ const STRINGS = {
   "inbox.empty": { "zh-CN": "暂无待处理事项", en: "All caught up", ja: "保留中の項目はありません" },
   "inbox.open": { "zh-CN": "打开会话", en: "Open chat", ja: "チャットを開く" },
   "inbox.markRead": { "zh-CN": "标记已读", en: "Mark read", ja: "既読にする" },
+  "inbox.markAllRead": { "zh-CN": "全部已读", en: "Mark all read", ja: "すべて既読" },
+  "inbox.delete": { "zh-CN": "删除", en: "Delete", ja: "削除" },
 
   "import.title": { "zh-CN": "导入对话", en: "Import chats", ja: "チャットをインポート" },
   "import.desc": {
@@ -140,6 +142,21 @@ const STRINGS = {
   "import.filterSection": { "zh-CN": "扫描范围", en: "Scan scope", ja: "スキャン範囲" },
   "import.projectFilter": { "zh-CN": "所属项目", en: "Project", ja: "プロジェクト" },
   "import.allProjects": { "zh-CN": "全部项目", en: "All projects", ja: "すべてのプロジェクト" },
+  "import.chooseProject": {
+    "zh-CN": "请选择项目（必选）",
+    en: "Choose a project (required)",
+    ja: "プロジェクトを選択（必須）",
+  },
+  "import.readyTitle": {
+    "zh-CN": "选择项目后开始扫描",
+    en: "Choose a project to scan",
+    ja: "プロジェクトを選んでスキャン",
+  },
+  "import.readyDesc": {
+    "zh-CN": "项目必选，引擎可选。点击「扫描本地对话」后才会读取本地历史。",
+    en: "A project is required; the engine is optional. Local history is read only when you click Scan local chats.",
+    ja: "プロジェクトは必須、エンジンは任意です。スキャンボタンを押すとローカル履歴を読み取ります。",
+  },
   "import.engineFilter": { "zh-CN": "来源引擎", en: "Engine", ja: "エンジン" },
   "import.allEngines": { "zh-CN": "全部引擎", en: "All engines", ja: "すべてのエンジン" },
   "import.searchPlaceholder": {
@@ -456,6 +473,229 @@ const STRINGS = {
   "usage.title": { "zh-CN": "用量", en: "Usage", ja: "使用量" },
   "devices.title": { "zh-CN": "手机连接", en: "Devices", ja: "デバイス" },
   "advanced.title": { "zh-CN": "高级", en: "Advanced", ja: "詳細" },
+
+  "delegation.section": { "zh-CN": "委派工单", en: "Delegated tasks", ja: "委任タスク" },
+  "delegation.escalate": {
+    "zh-CN": "转交 Kooyu 主控",
+    en: "Hand off to Kooyu",
+    ja: "Kooyu に引き継ぐ",
+  },
+  "delegation.managedBanner": {
+    "zh-CN": "由 Kooyu 主控编排 · 手动发言将自动暂停主控",
+    en: "Managed by Kooyu · Typing here pauses automation",
+    ja: "Kooyu が管理中・手動送信で自動続行を一時停止",
+  },
+  "delegation.sharedWorkspace": {
+    "zh-CN": "共享工作区",
+    en: "Shared workspace",
+    ja: "共有ワークスペース",
+  },
+  "delegation.viewController": {
+    "zh-CN": "查看主对话",
+    en: "Main chat",
+    ja: "メインチャット",
+  },
+  "delegation.viewWorker": {
+    "zh-CN": "下钻直聊",
+    en: "Inspect chat",
+    ja: "サブ会話へ",
+  },
+  "delegation.reviewDiff": {
+    "zh-CN": "审阅改动",
+    en: "Review diff",
+    ja: "差分を確認",
+  },
+  "delegation.takeover": {
+    "zh-CN": "接管暂停",
+    en: "Take over",
+    ja: "引き取る",
+  },
+  "delegation.handback": {
+    "zh-CN": "交还主控",
+    en: "Return to Kooyu",
+    ja: "Kooyu に戻す",
+  },
+  "delegation.status.provisioning": { "zh-CN": "准备中", en: "Provisioning", ja: "準備中" },
+  "delegation.status.running": { "zh-CN": "托管中", en: "Running", ja: "実行中" },
+  "delegation.status.awaiting-review": {
+    "zh-CN": "待审查",
+    en: "Awaiting review",
+    ja: "レビュー待ち",
+  },
+  "delegation.status.completed": { "zh-CN": "已完成", en: "Completed", ja: "完了" },
+  "delegation.status.blocked": { "zh-CN": "已暂停", en: "Paused", ja: "一時停止" },
+  "delegation.status.cancelled": { "zh-CN": "已撤销", en: "Cancelled", ja: "キャンセル" },
+  "delegation.status.failed": { "zh-CN": "失败", en: "Failed", ja: "失敗" },
+
+  "playbook.group": { "zh-CN": "主控剧本", en: "Playbooks", ja: "プレイブック" },
+  "playbook.implReview": { "zh-CN": "实现与审查", en: "Build & review", ja: "実装とレビュー" },
+  "playbook.parallel": { "zh-CN": "并行分工", en: "Parallel split", ja: "並列分担" },
+  "playbook.ciGuard": { "zh-CN": "修 CI / 单测守护", en: "Fix CI & tests", ja: "CI・テスト修復" },
+  "playbook.research": { "zh-CN": "深度联网调研", en: "Deep research", ja: "深掘り調査" },
+
+  "git.title": { "zh-CN": "Git 交付", en: "Git delivery", ja: "Git 納品" },
+  "git.worktrees": { "zh-CN": "可合入分支", en: "Ready branches", ja: "マージ可能なブランチ" },
+  "git.mergeFf": { "zh-CN": "快进合入", en: "Fast-forward", ja: "FF マージ" },
+  "git.mergeSquash": { "zh-CN": "压缩合入", en: "Squash", ja: "スカッシュ" },
+  "git.abortMerge": { "zh-CN": "中止合入", en: "Abort merge", ja: "マージ中止" },
+  "git.askAgentConflict": {
+    "zh-CN": "交给 Agent 解决冲突",
+    en: "Ask agent to resolve",
+    ja: "Agent に競合解決を依頼",
+  },
+  "git.stageFile": { "zh-CN": "暂存文件", en: "Stage file", ja: "ステージ" },
+  "git.unstageFile": { "zh-CN": "取消暂存", en: "Unstage", ja: "アンステージ" },
+  "git.discardFile": { "zh-CN": "丢弃改动", en: "Discard file", ja: "変更を破棄" },
+  "git.loadHunks": { "zh-CN": "逐块处理", en: "Hunks", ja: "ハンク選択" },
+  "git.stageHunk": { "zh-CN": "暂存此块", en: "Stage hunk", ja: "この塊をステージ" },
+  "git.discardHunk": { "zh-CN": "丢弃此块", en: "Discard hunk", ja: "この塊を破棄" },
+  "git.confirmDiscard": {
+    "zh-CN": "确认丢弃？此操作会还原工作区内容。",
+    en: "Discard changes? This restores the workspace content.",
+    ja: "変更を破棄しますか？作業ツリーの内容が元に戻ります。",
+  },
+  "git.confirmYes": { "zh-CN": "确认丢弃", en: "Discard", ja: "破棄する" },
+  "git.suggestMsg": { "zh-CN": "智能生成", en: "Auto-write", ja: "自動生成" },
+  "git.msgPlaceholder": {
+    "zh-CN": "输入提交说明或 PR 标题…",
+    en: "Commit message or PR title…",
+    ja: "コミットメッセージまたは PR タイトル…",
+  },
+  "git.commit": { "zh-CN": "提交暂存", en: "Commit staged", ja: "コミット" },
+  "git.createPr": { "zh-CN": "推送并建 PR", en: "Push & create PR", ja: "Push して PR 作成" },
+  "git.done": { "zh-CN": "操作已完成", en: "Done", ja: "完了しました" },
+  "git.noHunks": {
+    "zh-CN": "没有可逐块处理的未暂存改动。",
+    en: "No unstaged hunks available.",
+    ja: "未ステージの差分ブロックはありません。",
+  },
+
+  "terminal.title": { "zh-CN": "交互式终端", en: "Interactive terminal", ja: "ターミナル" },
+  "terminal.open": { "zh-CN": "打开终端", en: "Open terminal", ja: "ターミナルを開く" },
+  "terminal.close": { "zh-CN": "关闭终端", en: "Close terminal", ja: "閉じる" },
+  "terminal.quoteError": {
+    "zh-CN": "引用末尾输出发给 Agent",
+    en: "Send tail output to agent",
+    ja: "末尾ログを Agent に送る",
+  },
+
+  "preview.code": { "zh-CN": "代码", en: "Code", ja: "コード" },
+  "preview.live": { "zh-CN": "实时预览", en: "Live preview", ja: "ライブプレビュー" },
+  "preview.devServer": {
+    "zh-CN": "开发服务器预览",
+    en: "Dev server preview",
+    ja: "開発サーバープレビュー",
+  },
+  "preview.localPort": { "zh-CN": "本机端口", en: "Local port", ja: "ローカルポート" },
+  "preview.openLink": { "zh-CN": "生成预览链接", en: "Open preview", ja: "プレビュー生成" },
+  "preview.shareLink": {
+    "zh-CN": "远程一次性链接",
+    en: "One-time remote link",
+    ja: "リモート一時リンク",
+  },
+  "preview.openTab": { "zh-CN": "新标签打开", en: "Open in tab", ja: "新しいタブで開く" },
+  "preview.isolated": { "zh-CN": "隔离域打开", en: "Isolated origin", ja: "分離オリジンで開く" },
+  "preview.sendConsoleErr": {
+    "zh-CN": "将控制台报错发给 Agent",
+    en: "Send console errors to agent",
+    ja: "コンソールエラーを Agent に送る",
+  },
+
+  "browser.tabs": { "zh-CN": "标签页", en: "Tabs", ja: "タブ" },
+  "browser.recordStart": { "zh-CN": "开始示教", en: "Record steps", ja: "操作を録画" },
+  "browser.recordStop": { "zh-CN": "结束示教", en: "Stop recording", ja: "録画を終了" },
+  "browser.annotate": { "zh-CN": "截图批注", en: "Annotate", ja: "スクリーンショット注釈" },
+  "browser.downloadSkill": {
+    "zh-CN": "下载 SKILL.md",
+    en: "Download SKILL.md",
+    ja: "SKILL.md を保存",
+  },
+  "browser.dailyTime": { "zh-CN": "每日执行时间", en: "Daily schedule", ja: "毎日の実行時刻" },
+  "browser.createSchedule": { "zh-CN": "创建每日计划", en: "Schedule daily", ja: "毎日実行を作成" },
+  "browser.scheduled": { "zh-CN": "计划已启用", en: "Scheduled", ja: "スケジュール済み" },
+
+  "annotate.title": { "zh-CN": "截图批注", en: "Annotate image", ja: "画像注釈" },
+  "annotate.pen": { "zh-CN": "画笔", en: "Pen", ja: "ペン" },
+  "annotate.arrow": { "zh-CN": "箭头", en: "Arrow", ja: "矢印" },
+  "annotate.rect": { "zh-CN": "矩形", en: "Box", ja: "四角" },
+  "annotate.ellipse": { "zh-CN": "圆框", en: "Oval", ja: "楕円" },
+  "annotate.undo": { "zh-CN": "撤销", en: "Undo", ja: "戻す" },
+  "annotate.clear": { "zh-CN": "清空", en: "Clear", ja: "クリア" },
+  "annotate.attach": { "zh-CN": "附带到消息", en: "Attach to chat", ja: "メッセージに添付" },
+  "annotate.save": { "zh-CN": "保存 PNG", en: "Save PNG", ja: "PNG 保存" },
+
+  "voiceCall.start": { "zh-CN": "开始语音通话", en: "Start voice call", ja: "音声通話を開始" },
+  "voiceCall.end": { "zh-CN": "结束语音通话", en: "End voice call", ja: "音声通話を終了" },
+  "voiceCall.opening": {
+    "zh-CN": "正在打开麦克风…",
+    en: "Opening mic…",
+    ja: "マイクを開いています…",
+  },
+  "voiceCall.listening": { "zh-CN": "正在聆听…", en: "Listening…", ja: "聞き取り中…" },
+  "voiceCall.speaking": {
+    "zh-CN": "正在播报回复…",
+    en: "Speaking reply…",
+    ja: "応答を読み上げ中…",
+  },
+
+  "mailbox.send": {
+    "zh-CN": "加密投递到离线信箱",
+    en: "Send to offline mailbox",
+    ja: "オフライン受信箱へ暗号送信",
+  },
+  "mailbox.sent": {
+    "zh-CN": "已加密存入离线信箱，Host 恢复上线后自动送达。",
+    en: "Encrypted and queued in offline mailbox for Host delivery.",
+    ja: "暗号化してオフライン受信箱に保存しました。Host 復帰後に自動配送されます。",
+  },
+
+  "devices.permissions": { "zh-CN": "设备授权范围", en: "Device permissions", ja: "デバイス権限" },
+  "devices.perm.goalsCheck": {
+    "zh-CN": "运行检查与验收",
+    en: "Run verification checks",
+    ja: "検証チェックを実行",
+  },
+  "devices.perm.terminal": {
+    "zh-CN": "访问交互式终端",
+    en: "Interactive terminal access",
+    ja: "ターミナルアクセス",
+  },
+  "devices.perm.gitPush": {
+    "zh-CN": "推送分支与创建 PR",
+    en: "Push branches & create PRs",
+    ja: "ブランチ Push と PR 作成",
+  },
+  "devices.pushEnable": {
+    "zh-CN": "启用浏览器推送",
+    en: "Enable browser push",
+    ja: "ブラウザ通知を有効化",
+  },
+  "devices.pushDisable": {
+    "zh-CN": "关闭浏览器推送",
+    en: "Disable browser push",
+    ja: "ブラウザ通知をオフ",
+  },
+
+  "inbox.approveIntake": { "zh-CN": "批准并派发执行", en: "Approve & run", ja: "承認して実行" },
+  "inbox.intakeApproved": {
+    "zh-CN": "已派发至主对话",
+    en: "Dispatched to main chat",
+    ja: "メインチャットに送信済み",
+  },
+
+  "im.mode": { "zh-CN": "准入模式", en: "Admission mode", ja: "受付モード" },
+  "im.mode.observe": { "zh-CN": "仅观察记录", en: "Observe only", ja: "記録のみ" },
+  "im.mode.propose": {
+    "zh-CN": "建议（待人工批准）",
+    en: "Propose (approve in Inbox)",
+    ja: "提案（受信箱で承認）",
+  },
+  "im.mode.auto": { "zh-CN": "自动派发执行", en: "Auto-dispatch", ja: "自動実行" },
+  "im.groupChat": {
+    "zh-CN": "群聊模式（未 @ 时 0-Token 静默缓存上下文）",
+    en: "Group mode (0-token context buffer when not mentioned)",
+    ja: "グループモード（メンション無しは文脈のみ蓄積）",
+  },
 } as const;
 
 export type MessageKey = keyof typeof STRINGS;

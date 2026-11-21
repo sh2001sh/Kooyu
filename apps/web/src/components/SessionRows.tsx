@@ -17,7 +17,7 @@ import { HARNESS_IDS } from "@kodo/protocol/client";
 import type { HarnessId, Project, Session, Supervision } from "@kodo/protocol";
 import { HARNESS_NAMES, formatRelativeDate, shortModelLabel } from "../lib/harnesses";
 import { useT } from "../lib/i18n";
-import { HarnessBadge, KodoMark } from "./KodoBrand";
+import { HarnessBadge, KooyuBrandMark } from "./KooyuBrand";
 import { SegmentedControl } from "./SegmentedControl";
 import { StatusBadge, sessionStatusTone } from "./StatusBadge";
 import { useSidebarActions } from "./useSidebarActions";
@@ -344,7 +344,7 @@ export function SessionRows({
             <>
               <div className="l0-card__head desktop-only-flex">
                 <span className="l0-card__mark" aria-hidden="true">
-                  <KodoMark size={16} />
+                  <KooyuBrandMark size={16} />
                 </span>
                 <span className="l0-card__title">Kooyu 主对话</span>
                 <button
@@ -385,7 +385,7 @@ export function SessionRows({
                         aria-haspopup="menu"
                       >
                         <span className="master-row__mark" aria-hidden="true">
-                          <KodoMark size={15} />
+                          <KooyuBrandMark size={15} />
                         </span>
                         <div className="master-row__content">
                           <div className="master-row__title">
@@ -423,7 +423,7 @@ export function SessionRows({
               onClick={() => onCreateMaster()}
             >
               <span className="master-row__mark" aria-hidden="true">
-                <KodoMark size={15} />
+                <KooyuBrandMark size={15} />
               </span>
               <span className="nav-row__title">
                 <span className="desktop-only">Kooyu 主对话</span>

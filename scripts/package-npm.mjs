@@ -1,6 +1,7 @@
 import { chmod, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import * as platform from "../packages/platform/dist/index.js";
+import { stageDistribution } from "./distribution-config.mjs";
 
 const root = resolve(".");
 const stage = join(root, "release/npm");
@@ -84,6 +85,7 @@ await writeFile(
     2,
   ) + "\n",
 );
+await stageDistribution(runtime);
 if (typeof platform.hostBuildId === "function") {
   await writeFile(
     join(runtime, "host-build.json"),

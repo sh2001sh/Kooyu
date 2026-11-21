@@ -53,28 +53,38 @@ data class QuestionForm(val protocol: String, val questions: List<NativeQuestion
 }
 fun questionForm(payload: JSONObject): QuestionForm? {
     val protocol = payload.optString("protocol")
-    if (!when (protocol) { "claude" -> payload.optString("toolName") == "AskUserQuestion"; "codex" -> payload.optString("method") == "item/tool/requestUserInput"; "opencode" -> payload.optString("type") == "question.asked"; "kimi" -> payload.optString("method") == "question/request"; else -> false }) return null
+    val idBased = protocol == "kimi" || protocol == "kodo"
+    if (!when (protocol) { "claude" -> payload.optString("toolName") == "AskUserQuestion"; "codex" -> payload.optString("method") == "item/tool/requestUserInput"; "opencode" -> payload.optString("type") == "question.asked"; "kimi", "kodo" -> payload.optString("method") == "question/request"; else -> false }) return null
     val raw = payload.optJSONObject(if (protocol == "claude") "input" else "params")?.optJSONArray("questions") ?: return null
     if (raw.length() !in 1..20) return null
     val questions = mutableListOf<NativeQuestion>()
     for (i in 0 until raw.length()) {
         val q = raw.optJSONObject(i) ?: return null
-        if (q.opt("question") !is String || (protocol in listOf("codex", "kimi") && (q.opt("id") !is String || q.nullableString("id") == null))) return null
+        if (q.opt("question") !is String || ((protocol == "codex" || idBased) && (q.opt("id") !is String || q.nullableString("id") == null))) return null
         if (q.has("options") && !q.isNull("options") && q.opt("options") !is JSONArray) return null
         val options = q.optJSONArray("options") ?: JSONArray()
         if (options.length() > 100) return null
         val normalized = mutableListOf<QuestionOption>()
         for (j in 0 until options.length()) {
             val o = options.optJSONObject(j) ?: return null
-            if (o.opt("label") !is String || protocol == "kimi" && (o.opt("id") !is String || o.nullableString("id") == null)) return null
-            normalized += QuestionOption(if (protocol == "kimi") o.getString("id") else o.getString("label"), o.getString("label"), o.optString("description"))
+            if (o.opt("label") !is String || (idBased && (o.opt("id") !is String || o.nullableString("id") == null))) return null
+            val alwaysRule = o.optJSONObject("alwaysRule")
+            val desc = buildString {
+                append(o.optString("description"))
+                if (alwaysRule != null) {
+                    if (isNotEmpty()) append(" · ")
+                    val modeLabel = if (alwaysRule.optString("mode") == "allow") "以后直接照做" else "以后先问我"
+                    append("并记入规则（$modeLabel）：${alwaysRule.optString("text")}")
+                }
+            }
+            normalized += QuestionOption(if (idBased) o.getString("id") else o.getString("label"), o.getString("label"), desc)
         }
         if (normalized.distinctBy { it.value }.size != normalized.size) return null
-        val key = if (protocol in listOf("codex", "kimi")) q.getString("id") else if (protocol == "claude") q.getString("question") else i.toString()
+        val key = if (protocol == "codex" || idBased) q.getString("id") else if (protocol == "claude") q.getString("question") else i.toString()
         if (questions.any { it.key == key }) return null
-        questions += NativeQuestion(key, q.getString("question"), if (protocol == "kimi") q.optString("body") else "", normalized,
-            when (protocol) { "claude" -> q.optBoolean("multiSelect"); "kimi" -> q.optBoolean("multi_select"); "opencode" -> q.optBoolean("multiple"); else -> false },
-            normalized.isEmpty() || when (protocol) { "codex" -> q.optBoolean("isOther"); "kimi" -> q.optBoolean("allow_other"); "opencode" -> q.opt("custom") != false; else -> true }, protocol == "codex" && q.optBoolean("isSecret"))
+        questions += NativeQuestion(key, q.getString("question"), if (idBased) q.optString("body") else "", normalized,
+            when (protocol) { "claude" -> q.optBoolean("multiSelect"); "kimi", "kodo" -> q.optBoolean("multi_select"); "opencode" -> q.optBoolean("multiple"); else -> false },
+            normalized.isEmpty() || when (protocol) { "codex" -> q.optBoolean("isOther"); "kimi" -> q.optBoolean("allow_other"); "kodo" -> q.opt("allow_other") != false; "opencode" -> q.opt("custom") != false; else -> true }, protocol == "codex" && q.optBoolean("isSecret"))
     }
     return QuestionForm(protocol, questions)
 }

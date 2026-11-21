@@ -2,6 +2,8 @@ import { cp, mkdir, readFile, writeFile, chmod, rm } from "node:fs/promises";
 import { resolve, join, dirname } from "node:path";
 import { spawn } from "node:child_process";
 import { build } from "esbuild";
+import { hostBuildId } from "../packages/platform/dist/index.js";
+import { stageDistribution } from "./distribution-config.mjs";
 import "./sync-desktop-icons.mjs";
 
 // Stage on the target OS/architecture: keyring and other native addons are not portable.
@@ -108,6 +110,19 @@ await writeFile(
     2,
   ),
 );
+await stageDistribution(host);
+await writeFile(
+  join(host, "host-build.json"),
+  JSON.stringify({ buildId: hostBuildId(host), version: pkg.version }),
+);
+await build({
+  entryPoints: [join(root, "apps/desktop/src/upgrade-host.ts")],
+  outfile: join(stage, "upgrade-host.mjs"),
+  platform: "node",
+  format: "esm",
+  bundle: true,
+  target: "node24",
+});
 console.log(
   `Staged ${pkg.name} with standalone Node ${process.versions.node} for ${process.platform}/${process.arch}`,
 );

@@ -72,20 +72,39 @@ import org.json.JSONObject
 
 
 class MainActivity : ComponentActivity() {
+    private var requestedHost by mutableStateOf<String?>(null)
+
+    private fun receiveHost(intent: Intent) {
+        val url = intent.data ?: return
+        if (intent.action != Intent.ACTION_VIEW || url.scheme != "kooyu" || url.authority != "host" ||
+            url.query != null || url.fragment != null || url.pathSegments.size != 1) return
+        val id = url.lastPathSegment ?: return
+        if (Regex("[a-fA-F0-9]{8}(-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}").matches(id)) requestedHost = id
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        receiveHost(intent)
         ThemeManager.init(this)
         BackgroundReminders.receive(intent)
         enableEdgeToEdge()
         setContent {
             KooyuTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
-                    KooyuScreen()
+                    val model: Workbench = viewModel()
+                    LaunchedEffect(requestedHost) {
+                        val id = requestedHost ?: return@LaunchedEffect
+                        val device = model.state.value.book.devices.firstOrNull {
+                            it.cloud?.optString("hostId").equals(id,ignoreCase=true)
+                        }
+                        if(device != null) model.switchDevice(device.hostId) else model.addDevice(true, id)
+                        requestedHost = null
+                    }
+                    KooyuScreen(model)
                 }
             }
         }
     }
     override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent); setIntent(intent); BackgroundReminders.receive(intent)
+        super.onNewIntent(intent); setIntent(intent); receiveHost(intent); BackgroundReminders.receive(intent)
     }
 }

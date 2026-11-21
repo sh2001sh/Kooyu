@@ -37,7 +37,7 @@ import { DatabaseSync, backup } from "node:sqlite";
 import * as tar from "tar";
 import { fileURLToPath } from "node:url";
 const HEADER = Buffer.from("KOOYUBK1"),
-  SCHEMA = 9,
+  SCHEMA = 10,
   PROTOCOL = 2;
 const fileHash = async (path) => {
   const hash = createHash("sha256");
@@ -293,7 +293,7 @@ export async function restoreHost({ input, destination, keyFile }) {
     const manifest = JSON.parse(await readFile(join(temp, "extract", "manifest.json"), "utf8"));
     if (
       manifest.format !== 1 ||
-      manifest.schema !== SCHEMA ||
+      ![9, SCHEMA].includes(manifest.schema) ||
       manifest.protocol !== PROTOCOL ||
       !manifest.files ||
       Array.isArray(manifest.files) ||
@@ -313,7 +313,7 @@ export async function restoreHost({ input, destination, keyFile }) {
     const db = new DatabaseSync(join(root, "kodo.sqlite"));
     try {
       if (
-        Number(db.prepare("PRAGMA user_version").get().user_version) !== SCHEMA ||
+        Number(db.prepare("PRAGMA user_version").get().user_version) !== manifest.schema ||
         db.prepare("PRAGMA quick_check").get().quick_check !== "ok"
       )
         throw new Error("Restored database failed validation");

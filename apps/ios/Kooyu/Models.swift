@@ -82,6 +82,7 @@ struct InboxItem: Codable, Identifiable, Sendable {
     let id, sessionId, type: String
     let payload: JSONValue
     let resolved: Bool
+    let read: Bool?
     let actions: [NativeAction]?
 }
 struct HostGoal: Codable, Identifiable, Sendable {
@@ -150,6 +151,9 @@ struct Connection: Codable, Identifiable, Sendable {
     let url, hostId, deviceId, token, expiresAt: String
     var pending: PendingOperation?
     var name: String? = nil
+    var tunnelKey: Data? = nil
+    var cloud: CloudCredential? = nil
+    var mailboxSeed: Data? = nil
     var id: String { hostId }
     var displayName: String {
         let value = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -159,6 +163,7 @@ struct Connection: Codable, Identifiable, Sendable {
     }
 }
 struct PairResult: Decodable, Sendable {
+    let mailboxEncryptionKey: String?
     struct Device: Decodable, Sendable { let id, expiresAt: String }
     let device: Device
     let token, hostId: String
@@ -183,3 +188,4 @@ func formatWorkspaceLabel(_ raw: String?) -> String {
     if let only = segments.first { return only }
     return "/"
 }
+

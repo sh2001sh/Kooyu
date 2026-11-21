@@ -3,13 +3,20 @@ services:
   relay:
     image: ${RELAY_IMAGE:?Set a versioned RELAY_IMAGE in .env}
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:4321:4321"
+    network_mode: host
     environment:
-      RELAY_ORIGIN: https://relay.kooyu.app
+      RELAY_ORIGIN: ${RELAY_ORIGIN:?Set RELAY_ORIGIN in .env (e.g. https://relay.example.com)}
+      RELAY_BIND: "127.0.0.1"
       RELAY_WEB_ROOT: /app/web
       RELAY_TRUST_PROXY: "1"
-      RELAY_MAX_HOSTS: "1000"
+      RELAY_MAX_HOSTS: ${RELAY_MAX_HOSTS:-1000}
+      RELAY_MAILBOX_DB: /var/lib/kooyu-relay/mailbox.sqlite
+      RELAY_PREVIEW_DOMAIN: ${RELAY_PREVIEW_DOMAIN:-}
+      ACCOUNT_ORIGIN: ${ACCOUNT_ORIGIN:?Set public account issuer}
+      ACCOUNT_CONTROL_ORIGIN: ${ACCOUNT_CONTROL_ORIGIN:-http://127.0.0.1:4381}
+      RELAY_CONTROL_SECRET: ${RELAY_CONTROL_SECRET:?Set control secret}
+    volumes:
+      - relay-data:/var/lib/kooyu-relay
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
@@ -24,7 +31,7 @@ services:
           "CMD",
           "node",
           "-e",
-          "require('node:http').get('http://127.0.0.1:4321/healthz',{headers:{host:'relay.kooyu.app'}},r=>{r.resume();process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1))",
+          "const host=new URL(process.env.RELAY_ORIGIN).host;require('node:http').get('http://127.0.0.1:4321/healthz',{headers:{host}},r=>{r.resume();process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1))",
         ]
       interval: 20s
       timeout: 5s
@@ -35,3 +42,6 @@ services:
       options:
         max-size: 10m
         max-file: "3"
+volumes:
+  relay-data:
+

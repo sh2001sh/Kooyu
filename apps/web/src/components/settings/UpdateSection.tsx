@@ -13,7 +13,7 @@ import { api, remoteClient } from "../../lib/host-client";
 import { formatDate } from "../../lib/harnesses";
 import { useT } from "../../lib/i18n";
 import { useAppPreferences } from "../../lib/preferences";
-import { KodoMark } from "../KodoBrand";
+import { KooyuBrandMark } from "../KooyuBrand";
 import { SettingsRow, SettingsSection, SxSelect, Toggle } from "./SettingsKit";
 
 function formatBytes(bytes: number): string {
@@ -162,7 +162,7 @@ export function UpdateSection() {
       <div className="sx-update-hero">
         <div className="sx-update-hero__id">
           <span className="sx-update-hero__icon" aria-hidden="true">
-            <KodoMark size={24} />
+            <KooyuBrandMark size={24} />
           </span>
           <div className="sx-update-hero__meta">
             <div className="sx-update-hero__title-row">

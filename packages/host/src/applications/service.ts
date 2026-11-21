@@ -1,3 +1,6 @@
+import { LocalMcpPool } from "./local-mcp.js";
+import { createRequire } from "node:module";
+import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -16,7 +19,21 @@ const manifestSchema = z
     name: z.string().min(1).max(100),
     publisher: z.string().min(1).max(100),
     description: z.string().max(4000),
-    runtime: z.enum(["builtin", "remote-mcp", "skills-only"]),
+    runtime: z.enum(["builtin", "remote-mcp", "local-mcp", "skills-only"]),
+    stdio: z
+      .object({
+        command: z.string().min(1).max(4096),
+        args: z.array(z.string().max(4096)).max(100),
+        env: z
+          .record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]{0,127}$/), z.string().max(4096))
+          .optional(),
+        credentialEnv: z
+          .string()
+          .regex(/^[A-Za-z_][A-Za-z0-9_]{0,127}$/)
+          .optional(),
+      })
+      .strict()
+      .optional(),
     endpoint: z.string().url().optional(),
     requestedPermissions: z.array(z.string().min(1).max(100)).max(100),
     skills: z
@@ -56,6 +73,70 @@ const connectSchema = z
   })
   .strict();
 const BUILTINS: ApplicationManifest[] = [
+  ...[
+    ["wecom", "企业微信"],
+    ["feishu", "飞书"],
+    ["weixin", "微信 ClawBot"],
+  ].map(([id, name]): ApplicationManifest => ({
+    schemaVersion: 1,
+    id: id!,
+    version: "1.0.0",
+    name: name!,
+    publisher: "Kooyu",
+    description: "通过机器人长连接接收消息，并通过发件箱回复已绑定会话。",
+    runtime: "builtin",
+    requestedPermissions: [id + ".messages.create"],
+    skills: [],
+    filesManifest: {},
+  })),
+  {
+    schemaVersion: 1,
+    id: "telegram",
+    version: "1.0.0",
+    name: "Telegram",
+    publisher: "Kooyu",
+    description: "接收已绑定会话的消息，并通过发件箱回复。",
+    runtime: "builtin",
+    requestedPermissions: ["telegram.messages.create"],
+    skills: [],
+    filesManifest: {},
+  },
+  ...[
+    {
+      id: "memory",
+      name: "Memory",
+      description: "保存和查询此连接的本地知识图谱。",
+      tools: [
+        "create_entities",
+        "create_relations",
+        "add_observations",
+        "delete_entities",
+        "delete_observations",
+        "delete_relations",
+        "read_graph",
+        "search_nodes",
+        "open_nodes",
+      ],
+    },
+    {
+      id: "sequential-thinking",
+      name: "Sequential Thinking",
+      description: "分步整理和修订当前任务的推理过程。",
+      tools: ["sequentialthinking"],
+    },
+  ].map(({ id, name, description, tools }): ApplicationManifest => ({
+    schemaVersion: 1,
+    id: "mcp-" + id,
+    version: "1.0.0",
+    name,
+    publisher: "Model Context Protocol",
+    description,
+    runtime: "local-mcp",
+    stdio: { command: "kooyu-bundled:" + id, args: [] },
+    requestedPermissions: tools.map((tool) => "mcp." + tool),
+    skills: [],
+    filesManifest: {},
+  })),
   {
     schemaVersion: 1,
     id: "github",
@@ -82,6 +163,7 @@ const BUILTINS: ApplicationManifest[] = [
   },
 ];
 export class ApplicationService {
+  readonly localMcp = new LocalMcpPool();
   readonly versions: DomainTable<ApplicationVersion>;
   readonly connections: DomainTable<AppConnection>;
   constructor(
@@ -98,6 +180,8 @@ export class ApplicationService {
     const manifest = manifestSchema.parse(value);
     if (manifest.runtime === "builtin" && !BUILTINS.some((x) => digest(x) === digest(manifest)))
       throw new KodoError("UNSUPPORTED", "不允许导入未知 builtin 应用。");
+    if (Boolean(manifest.stdio) !== (manifest.runtime === "local-mcp"))
+      throw new KodoError("INVALID_INPUT", "本地 MCP 需要指定启动命令与参数。");
     if (manifest.endpoint) {
       const u = new URL(manifest.endpoint);
       if (u.protocol !== "https:" || u.username || u.password || u.search || u.hash)
@@ -121,6 +205,18 @@ export class ApplicationService {
       versions: this.versions.all(),
       connections: this.connections.all().map(({ credentialRef: _c, ...x }) => x),
     };
+  }
+  /** Resolve an enabled built-in GitHub connection token from the Vault for PR creation fallback. */
+  async githubToken(): Promise<string | null> {
+    const conn = this.connections
+      .all()
+      .find((c) => c.enabled && c.applicationId === "github" && c.credentialRef);
+    if (!conn?.credentialRef) return null;
+    try {
+      return (await this.vault.get(conn.credentialRef)) ?? null;
+    } catch {
+      return null;
+    }
   }
   permissionsDiff(applicationId: string, from: string, to: string) {
     const a = this.versions.get(applicationId + "@" + from).manifest,
@@ -148,10 +244,27 @@ export class ApplicationService {
     }
     const manifest = this.versions.get(p.applicationId + "@" + p.version).manifest;
     if (old && old.revision !== p.expectedRevision) throw new KodoError("CONFLICT", "连接已修改。");
+    const previousManifest =
+      old && this.versions.get(old.applicationId + "@" + old.version).manifest;
+    const sameCredentialScope =
+      previousManifest &&
+      old?.applicationId === p.applicationId &&
+      previousManifest.runtime === manifest.runtime &&
+      previousManifest.endpoint === manifest.endpoint;
     const key = old?.id ?? randomUUID(),
-      ref = p.token ? "app:" + key + ":" + randomUUID() : (old?.credentialRef ?? null);
+      ref = p.token
+        ? "app:" + key + ":" + randomUUID()
+        : sameCredentialScope
+          ? (old?.credentialRef ?? null)
+          : null;
     if (p.token) await this.vault.set(ref!, p.token);
-    if (manifest.runtime !== "skills-only" && p.auth !== "oauth" && p.enabled && !ref)
+    if (
+      manifest.runtime !== "skills-only" &&
+      manifest.runtime !== "local-mcp" &&
+      p.auth !== "oauth" &&
+      p.enabled &&
+      !ref
+    )
       throw new KodoError("INVALID_INPUT", "需要应用凭据。");
     return this.service.store.transaction(() => {
       const prior = this.service.store.record<{ fingerprint: string; id: string }>(
@@ -177,6 +290,10 @@ export class ApplicationService {
       };
       this.connections.put(next);
       if (old)
+        this.service.store.afterCommit(
+          () => void this.localMcp.close(old.id + ":" + old.generation),
+        );
+      if (old)
         for (const g of this.service.permissions.grants.all())
           if (g.connectionId === key && !g.revoked)
             this.service.permissions.revoke(g.id, g.revision);
@@ -194,6 +311,7 @@ export class ApplicationService {
         revision: c.revision + 1,
         generation: c.generation + 1,
       });
+      this.service.store.afterCommit(() => void this.localMcp.close(c.id + ":" + c.generation));
       for (const g of this.service.permissions.grants.all())
         if (g.connectionId === id && !g.revoked) this.service.permissions.revoke(g.id, g.revision);
       return { id, enabled: false };
@@ -205,6 +323,89 @@ export class ApplicationService {
     authorize: () => void = () => {},
   ) {
     const manifest = this.versions.get(c.applicationId + "@" + c.version).manifest;
+    if (manifest.runtime === "local-mcp" && manifest.stdio) {
+      authorize();
+      const release = this.service.lifecycle.enter();
+      try {
+        let { command, args } = manifest.stdio;
+        const env: Record<string, string> = {};
+        // Provide minimal OS runtime path/temp variables so npx/uvx/node work without inheriting Host secrets.
+        for (const key of [
+          "PATH",
+          "Path",
+          "PATHEXT",
+          "HOME",
+          "USERPROFILE",
+          "APPDATA",
+          "LOCALAPPDATA",
+          "SYSTEMROOT",
+          "SystemRoot",
+          "COMSPEC",
+          "ComSpec",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "LANG",
+          "LC_ALL",
+        ]) {
+          const val = process.env[key];
+          if (typeof val === "string") env[key] = val;
+        }
+        if (manifest.stdio.env) {
+          for (const [k, v] of Object.entries(manifest.stdio.env)) env[k] = v;
+        }
+        if (c.credentialRef) {
+          const secret = await this.vault.get(c.credentialRef);
+          if (secret) {
+            if (manifest.stdio.credentialEnv) {
+              env[manifest.stdio.credentialEnv] = secret;
+            } else {
+              let parsedSecret: Record<string, unknown> | null = null;
+              if (secret.trim().startsWith("{")) {
+                try {
+                  const candidate = JSON.parse(secret);
+                  if (candidate && typeof candidate === "object" && !Array.isArray(candidate))
+                    parsedSecret = candidate as Record<string, unknown>;
+                } catch {}
+              }
+              if (parsedSecret) {
+                for (const [k, v] of Object.entries(parsedSecret)) {
+                  if (/^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(k) && typeof v === "string") env[k] = v;
+                }
+              } else {
+                env.MCP_API_KEY = secret;
+              }
+            }
+          }
+        }
+        if (command.startsWith("kooyu-bundled:")) {
+          const server = command.slice("kooyu-bundled:".length);
+          if (!["memory", "sequential-thinking"].includes(server))
+            throw new KodoError("INVALID_INPUT", "未知内置 MCP 服务。");
+          command = process.execPath;
+          args = [
+            createRequire(import.meta.url).resolve(
+              "@modelcontextprotocol/server-" + server + "/dist/index.js",
+            ),
+          ];
+          env.ELECTRON_RUN_AS_NODE = "1";
+          if (server === "memory")
+            env.MEMORY_FILE_PATH = join(this.service.dataDir, "mcp-memory-" + c.id + ".jsonl");
+        }
+        return await this.localMcp.use(
+          c.id + ":" + c.generation,
+          command,
+          args,
+          (client) => {
+            authorize();
+            return op(client);
+          },
+          env,
+        );
+      } finally {
+        release();
+      }
+    }
     const token = c.credentialRef ? await this.vault.get(c.credentialRef) : null;
     const client = new Client({ name: "kooyu", version: "1.0.0" });
     const transport = new StreamableHTTPClientTransport(new URL(manifest.endpoint!), {
@@ -238,7 +439,7 @@ export class ApplicationService {
     };
     authorize();
     const manifest = this.versions.get(c.applicationId + "@" + c.version).manifest;
-    if (manifest.runtime !== "remote-mcp")
+    if (manifest.runtime !== "remote-mcp" && manifest.runtime !== "local-mcp")
       return manifest.requestedPermissions.map((name) => ({ name }));
     return this.mcp(
       c,
@@ -294,11 +495,15 @@ export class ApplicationService {
       async () => {
         if (version.runtime === "skills-only")
           throw new KodoError("UNSUPPORTED", "该应用只提供技能。");
-        if (version.runtime === "remote-mcp") {
+        if (version.runtime === "local-mcp" || version.runtime === "remote-mcp") {
           if (
-            input.resource !== new URL(version.endpoint!).origin ||
-            !input.operation.startsWith("mcp.")
+            version.runtime === "local-mcp" &&
+            this.service.store.session(input.controllerSessionId).harnessId !== "kodo"
           )
+            throw new KodoError("UNAUTHORIZED", "本地 MCP 仅供 Kooyu 主控使用。");
+          const resource =
+            version.runtime === "local-mcp" ? c.id : new URL(version.endpoint!).origin;
+          if (input.resource !== resource || !input.operation.startsWith("mcp."))
             throw new KodoError("UNAUTHORIZED", "MCP 资源范围无效。");
           return this.mcp(
             c,
@@ -314,6 +519,45 @@ export class ApplicationService {
         let url: string,
           method = "GET",
           body: unknown;
+        if (["telegram", "wecom", "feishu", "weixin"].includes(c.applicationId)) {
+          const binding = this.service.im.bindings().find((b) => b.connectionId === c.id);
+          if (
+            binding?.generation !== c.generation ||
+            binding.controllerId !== input.controllerSessionId ||
+            binding.chatId !== input.resource ||
+            input.operation !== c.applicationId + ".messages.create"
+          )
+            throw new KodoError("UNAUTHORIZED", "回复超出已绑定的会话。");
+          const text = z.string().min(1).max(4096).parse(input.arguments.text);
+          if (c.applicationId !== "telegram")
+            return this.service.im.send(
+              c.id,
+              binding.chatId,
+              text,
+              input.identity.toolCallId,
+              token,
+            );
+          if (!/^\d+:[\w-]+$/.test(token))
+            throw new KodoError("INVALID_INPUT", "无效的机器人令牌。");
+          const response = await this.fetcher(
+            "https://api.telegram.org/bot" + token + "/sendMessage",
+            {
+              method: "POST",
+              redirect: "error",
+              signal: AbortSignal.timeout(30000),
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ chat_id: binding.chatId, text }),
+            },
+          );
+          const receipt = await boundedJson(response);
+          if (
+            !response.ok ||
+            receipt.ok !== true ||
+            !Number.isSafeInteger(receipt.result?.message_id)
+          )
+            throw new KodoError("UNAVAILABLE", "Telegram 未确认发送结果。");
+          return { messageId: receipt.result.message_id };
+        }
         if (c.applicationId === "github") {
           if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(input.resource))
             throw new KodoError("INVALID_INPUT", "GitHub 资源应为 owner/repo。");

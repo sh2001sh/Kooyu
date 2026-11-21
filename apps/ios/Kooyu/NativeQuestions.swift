@@ -23,27 +23,34 @@ struct NativeQuestionForm {
 }
 func nativeQuestionForm(_ payload: JSONValue) -> NativeQuestionForm? {
     let kind = payload["protocol"].string
-    let recognized = kind == "claude" && payload["toolName"].string == "AskUserQuestion" || kind == "codex" && payload["method"].string == "item/tool/requestUserInput" || kind == "opencode" && payload["type"].string == "question.asked" || kind == "kimi" && payload["method"].string == "question/request"
+    let idBased = kind == "kimi" || kind == "kodo"
+    let recognized = kind == "claude" && payload["toolName"].string == "AskUserQuestion" || kind == "codex" && payload["method"].string == "item/tool/requestUserInput" || kind == "opencode" && payload["type"].string == "question.asked" || idBased && payload["method"].string == "question/request"
     guard recognized, case .array(let raw) = payload[kind == "claude" ? "input" : "params"]["questions"], (1...20).contains(raw.count) else { return nil }
     var questions: [NativeQuestion] = []
     for (index, q) in raw.enumerated() {
         guard case .string(let text) = q["question"] else { return nil }
-        if ["codex", "kimi"].contains(kind), q["id"].string.isEmpty { return nil }
+        if (kind == "codex" || idBased), q["id"].string.isEmpty { return nil }
         let options: [JSONValue]
         switch q["options"] { case .array(let values): options = values; case .null: options = []; default: return nil }
         guard options.count <= 100 else { return nil }
         var normalized: [NativeQuestionOption] = []
         for option in options {
             guard case .string(let label) = option["label"] else { return nil }
-            let id = kind == "kimi" ? option["id"].string : label
-            if kind == "kimi" && id.isEmpty || normalized.contains(where: { $0.id == id }) { return nil }
-            normalized.append(NativeQuestionOption(id: id, label: label, detail: option["description"].string))
+            let id = idBased ? option["id"].string : label
+            if idBased && id.isEmpty || normalized.contains(where: { $0.id == id }) { return nil }
+            var detail = option["description"].string
+            if case .object = option["alwaysRule"] {
+                let modeLabel = option["alwaysRule"]["mode"].string == "allow" ? "以后直接照做" : "以后先问我"
+                let ruleNote = "并记入规则（\(modeLabel)）：\(option["alwaysRule"]["text"].string)"
+                detail = detail.isEmpty ? ruleNote : "\(detail) · \(ruleNote)"
+            }
+            normalized.append(NativeQuestionOption(id: id, label: label, detail: detail))
         }
-        let key = ["codex", "kimi"].contains(kind) ? q["id"].string : kind == "claude" ? text : String(index)
+        let key = (kind == "codex" || idBased) ? q["id"].string : kind == "claude" ? text : String(index)
         if questions.contains(where: { $0.id == key }) { return nil }
-        let multiple = kind == "claude" ? q["multiSelect"].boolean : kind == "kimi" ? q["multi_select"].boolean : kind == "opencode" && q["multiple"].boolean
-        let custom = options.isEmpty || (kind == "codex" ? q["isOther"].boolean : kind == "kimi" ? q["allow_other"].boolean : kind == "opencode" ? { if case .bool(false) = q["custom"] { return false }; return true }() : true)
-        questions.append(NativeQuestion(id: key, text: text, body: kind == "kimi" ? q["body"].string : "", options: normalized, multiple: multiple, custom: custom, secret: kind == "codex" && q["isSecret"].boolean))
+        let multiple = kind == "claude" ? q["multiSelect"].boolean : idBased ? q["multi_select"].boolean : kind == "opencode" && q["multiple"].boolean
+        let custom = options.isEmpty || (kind == "codex" ? q["isOther"].boolean : kind == "kimi" ? q["allow_other"].boolean : kind == "kodo" ? { if case .bool(false) = q["allow_other"] { return false }; return true }() : kind == "opencode" ? { if case .bool(false) = q["custom"] { return false }; return true }() : true)
+        questions.append(NativeQuestion(id: key, text: text, body: idBased ? q["body"].string : "", options: normalized, multiple: multiple, custom: custom, secret: kind == "codex" && q["isSecret"].boolean))
     }
     return NativeQuestionForm(kind: kind, questions: questions)
 }

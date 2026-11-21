@@ -45,6 +45,8 @@ export interface AdapterContext {
   /** Invalidate a native request answered elsewhere or withdrawn by its transport. */
   resolveInteraction?: (id: string, reason?: "resolved" | "withdrawn") => void;
   memoryContext?: () => unknown;
+  soulPrompt?: () => string | null;
+  isQuietTurn?: (commandId: string) => boolean;
   toolAction?: <T>(callId: string, args: unknown, operation: () => Promise<T>) => Promise<T>;
   tools?: import("@earendil-works/pi-coding-agent").ToolDefinition[];
   sdkSessionOwners?: () => Record<string, "kodo" | "pi">;
@@ -81,6 +83,10 @@ export interface NativeRuntime {
   read?(): Promise<unknown>;
   list?(): Promise<unknown>;
   quota?(): Promise<unknown>;
+  compactIfIdle?(
+    minIdleMs?: number,
+    minTokens?: number,
+  ): Promise<{ compacted: boolean; estimatedTokens: number }>;
   close(): Promise<void>;
 }
 export interface HarnessAdapter {

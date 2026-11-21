@@ -281,6 +281,30 @@ private fun extractLatestTodos(rows: List<TranscriptRow>): List<TodoTaskItem> {
         val total = listState.layoutInfo.totalItemsCount
         if (total > 0 && (!followed || atBottom)) { listState.scrollToItem(total - 1, Int.MAX_VALUE / 2); followed = true }
     }
+    // Keep latest messages visible above the composer whenever the soft keyboard opens or resizes the viewport.
+    val density = LocalDensity.current
+    val imeBottom = WindowInsets.ime.getBottom(density)
+    val viewportHeight by remember { derivedStateOf { listState.layoutInfo.viewportSize.height } }
+    var prevImeBottom by remember(positionKey) { mutableIntStateOf(0) }
+    var prevViewportHeight by remember(positionKey) { mutableIntStateOf(0) }
+    var stickyBottomForIme by remember(positionKey) { mutableStateOf(true) }
+    LaunchedEffect(atBottom, imeBottom) {
+        if (imeBottom == 0) {
+            stickyBottomForIme = atBottom
+        }
+    }
+    LaunchedEffect(imeBottom, viewportHeight) {
+        val imeGrowing = imeBottom > prevImeBottom
+        val viewportShrinking = prevViewportHeight > 0 && viewportHeight < prevViewportHeight && imeBottom > 0
+        if ((imeGrowing || viewportShrinking) && (stickyBottomForIme || atBottom)) {
+            val total = listState.layoutInfo.totalItemsCount
+            if (total > 0) {
+                listState.scrollToItem(total - 1, Int.MAX_VALUE / 2)
+            }
+        }
+        prevImeBottom = imeBottom
+        prevViewportHeight = viewportHeight
+    }
     LaunchedEffect(state.composerDraft, state.composerAttachments) {
         if (state.composerDraft.isNotEmpty()) draft = state.composerDraft
         if (state.composerAttachments.isNotEmpty()) attachments = state.composerAttachments
@@ -430,6 +454,15 @@ private fun extractLatestTodos(rows: List<TranscriptRow>): List<TodoTaskItem> {
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                if (session != null && activeSubagent == null) {
+                    val tickets = state.snapshot.optJSONArray("delegationTickets")?.objects().orEmpty()
+                        .filter { it.optString("controllerSessionId") == session.id || it.optString("workerSessionId") == session.id }
+                    tickets.forEach { ticket ->
+                        item("delegation:" + ticket.getString("id")) {
+                            DelegationCard(ticket, session.id, model, state.canWrite && !state.busy)
+                        }
+                    }
+                }
                 if (state.older && activeSubagent == null) item("older") {
                     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                         TextButton(onClick = { scope.launch { model.loadOlder() } }, enabled = !state.loadingHistory) {
@@ -474,7 +507,12 @@ private fun extractLatestTodos(rows: List<TranscriptRow>): List<TodoTaskItem> {
                 }
                 items(inboxItems, key = { "inbox-" + it.id }) { item ->
                     Box(Modifier.animateItem(fadeInSpec = KooyuMotion.base(), placementSpec = KooyuMotion.BaseIntOffset)) {
-                        InteractionCard(item, state.canWrite) { action -> scope.launch { model.answer(item, action) } }
+                        InteractionCard(
+                            item = item,
+                            enabled = state.canWrite,
+                            onMarkRead = { scope.launch { model.markInboxRead(item.id) } },
+                            onDelete = { scope.launch { model.deleteInboxItem(item.id) } },
+                        ) { action -> scope.launch { model.answer(item, action) } }
                     }
                 }
                 item("tail") { Spacer(Modifier.height(1.dp)) }

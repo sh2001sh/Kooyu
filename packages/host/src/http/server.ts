@@ -1,3 +1,5 @@
+import { workspaceGit } from "../workspaces/git.js";
+import { requireOperation } from "../clients/access.js";
 import { handleClientRoutes } from "./client-routes.js";
 import { sessionMetadataSchema } from "../clients/operations.js";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -16,9 +18,10 @@ import { ZodError, z } from "zod";
 import { Pairing, DEVICE_TOKEN_TTL_MS } from "../devices/pairing.js";
 import type { RelayConnector } from "../devices/relay.js";
 import { nativeSnapshot } from "../devices/native-client.js";
+import { secureChannel } from "../devices/secure-channel.js";
 import type { SessionService } from "../session-service.js";
 import type { Wire } from "../harnesses/adapter.js";
-import { artifacts, preview, createWorktree, workspaceContext } from "../workspaces/artifacts.js";
+import { artifacts, preview, workspaceContext } from "../workspaces/artifacts.js";
 import { listDirectories } from "../workspaces/directories.js";
 import {
   listWorkspaceFiles,
@@ -86,9 +89,13 @@ export interface HostHttpOptions {
   port: number;
   webRoot: string;
   publicOrigin?: string;
+  accountRemote?: boolean;
   /** Set only by the internal connector listener, never from request headers. */
   forceRemote?: boolean;
+  buildId?: string;
+  upgrade?: { state(): unknown; request(buildId: string): unknown };
   pairing?: Pairing;
+  mailbox?: import("../devices/mailbox.js").DeviceMailbox;
   relay?: RelayConnector;
 }
 export function createHostHandler(service: SessionService, options: HostHttpOptions) {
@@ -101,7 +108,7 @@ export function createHostHandler(service: SessionService, options: HostHttpOpti
       "http://127.0.0.1:5173",
     ]);
   if (options.publicOrigin && !options.publicOrigin.startsWith("https://"))
-    throw new Error("KODO_PUBLIC_ORIGIN must use HTTPS.");
+    throw new Error("KOOYU_PUBLIC_ORIGIN must use HTTPS.");
   return async (request: IncomingMessage, response: ServerResponse) => {
     try {
       response.setHeader("X-Content-Type-Options", "nosniff");
@@ -130,6 +137,8 @@ export function createHostHandler(service: SessionService, options: HostHttpOpti
       );
       const forwarded = Boolean(request.headers["x-forwarded-for"] || request.headers.forwarded);
       const local = !options.forceRemote && localHost && localPeer && !forwarded;
+      if (options.accountRemote && !local && !options.forceRemote)
+        throw new KodoError("UNAUTHORIZED", "远程访问需要账号设备网关。");
       const allowed = localOrigins.has(origin ?? "") || origin === options.publicOrigin;
       if (origin && !allowed) throw new KodoError("UNAUTHORIZED", "界面来源未授权。");
       if (request.method === "GET" && url.pathname === "/api/health") {
@@ -137,8 +146,42 @@ export function createHostHandler(service: SessionService, options: HostHttpOpti
           status: "ok",
           protocolVersion: PROTOCOL_VERSION,
           hostId: service.store.hostId,
+          buildId: options.buildId,
         });
         return;
+      }
+      const cloudContext =
+        options.forceRemote && options.accountRemote
+          ? String(request.headers["x-kooyu-device-context"] ?? "")
+          : undefined;
+      if (
+        cloudContext !== undefined &&
+        !/^(pair:[a-f0-9-]{36}:[A-Za-z0-9_-]{43}|device:[a-f0-9-]{36})$/.test(cloudContext)
+      )
+        throw new KodoError("UNAUTHORIZED", "远程连接缺少云设备授权。");
+      if (options.forceRemote && options.mailbox && options.relay?.mailboxEnabled) {
+        if (url.pathname === "/api/secure/key" && request.method === "GET") {
+          json(response, 200, options.relay.encryptionIdentity(options.mailbox.publicKey()));
+          return;
+        }
+        if (url.pathname === "/api/secure/channel" && request.method === "POST") {
+          if (!request.socket.localPort || !options.publicOrigin)
+            throw new KodoError("UNAVAILABLE", "加密通道尚未启动。");
+          await secureChannel(
+            await readBody(request),
+            options.mailbox,
+            pairing,
+            service.store,
+            {
+              port: request.socket.localPort,
+              host: new URL(options.publicOrigin).host,
+              cloudContext,
+              origin,
+            },
+            response,
+          );
+          return;
+        }
       }
       const nativePair = url.pathname === "/api/pair/native";
       const clientVersion = request.headers["x-kooyu-protocol"];
@@ -161,10 +204,36 @@ export function createHostHandler(service: SessionService, options: HostHttpOpti
         )
           throw new KodoError("UNAUTHORIZED", "原生设备需要通过配置的 HTTPS 地址配对。");
         const body = await readBody(request);
+        const mailboxKey = z.string().max(128).optional().parse(body.mailboxVerifyPubKey);
+        const mailboxEncryptionKey =
+          mailboxKey && options.mailbox && options.relay?.mailboxEnabled
+            ? options.mailbox.publicKey()
+            : undefined;
+        if (cloudContext !== undefined && !cloudContext.startsWith("pair:"))
+          throw new KodoError("UNAUTHORIZED", "需要新的配对交易。");
         const result = pairing.pair(
-          z.string().max(64).parse(body.code),
+          (cloudContext?.startsWith("pair:")
+            ? pairing.transactionCode(cloudContext.split(":")[1]!)
+            : undefined) ?? z.string().max(64).parse(body.code),
           z.string().max(100).parse(body.name),
+          mailboxEncryptionKey ? mailboxKey : undefined,
         );
+        options.relay?.syncMailboxDevices();
+        if (cloudContext) {
+          const [, transactionId, jkt] = cloudContext.split(":");
+          try {
+            if (!options.relay?.account) throw Error("Account required");
+            await options.relay.account.hostRequest("pairing/confirm", {
+              transactionId,
+              jkt,
+              approve: true,
+              pairedClientId: result.device.id,
+            });
+          } catch (error) {
+            pairing.revoke(result.device.id);
+            throw error;
+          }
+        }
         // OAuth providers return by top-level GET; Lax preserves the paired device
         // on that navigation. Cross-origin writes still fail the Origin/JSON gates.
         if (!nativePair)
@@ -174,6 +243,7 @@ export function createHostHandler(service: SessionService, options: HostHttpOpti
           );
         json(response, 201, {
           device: result.device,
+          ...(mailboxEncryptionKey ? { mailboxEncryptionKey } : {}),
           ...(nativePair
             ? {
                 token: result.token,
@@ -186,9 +256,70 @@ export function createHostHandler(service: SessionService, options: HostHttpOpti
       }
       const cookie = /\bkodo_device=([A-Za-z0-9_-]+)/.exec(request.headers.cookie ?? "")?.[1],
         bearer = request.headers.authorization?.replace(/^Bearer /, "");
-      const authorized = local || pairing.authenticate(bearer ?? cookie ?? "");
+      const localToken = bearer ?? cookie ?? "";
+      const authorized =
+        local ||
+        (cloudContext === undefined
+          ? pairing.authenticate(localToken)
+          : cloudContext === "device:" + pairing.deviceId(localToken));
       if (url.pathname.startsWith("/api/") && !authorized)
         throw new KodoError("UNAUTHORIZED", "请在桌面生成配对码后连接此设备。");
+      if (url.pathname === "/api/push/web" && ["PUT", "DELETE"].includes(request.method ?? "")) {
+        const deviceId = pairing.deviceId(bearer ?? cookie ?? "");
+        if (
+          !deviceId ||
+          !service.store.record<{ mailboxVerifyPubKey?: string }>("device-public", deviceId)
+            ?.mailboxVerifyPubKey
+        )
+          throw new KodoError("UNAUTHORIZED", "请在已配对的 Relay v2 浏览器上启用推送。");
+        const endpoint =
+          request.method === "DELETE"
+            ? undefined
+            : z
+                .string()
+                .max(4096)
+                .url()
+                .parse((await readBody(request)).endpoint);
+        if (endpoint) {
+          const target = new URL(endpoint);
+          if (
+            target.protocol !== "https:" ||
+            target.username ||
+            target.password ||
+            target.port ||
+            target.hash ||
+            !/^(fcm\.googleapis\.com|updates\.push\.services\.mozilla\.com|([a-z0-9-]+\.)+push\.apple\.com|([a-z0-9-]+\.)+notify\.windows\.com)$/.test(
+              target.hostname,
+            )
+          )
+            throw new KodoError("INVALID_INPUT", "暂不支持此浏览器推送服务。");
+        }
+        if (!options.relay?.pushDevice(deviceId, endpoint))
+          throw new KodoError("UNAVAILABLE", "Relay v2 尚未连接。");
+        if (endpoint) service.store.put("web-push-device", deviceId, { deviceId });
+        else service.store.remove("web-push-device", deviceId);
+        json(response, 200, { enabled: !!endpoint });
+        return;
+      }
+      if (url.pathname === "/internal/upgrade") {
+        if (!local) throw new KodoError("UNAUTHORIZED", "后台版本切换仅允许本机执行。");
+        if (!options.upgrade) throw new KodoError("UNSUPPORTED", "此后台未启用自动版本切换。");
+        if (request.method === "GET") json(response, 200, options.upgrade.state());
+        else if (request.method === "POST") {
+          const body = await readBody(request);
+          json(
+            response,
+            202,
+            options.upgrade.request(
+              z
+                .string()
+                .regex(/^[a-f0-9]{64}$/)
+                .parse(body.buildId),
+            ),
+          );
+        } else throw new KodoError("INVALID_INPUT", "不支持的版本切换操作。");
+        return;
+      }
       if (
         url.pathname.startsWith("/api/") &&
         (await handleClientRoutes(service, request, response, url, {
@@ -210,6 +341,30 @@ export function createHostHandler(service: SessionService, options: HostHttpOpti
         })
       )
         return;
+      if (url.pathname.startsWith("/api/remote/account/") && request.method === "POST") {
+        if (!local) throw new KodoError("UNAUTHORIZED", "请在工作电脑上绑定账号。");
+        const account = options.relay?.account;
+        if (!account) throw new KodoError("UNAVAILABLE", "此构建尚未配置账号服务。");
+        const method = url.pathname.slice("/api/remote/account/".length);
+        if (method === "requests") json(response, 200, await account.hostRequest("pairing/status"));
+        else if (method === "decide") {
+          const { id, approve } = z
+            .object({ id: z.string().uuid(), approve: z.boolean() })
+            .parse(await readBody(request));
+          if (approve) pairing.approveTransaction(id);
+          json(response, 200, await account.hostRequest("pairing/decision", { id, approve }));
+        } else if (method === "start") json(response, 200, await account.start());
+        else if (method === "poll") json(response, 200, await account.poll());
+        else if (method === "logout") {
+          await account.logout();
+          options.relay?.disable();
+          json(response, 200, { ok: true });
+        } else if (method === "cancel") {
+          await account.cancel();
+          json(response, 200, { ok: true });
+        } else throw new KodoError("INVALID_INPUT", "未知操作。");
+        return;
+      }
       if (url.pathname === "/api/remote") {
         if (!local) throw new KodoError("UNAUTHORIZED", "请在电脑端管理远程连接。");
         if (request.method === "DELETE") {
@@ -221,6 +376,8 @@ export function createHostHandler(service: SessionService, options: HostHttpOpti
             enabled: false,
             state: "disabled",
             configured: Boolean(options.publicOrigin),
+            accountRequired: Boolean(options.accountRemote),
+            account: { configured: false, bound: false, origin: "" },
           }),
           devices: service.store.records("device-public"),
         });
@@ -617,6 +774,130 @@ export function createHostHandler(service: SessionService, options: HostHttpOpti
         else throw new KodoError("NOT_FOUND", "接口不存在。");
         return;
       }
+      const terminalRoute = /^\/api\/terminals(?:\/([a-f0-9-]+)(?:\/(stream))?)?$/.exec(
+        url.pathname,
+      );
+      if (terminalRoute) {
+        const identity = {
+          local,
+          deviceId: local ? "desktop" : pairing.deviceId(bearer ?? cookie ?? "")!,
+        };
+        requireOperation(service, identity, "terminal.access");
+        const id = terminalRoute[1];
+        const sub = terminalRoute[2];
+        if (!id && request.method === "POST") {
+          const { workspaceId } = z
+            .object({ workspaceId: z.string().uuid() })
+            .strict()
+            .parse(await readBody(request));
+          const workspace = service.store
+            .workspaces()
+            .find((w) => w.id === workspaceId && w.hostId === service.store.hostId);
+          if (!workspace) throw new KodoError("NOT_FOUND", "找不到本机工作区。");
+          json(response, 201, await service.terminals.open(workspace, identity.deviceId));
+        } else if (id && sub === "stream" && request.method === "GET") {
+          const cursor = z.coerce
+            .number()
+            .int()
+            .nonnegative()
+            .parse(url.searchParams.get("cursor") ?? 0);
+          service.terminals.get(id, identity.deviceId);
+          response.writeHead(200, {
+            "Content-Type": "text/event-stream; charset=utf-8",
+            "Cache-Control": "no-store",
+            Connection: "keep-alive",
+          });
+          response.write(": connected\n\n");
+          const unsub = service.terminals.subscribe(id, identity.deviceId, cursor, (chunk) => {
+            if (response.destroyed || response.writableEnded) return;
+            response.write(`data: ${JSON.stringify(chunk)}\n\n`);
+            if (chunk.closed) {
+              unsub();
+              clearInterval(ping);
+              response.end();
+            }
+          });
+          const ping = setInterval(() => {
+            if (!local && !pairing.authenticate(bearer ?? cookie ?? "")) {
+              unsub();
+              clearInterval(ping);
+              response.end();
+              return;
+            }
+            if (!response.destroyed && !response.writableEnded) response.write(": ping\n\n");
+          }, 15000);
+          ping.unref();
+          request.once("close", () => {
+            unsub();
+            clearInterval(ping);
+          });
+        } else if (id && !sub && request.method === "GET") {
+          const cursor = z.coerce
+            .number()
+            .int()
+            .nonnegative()
+            .parse(url.searchParams.get("cursor") ?? 0);
+          json(response, 200, service.terminals.read(id, identity.deviceId, cursor));
+        } else if (id && !sub && request.method === "POST") {
+          const input = z
+            .union([
+              z.object({ data: z.string().max(16384) }).strict(),
+              z
+                .object({
+                  cols: z.number().int().min(2).max(400),
+                  rows: z.number().int().min(1).max(200),
+                })
+                .strict(),
+            ])
+            .parse(await readBody(request));
+          const t = service.terminals.get(id, identity.deviceId);
+          if (t.closed) throw new KodoError("CONFLICT", "终端已退出。");
+          if ("data" in input) t.pty.write(input.data);
+          else t.pty.resize(input.cols, input.rows);
+          json(response, 200, { ok: true });
+        } else if (id && !sub && request.method === "DELETE") {
+          service.terminals.get(id, identity.deviceId);
+          service.terminals.close(id);
+          json(response, 200, { closed: true });
+        } else throw new KodoError("INVALID_INPUT", "终端操作无效。");
+        return;
+      }
+      const gitAction = /^\/api\/workspaces\/([^/]+)\/git\/([a-z-]+)$/.exec(url.pathname);
+      if (
+        gitAction &&
+        (request.method === "POST" ||
+          (request.method === "GET" &&
+            ["hunks", "branches", "suggest-message"].includes(gitAction[2]!)))
+      ) {
+        const identity = {
+          local,
+          deviceId: local ? "desktop" : pairing.deviceId(bearer ?? cookie ?? "")!,
+        };
+        const operation = gitAction[2]!;
+        requireOperation(
+          service,
+          identity,
+          operation === "pr" ? "workspaces.git.push" : "workspaces.git.local",
+        );
+        const workspace = service.store.workspaces().find((w) => w.id === gitAction[1]);
+        if (!workspace) throw new KodoError("NOT_FOUND", "工作区不存在。");
+        json(
+          response,
+          200,
+          await workspaceGit(
+            service,
+            workspace,
+            operation,
+            request.method === "GET"
+              ? operation === "hunks"
+                ? { path: url.searchParams.get("path") }
+                : {}
+              : await readBody(request),
+            identity.deviceId,
+          ),
+        );
+        return;
+      }
       const workspace = /^\/api\/workspaces\/([^/]+)\/(artifacts|context|preview|worktrees)$/.exec(
         url.pathname,
       );
@@ -633,14 +914,48 @@ export function createHostHandler(service: SessionService, options: HostHttpOpti
           json(response, 200, await workspaceContext(w));
           return;
         }
+        if (request.method === "POST" && workspace[2] === "preview") {
+          const identity = {
+            local,
+            deviceId: local ? "desktop" : pairing.deviceId(bearer ?? cookie ?? "")!,
+          };
+          requireOperation(service, identity, "preview.read");
+          const input = z
+            .union([
+              z.object({ path: z.string().min(1), share: z.boolean().optional() }).strict(),
+              z.object({ port: z.number().int(), share: z.boolean().optional() }).strict(),
+            ])
+            .parse(await readBody(request));
+          if (!local && "port" in input)
+            throw new KodoError("UNAUTHORIZED", "请在本机打开开发端口共享。");
+          if ((!local || input.share) && !options.relay?.previewAvailable)
+            throw new KodoError("UNAVAILABLE", "Relay 尚未配置独立的预览域名。");
+          const result =
+            "port" in input
+              ? await service.previews.openPort(input.port, request.socket.localPort)
+              : await service.previews.open(w, input.path);
+          json(response, 201, !local || input.share ? options.relay!.sharePreview(result) : result);
+          return;
+        }
         if (request.method === "GET" && workspace[2] === "preview") {
+          const identity = {
+            local,
+            deviceId: local ? "desktop" : pairing.deviceId(bearer ?? cookie ?? "")!,
+          };
+          requireOperation(service, identity, "preview.read");
           json(response, 200, await preview(w, url.searchParams.get("path") ?? ""));
           return;
         }
         if (request.method === "POST" && workspace[2] === "worktrees") {
           const b = await readBody(request);
-          const path = await createWorktree(w, z.string().min(1).parse(b.rootPath));
-          json(response, 201, service.addWorkspace(w.projectId, path));
+          const input = z
+            .object({ rootPath: z.string().min(1).optional() })
+            .strict()
+            .parse(b);
+          const result = await service.worktrees.create(w, input, {
+            detached: Boolean(input.rootPath),
+          });
+          json(response, 201, result.workspace);
           return;
         }
       }
@@ -653,6 +968,9 @@ export function createHostHandler(service: SessionService, options: HostHttpOpti
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/native-imports") {
+        const projectId = url.searchParams.get("projectId");
+        if (!projectId || !service.store.projects().some((p) => p.id === projectId))
+          throw new KodoError("INVALID_INPUT", "请先选择一个有效项目，再扫描本地对话。");
         const harnessParam = url.searchParams.get("harnessId") ?? undefined;
         const harnessId =
           harnessParam && HARNESS_IDS.includes(harnessParam as HarnessId)
@@ -662,7 +980,7 @@ export function createHostHandler(service: SessionService, options: HostHttpOpti
           response,
           200,
           await service.discoverNativeImports({
-            projectId: url.searchParams.get("projectId") ?? undefined,
+            projectId,
             workspaceId: url.searchParams.get("workspaceId") ?? undefined,
             harnessId,
             directory: url.searchParams.get("directory") ?? undefined,
@@ -671,7 +989,10 @@ export function createHostHandler(service: SessionService, options: HostHttpOpti
         return;
       }
       if (request.method === "POST" && url.pathname === "/api/native-imports") {
-        json(response, 201, await service.importNativeSessions(await readBody(request)));
+        const body = await readBody(request);
+        if (!body.projectId || !service.store.projects().some((p) => p.id === body.projectId))
+          throw new KodoError("INVALID_INPUT", "请先选择一个有效项目，再导入本地对话。");
+        json(response, 201, await service.importNativeSessions(body));
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/voice/status") {
@@ -811,6 +1132,22 @@ export function createHostHandler(service: SessionService, options: HostHttpOpti
       }
       if (request.method === "POST" && url.pathname === "/api/harness-bindings") {
         json(response, 201, service.providers.saveBinding(await readBody(request)));
+        return;
+      }
+      const handback = /^\/api\/delegations\/([^/]+)\/handback$/.exec(url.pathname);
+      if (request.method === "POST" && handback) {
+        json(response, 200, service.delegations.handback(handback[1]!));
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/delegations/escalate") {
+        const input = z
+          .object({
+            workerSessionId: z.string().uuid(),
+            controllerSessionId: z.string().uuid().optional(),
+          })
+          .strict()
+          .parse(await readBody(request));
+        json(response, 201, service.delegations.escalateDirectSession(input));
         return;
       }
       if (request.method === "POST" && url.pathname === "/api/watches") {
@@ -956,13 +1293,17 @@ export function createHostHandler(service: SessionService, options: HostHttpOpti
             return;
           }
           if (action === "stop") {
+            const pause = z.boolean().default(true).parse(b.pause);
+            const stopBackground = z.boolean().optional().parse(b.stopBackground);
             json(
               response,
               200,
               await service.stop(
                 id,
-                z.boolean().default(true).parse(b.pause),
+                pause,
                 z.string().uuid().optional().parse(b.requestId),
+                null,
+                stopBackground ?? pause,
               ),
             );
             return;
@@ -1028,27 +1369,65 @@ export function createHostHandler(service: SessionService, options: HostHttpOpti
         );
         return;
       }
+      if (request.method === "POST" && url.pathname === "/api/inbox/read-all") {
+        await readBody(request);
+        json(response, 200, service.markAllInboxRead());
+        return;
+      }
       const inbox = /^\/api\/inbox\/([^/]+)\/read$/.exec(url.pathname);
       if (request.method === "POST" && inbox) {
         await readBody(request);
-        const id = decodeURIComponent(inbox[1]!),
-          item = service.store.record<Wire>("inbox", id);
-        if (item) service.store.put("inbox", id, { ...item, read: true });
-        json(response, 200, { status: "read" });
+        json(response, 200, service.markInboxRead(decodeURIComponent(inbox[1]!)));
+        return;
+      }
+      const inboxDelete = /^\/api\/inbox\/([^/]+)$/.exec(url.pathname);
+      if (request.method === "DELETE" && inboxDelete) {
+        json(response, 200, service.deleteInboxItem(decodeURIComponent(inboxDelete[1]!)));
         return;
       }
       if (request.method === "POST" && url.pathname === "/api/pairing") {
         if (!local) throw new KodoError("UNAUTHORIZED", "配对码只能在本地桌面生成。");
         await readBody(request);
-        const publicBase = options.publicOrigin
-          ? options.publicOrigin.replace(/\/$/, "") + "/"
-          : await options.relay?.enable();
+        const publicBase =
+          options.publicOrigin && !options.accountRemote
+            ? options.publicOrigin.replace(/\/$/, "") + "/"
+            : await options.relay?.enable();
         if (!publicBase)
           throw new KodoError("UNAVAILABLE", "此 Host 未启用自动远程连接，请更新并重启电脑端。");
+        const cloud = options.accountRemote
+          ? await options.relay?.account?.hostRequest(
+              "pairing/start",
+              options.publicOrigin?.startsWith("https://")
+                ? { directOrigin: new URL(options.publicOrigin).origin }
+                : {},
+            )
+          : undefined;
+        if (options.accountRemote && !cloud)
+          throw new KodoError("UNAUTHORIZED", "生成配对码前请绑定账号。");
+        const directBase =
+          cloud && options.publicOrigin?.startsWith("https://")
+            ? new URL("/h/" + cloud.relayHostId + "/", options.publicOrigin).href
+            : undefined;
         const invitation = pairing.create();
+        const code =
+          options.mailbox && options.relay?.mailboxEnabled && (!options.publicOrigin || cloud)
+            ? "V2-" + invitation.code
+            : invitation.code;
         json(response, 201, {
           ...invitation,
-          url: publicBase + "#pair=" + invitation.code,
+          code,
+          url:
+            (directBase ?? publicBase) +
+            "#pair=" +
+            code +
+            (cloud
+              ? "&transaction=" +
+                cloud.transactionId +
+                "&claim=" +
+                cloud.secret +
+                "&host=" +
+                cloud.hostId
+              : ""),
         });
         return;
       }
@@ -1056,6 +1435,8 @@ export function createHostHandler(service: SessionService, options: HostHttpOpti
       if (request.method === "DELETE" && device) {
         if (!local) throw new KodoError("UNAUTHORIZED", "设备撤销需在桌面操作。");
         pairing.revoke(device[1]!);
+        service.store.remove("web-push-device", device[1]!);
+        options.relay?.syncMailboxDevices();
         await service.delivery.revokeDevice(device[1]!);
         json(response, 200, { status: "revoked" });
         return;

@@ -150,6 +150,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   directChat: "直接对话",
   historyRead: "历史读取",
   resume: "原生恢复",
+  settled: "后台任务已结束",
   observeLive: "实时观察",
   observeExternal: "外部活动观察",
   steer: "运行中引导",
@@ -181,7 +182,7 @@ export function formatRelativeDate(value: string): string {
   return target.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
 }
 
-/** Model name without its provider route, e.g. `codegoai/deepseek-v4.1-flash` → `deepseek-v4.1-flash`. */
+/** Model name without its provider route, e.g. `custom-provider/deepseek-v4.1-flash` → `deepseek-v4.1-flash`. */
 export function shortModelLabel(model: string): string {
   const idx = model.lastIndexOf("/");
   return idx > 0 ? model.slice(idx + 1) : model;

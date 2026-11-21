@@ -14,10 +14,12 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
@@ -80,7 +82,7 @@ private enum class InspectorTab { OVERVIEW, FILES, BRANCHES }
             ) {
                 when (tab) {
                     InspectorTab.OVERVIEW -> overviewTab(state, model, session, onUsage, close) { command, text -> editingCommand = command; editingText = text }
-                    InspectorTab.FILES -> filesTab(state, session) { browsing = true }
+                    InspectorTab.FILES -> filesTab(state, model, session) { browsing = true }
                     InspectorTab.BRANCHES -> branchesTab(
                         state, session,
                         fork = { row -> scope.launch { if (model.branch(row, false)) close() } },
@@ -480,11 +482,11 @@ private fun LazyListScope.overviewTab(
     }
 }
 
-private fun LazyListScope.filesTab(state: WorkbenchState, session: HostSession, browse: () -> Unit) {
+private fun LazyListScope.filesTab(state: WorkbenchState, model: Workbench, session: HostSession, browse: () -> Unit) {
     val tools = state.transcript.rows.filter { it.role == RowRole.TOOL }
+    val workspace = state.workspaces.firstOrNull { it.id == session.workspaceId }
     item("workspace") {
         val c = Kooyu.colors
-        val workspace = state.workspaces.firstOrNull { it.id == session.workspaceId }
         InspectorGroup("工作区") {
             KeyValue("目录", formatWorkspaceLabel(workspace?.path).ifBlank { "未绑定" }, mono = true)
             if (workspace != null) {
@@ -501,11 +503,229 @@ private fun LazyListScope.filesTab(state: WorkbenchState, session: HostSession, 
             }
         }
     }
+    if (workspace != null) {
+        item("git-delivery") {
+            GitDeliveryInspector(workspace, state, model)
+        }
+    }
     item("tools-header") {
         Text("工具调用 · ${tools.size}", style = KooyuType.sectionHeader, color = Kooyu.colors.textTertiary, modifier = Modifier.padding(start = 4.dp, top = 4.dp))
     }
     if (tools.isEmpty()) item("tools-empty") { Text("本次已加载的记录中没有工具调用。", style = KooyuType.label, color = Kooyu.colors.textSecondary, modifier = Modifier.padding(start = 4.dp)) }
     items(tools.reversed(), key = { "tool:" + it.id }) { row -> ToolCard(row) }
+}
+
+@Composable private fun GitDeliveryInspector(workspace: HostWorkspace, state: WorkbenchState, model: Workbench) {
+    val c = Kooyu.colors
+    val scope = rememberCoroutineScope()
+    val base = "/workspaces/" + workspace.id
+    var expanded by remember(workspace.id) { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    var feedback by remember { mutableStateOf("") }
+    var isError by remember { mutableStateOf(false) }
+    var message by remember(workspace.id) { mutableStateOf("") }
+    var files by remember(workspace.id) { mutableStateOf(emptyList<JSONObject>()) }
+    var branches by remember(workspace.id) { mutableStateOf(emptyList<JSONObject>()) }
+    var isGit by remember(workspace.id) { mutableStateOf(true) }
+    var confirmDiscardPath by remember { mutableStateOf<String?>(null) }
+
+    suspend fun reload() {
+        val changes = model.read("$base/changes")
+        isGit = changes?.optBoolean("git", false) ?: false
+        files = changes?.optJSONArray("files")?.objects().orEmpty()
+        branches = model.readArray("$base/git/branches")
+    }
+
+    LaunchedEffect(expanded, workspace.id) {
+        if (expanded) reload()
+    }
+
+    fun runGit(action: String, body: JSONObject = JSONObject()) {
+        scope.launch {
+            busy = true
+            feedback = ""
+            isError = false
+            try {
+                val res = model.execute("$base/git/$action", "POST", body)
+                if (res == null) {
+                    isError = true
+                    feedback = model.state.value.error.ifBlank { "Git 操作失败" }
+                } else if (action == "suggest-message") {
+                    message = res.optString("message", message)
+                } else if (action == "pr") {
+                    feedback = res.optString("url", "PR 已创建")
+                    reload()
+                } else {
+                    feedback = "操作已完成"
+                    reload()
+                }
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    InspectorGroup("Git 交付") {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 46.dp)
+                .clickable { expanded = !expanded }
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(Icons.Outlined.AccountTree, null, tint = c.textSecondary, modifier = Modifier.size(16.dp))
+            Text(
+                if (expanded) "收起 Git 交付面板" else "暂存 · 提交 · Worktree 合入 · PR",
+                style = KooyuType.label,
+                color = c.text,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(
+                if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                null,
+                tint = c.textTertiary,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        AnimatedVisibility(expanded) {
+            Column(
+                Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, bottom = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                InsetDivider(0)
+                if (!isGit) {
+                    Text("当前目录不是可读取的 Git 仓库。", style = KooyuType.caption, color = c.textSecondary)
+                } else {
+                    if (branches.isNotEmpty()) {
+                        Text("可合入分支", style = KooyuType.sectionHeader, color = c.textTertiary)
+                        branches.forEach { wt ->
+                            val wtId = wt.optString("workspaceId")
+                            val branchName = wt.optString("branchName")
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(branchName, style = KooyuType.mono, fontSize = 11.5.sp, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                OutlinedButton(
+                                    enabled = state.canWrite && !busy,
+                                    onClick = { runGit("merge", JSONObject().put("worktreeId", wtId).put("mode", "ff")) },
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                ) { Text("快进", fontSize = 11.sp, color = c.text) }
+                                OutlinedButton(
+                                    enabled = state.canWrite && !busy,
+                                    onClick = { runGit("merge", JSONObject().put("worktreeId", wtId).put("mode", "squash")) },
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                ) { Text("压缩", fontSize = 11.sp, color = c.text) }
+                            }
+                        }
+                    }
+
+                    if (files.isNotEmpty()) {
+                        Text("变更文件 (${files.size})", style = KooyuType.sectionHeader, color = c.textTertiary)
+                        files.take(12).forEach { f ->
+                            val filePath = f.optString("path")
+                            val status = f.optString("status")
+                            Column(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(c.sunken)
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text("$status · $filePath", style = KooyuType.mono, fontSize = 11.5.sp, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Row(
+                                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    TextButton(
+                                        enabled = state.canWrite && !busy,
+                                        onClick = { runGit("stage", JSONObject().put("path", filePath)) },
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                    ) { Text("暂存", fontSize = 11.5.sp, color = c.text) }
+                                    TextButton(
+                                        enabled = state.canWrite && !busy,
+                                        onClick = { runGit("unstage", JSONObject().put("path", filePath)) },
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                    ) { Text("取消暂存", fontSize = 11.5.sp, color = c.textSecondary) }
+                                    if (status != "untracked") {
+                                        TextButton(
+                                            enabled = state.canWrite && !busy,
+                                            onClick = { confirmDiscardPath = filePath },
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                        ) { Text("丢弃", fontSize = 11.5.sp, color = c.destructive) }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        Text("当前没有未提交改动。", style = KooyuType.caption, color = c.textSecondary)
+                    }
+
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("提交说明 / PR 标题", style = KooyuType.sectionHeader, color = c.textTertiary, modifier = Modifier.weight(1f))
+                        TextButton(
+                            enabled = state.canWrite && !busy,
+                            onClick = { runGit("suggest-message") },
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                        ) { Text("智能生成", fontSize = 11.5.sp, color = c.brandCoral) }
+                    }
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(c.sunken)
+                            .border(0.5.dp, c.borderSubtle, RoundedCornerShape(10.dp))
+                            .padding(horizontal = 10.dp, vertical = 10.dp)
+                    ) {
+                        if (message.isEmpty()) Text("输入提交说明或 PR 标题…", style = KooyuType.label, color = c.textTertiary)
+                        BasicTextField(
+                            value = message,
+                            onValueChange = { message = it },
+                            textStyle = KooyuType.label.copy(color = c.text),
+                            cursorBrush = SolidColor(c.brandCoral),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            enabled = state.canWrite && !busy && message.isNotBlank(),
+                            onClick = { runGit("commit", JSONObject().put("message", message.trim())) },
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = c.accent, contentColor = c.onAccent),
+                            modifier = Modifier.weight(1f)
+                        ) { Text("提交暂存", fontSize = 12.5.sp) }
+                        OutlinedButton(
+                            enabled = state.canWrite && !busy && message.isNotBlank(),
+                            onClick = { runGit("pr", JSONObject().put("title", message.trim()).put("body", "")) },
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) { Text("推送建 PR", fontSize = 12.5.sp, color = c.text) }
+                    }
+                    if (feedback.isNotBlank()) {
+                        Text(feedback, fontSize = 12.sp, color = if (isError) c.destructive else c.doneText)
+                    }
+                }
+            }
+        }
+    }
+
+    confirmDiscardPath?.let { target ->
+        ConfirmDialog(
+            "丢弃文件改动？",
+            "将还原「$target」到上次提交状态，未提交内容会丢失。",
+            "确认丢弃",
+            { confirmDiscardPath = null }
+        ) {
+            confirmDiscardPath = null
+            runGit("discard-file", JSONObject().put("path", target).put("confirmed", true))
+        }
+    }
 }
 
 private fun LazyListScope.branchesTab(state: WorkbenchState, session: HostSession, fork: (TranscriptRow) -> Unit, edit: (TranscriptRow) -> Unit) {

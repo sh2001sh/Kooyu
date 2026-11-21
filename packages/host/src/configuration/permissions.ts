@@ -12,6 +12,7 @@ const MODES: Partial<Record<HarnessId, [PermissionMode, string][]>> = {
     ["full-access", "完全访问"],
   ],
   "claude-code": [
+    ["read-only", "只读审查"],
     ["accept-edits", "允许编辑"],
     ["bypass-permissions", "跳过权限检查"],
   ],

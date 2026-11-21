@@ -130,9 +130,9 @@ fun defaultPermissionLabel(harness: String): String = when (harness) {
     MobileComposer(
         text = text,
         change = change,
-        placeholder = if (blocked) "会话配置不可用" else "发送消息给 ${descriptor?.name ?: session.harnessId}…",
+        placeholder = if (blocked) "会话配置不可用" else if (state.canMail) "发送到离线信箱…" else "发送消息给 ${descriptor?.name ?: session.harnessId}…",
         enabled = !blocked,
-        sendEnabled = state.canWrite && !blocked && !uploading && error.isBlank() && (text.isNotBlank() || attachments.isNotEmpty()) && text.length <= 200000,
+        sendEnabled = (state.canWrite || (state.canMail && attachments.isEmpty() && text.length <= 16000)) && !blocked && !uploading && error.isBlank() && (text.isNotBlank() || attachments.isNotEmpty()) && text.length <= 200000,
         stop = showStop,
         stopEnabled = state.canWrite && (supervised || cancelSupported),
         stopAccessibilityLabel = if (supervised) "停止或暂停托管" else "中断当前回合",
@@ -157,6 +157,7 @@ fun defaultPermissionLabel(harness: String): String = when (harness) {
         onModelSummaryClick = { modelTab = "model"; menu = "model_unified" }
     )
 
+    if (menu == "call") ConversationCall(state,model) { menu = "" }
     if (menu == "plus") {
         ModalBottomSheet(onDismissRequest = { menu = "" }, containerColor = c.raised, dragHandle = { KooyuSheetHandle() }) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 26.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -166,6 +167,8 @@ fun defaultPermissionLabel(harness: String): String = when (harness) {
                         menu = ""
                         if (state.canWrite && !uploading && attachments.size < 10) attach()
                     }
+                    InsetDivider()
+                    InsetLinkRow(Icons.Outlined.Mic, "语音通话") { menu = "call" }
                     InsetDivider()
                     InsetLinkRow(Icons.Outlined.Shield, "工具权限 · $permissionLabel") { menu = "permission" }
                 }

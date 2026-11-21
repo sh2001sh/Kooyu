@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 test.use({ locale: "zh-CN" });
 
 const SCREENSHOT_DIR =
-  "C:/Users/admin/.gemini/antigravity/brain/caf3214e-ad51-4064-be34-697d7f06adc8/screenshots";
+  process.env.KOOYU_SCREENSHOT_DIR ?? resolve("test-results", "desktop-borders");
 
 test("desktop borders verification - light & dark", async ({ page, request }) => {
   mkdirSync(SCREENSHOT_DIR, { recursive: true });

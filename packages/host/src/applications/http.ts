@@ -1,6 +1,6 @@
 import { KodoError } from "@kodo/protocol";
 /** Bound the body while streaming, including absent or dishonest Content-Length. */
-export async function boundedJson(response: Response, limit = 2 * 1024 * 1024): Promise<any> {
+export async function boundedText(response: Response, limit = 2 * 1024 * 1024): Promise<string> {
   if (Number(response.headers.get("content-length") ?? 0) > limit) {
     await response.body?.cancel();
     throw new KodoError("UNAVAILABLE", "服务响应超过大小限制。");
@@ -23,8 +23,17 @@ export async function boundedJson(response: Response, limit = 2 * 1024 * 1024): 
   } finally {
     reader.releaseLock();
   }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+export async function boundedJson(
+  response: Response,
+  limit?: number,
+  reviver?: (key: string, value: unknown, context?: { source?: string }) => unknown,
+): Promise<any> {
+  const text = await boundedText(response, limit);
   try {
-    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    return JSON.parse(text, reviver);
   } catch {
     throw new KodoError("UNAVAILABLE", "服务未返回有效 JSON。");
   }

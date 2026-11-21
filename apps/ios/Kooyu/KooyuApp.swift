@@ -10,6 +10,19 @@ import UniformTypeIdentifiers
             let _ = appearance.revision
             let _ = LanguageStore.shared.revision
             RootView(model: model)
+                .onOpenURL { url in
+                    guard url.scheme == "kooyu", url.host == "host",
+                          let id = UUID(uuidString: String(url.path.dropFirst())),
+                          url.query == nil, url.fragment == nil else { return }
+                    if let device = model.book.devices.first(where: {
+                        $0.cloud?.hostId.lowercased() == id.uuidString.lowercased()
+                    }) {
+                        model.switchDevice(device.hostId)
+                    } else {
+                        model.requestedCloudHost = id
+                        model.addingDevice = model.connection != nil
+                    }
+                }
                 .tint(KY.accent)
                 .preferredColorScheme(appearance.preferredColorScheme)
                 .onChange(of: model.appSettings?["language"].string) { _, next in
@@ -34,7 +47,7 @@ struct RootView: View {
                     .safeAreaInset(edge: .top, spacing: 0) { StatusView(model: model, showsOffline: model.selectedTab != "sessions") }
             }
         }
-        .sheet(isPresented: $model.addingDevice) {
+        .sheet(isPresented: $model.addingDevice, onDismiss: { model.requestedCloudHost = nil }) {
             PairView(model: model).interactiveDismissDisabled(model.busy)
         }
         .task(id: "\(model.push.pending?.hostId ?? "")/\(model.push.pending?.notificationId ?? "")/\(model.busy)") {
@@ -84,7 +97,7 @@ struct RootView: View {
             tabs
         }
     }
-    private var pending: [InboxItem] { model.snapshot?.inbox.filter { !$0.resolved } ?? [] }
+    private var pending: [InboxItem] { model.snapshot?.inbox.filter { !$0.resolved && $0.read != true } ?? [] }
 }
 
 struct PairView: View {
@@ -96,25 +109,158 @@ struct PairView: View {
     @State private var manual = false
     @State private var invitation: PairingInvitation?
 
+    @State private var loginTask: Task<Void, Never>?
+    @State private var discovery: CloudDevice?
+    @State private var loginCode = ""
+    @State private var loginURL: URL?
+    @State private var hosts: [JSONValue] = []
+    @State private var directoryReady = false
+
     var body: some View {
         NavigationStack {
             Form {
                 Section {
                     VStack(spacing: 12) {
-                        Image(systemName: "desktopcomputer.and.arrow.forward")
-                            .font(.system(size: 48))
-                            .foregroundStyle(Color.accentColor)
-                            .padding(.top, 8)
-                        Text("连接工作台")
-                            .font(.title2.weight(.bold))
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .fill(KY.raised)
+                                .frame(width: 68, height: 68)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                        .strokeBorder(KY.border, lineWidth: 0.75)
+                                )
+                            Image("KooyuMark")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 42, height: 36)
+                        }
+                        .padding(.top, 8)
+                        Text("连接工作电脑")
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(KY.text)
+                        Text("登录 Kooyu 账号或扫描桌面二维码")
+                            .font(.footnote)
+                            .foregroundStyle(KY.textSecondary)
                     }
                     .frame(maxWidth: .infinity)
                     .listRowBackground(Color.clear)
                 }
 
                 Section {
-                    TextField("设备名称", text: $name)
+                    TextField("设备名称（可选）", text: $name)
+                }
 
+                Section("Kooyu 账号") {
+                    if model.requestedCloudHost != nil {
+                        Text("登录后将自动匹配官网选中的工作电脑。")
+                            .font(.footnote)
+                            .foregroundStyle(KY.textSecondary)
+                    }
+                    Button {
+                        model.error = ""
+                        loginTask = Task {
+                            defer { loginTask = nil }
+                            do {
+                                let client = try CloudDevice.discovery()
+                                discovery = client
+                                directoryReady = false
+                                hosts = []
+                                let (device, value, url) = try await client.beginLogin()
+                                loginCode = value
+                                loginURL = url
+                                let available = try await client.hosts(deviceCode: device)
+                                hosts = available.filter { model.requestedCloudHost == nil || model.requestedCloudHost == UUID(uuidString: $0["id"].string) }
+                                directoryReady = true
+                            } catch {
+                                if !Task.isCancelled { model.error = error.localizedDescription }
+                            }
+                            loginURL = nil
+                        }
+                    } label: {
+                        HStack {
+                            Spacer()
+                            if loginTask != nil && loginURL != nil {
+                                ProgressView().tint(KY.onAccent)
+                                Text("等待网页确认授权…").font(.subheadline.weight(.semibold))
+                            } else {
+                                Label("登录 Kooyu 账号", systemImage: "person.crop.circle")
+                                    .font(.subheadline.weight(.semibold))
+                            }
+                            Spacer()
+                        }
+                        .frame(minHeight: 42)
+                    }
+                    .buttonStyle(.kooyuPrimary)
+                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                    .disabled(loginTask != nil || model.busy)
+
+                    if let loginURL {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("授权码（打开授权页将自动预填）")
+                                .font(.caption)
+                                .foregroundStyle(KY.textSecondary)
+                            HStack {
+                                Text(loginCode)
+                                    .font(.title3.monospaced().bold())
+                                    .foregroundStyle(KY.text)
+                                    .textSelection(.enabled)
+                                Spacer()
+                                Button {
+                                    UIPasteboard.general.string = loginCode
+                                } label: {
+                                    Label("复制", systemImage: "doc.on.doc")
+                                        .font(.caption.weight(.medium))
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                            Link(destination: loginURL) {
+                                Label("前往官网确认授权", systemImage: "arrow.up.right.square")
+                                    .font(.subheadline.weight(.medium))
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+
+                    if directoryReady && hosts.isEmpty {
+                        Text("此账号尚未绑定可连接的工作电脑。")
+                            .font(.footnote)
+                            .foregroundStyle(KY.textSecondary)
+                    }
+
+                    ForEach(hosts.indices, id: \.self) { index in
+                        let host = hosts[index]
+                        Button {
+                            guard let discovery else { return }
+                            loginTask = Task {
+                                defer { loginTask = nil }
+                                do {
+                                    let request = try await discovery.requestHost(host)
+                                    await model.pair(url: request.address, code: request.code, name: name)
+                                } catch { model.error = error.localizedDescription }
+                            }
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "desktopcomputer")
+                                    .foregroundStyle(KY.textSecondary)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(host["name"].string)
+                                        .fontWeight(.medium)
+                                        .foregroundStyle(KY.text)
+                                    Text("点击发起连接并在电脑端批准")
+                                        .font(.caption)
+                                        .foregroundStyle(KY.textTertiary)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundStyle(KY.textTertiary)
+                            }
+                        }
+                        .disabled(model.busy || loginTask != nil)
+                    }
+                }
+
+                Section {
                     Button {
                         invitation = nil
                         model.error = ""
@@ -123,14 +269,16 @@ struct PairView: View {
                         HStack {
                             Spacer()
                             Label("扫描桌面二维码", systemImage: "qrcode.viewfinder")
-                                .font(.headline)
+                                .font(.subheadline.weight(.semibold))
                             Spacer()
                         }
-                        .frame(minHeight: 44)
+                        .frame(minHeight: 40)
                     }
-                    .buttonStyle(.kooyuPrimary)
-                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                     .disabled(model.busy)
+                } header: {
+                    Text("扫码配对")
+                } footer: {
+                    Text("在桌面端「设置 → 手机连接」生成二维码后直接扫码。")
                 }
 
                 if let invitation {
@@ -138,14 +286,14 @@ struct PairView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Label("已识别桌面二维码", systemImage: "checkmark.circle.fill")
                                 .font(.headline)
-                                .foregroundStyle(.green)
+                                .foregroundStyle(KY.success)
                             Button {
                                 Task { await model.pair(url: invitation.address, code: invitation.code, name: name) }
                             } label: {
                                 HStack {
                                     Spacer()
                                     Text("连接此设备").fontWeight(.semibold)
-                                    if model.busy { Spacer(); ProgressView() }
+                                    if model.busy { Spacer(); ProgressView().tint(KY.onAccent) }
                                     Spacer()
                                 }
                                 .frame(minHeight: 40)
@@ -188,7 +336,7 @@ struct PairView: View {
                 if !model.error.isEmpty {
                     Section {
                         Text(model.error)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(KY.destructive)
                             .font(.callout)
                     }
                 }
@@ -203,6 +351,7 @@ struct PairView: View {
                 }
             }
         }
+        .onDisappear { loginTask?.cancel() }
         .sheet(isPresented: $showingScanner) {
             PairingScannerView(onInvitation: { scanned in
                 invitation = scanned
@@ -228,7 +377,7 @@ struct StatusView: View {
             VStack(alignment: .leading, spacing: 6) {
                 if offline {
                     HStack(spacing: 6) {
-                        Image(systemName: "wifi.slash").foregroundStyle(.red)
+                        Image(systemName: "wifi.slash").foregroundStyle(KY.destructive)
                         Text("设备已离线，正在重新连接").font(.footnote)
                     }
                 }
@@ -237,7 +386,7 @@ struct StatusView: View {
                 }
                 if model.connection?.pending != nil {
                     HStack {
-                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(KY.info)
                         Text("有一项操作等待核对").font(.footnote)
                         Spacer()
                         Button("查询回执") { Task { await model.refresh() } }
@@ -1087,7 +1236,16 @@ struct InteractionView: View {
             let cmd = params["command"].string.isEmpty ? params["cmd"].string : params["command"].string
             let path = params["path"].string.isEmpty ? params["file"].string : params["path"].string
 
-            if item.payload["protocol"].string == "kodo" && !params["schedule"].string.isEmpty {
+            if item.payload["protocol"].string == "kodo" && item.payload["method"].string == "question/request" {
+                VStack(alignment: .leading, spacing: 4) {
+                    if !params["title"].string.isEmpty {
+                        Text(params["title"].string).font(.subheadline.bold())
+                    }
+                    if !params["detail"].string.isEmpty {
+                        Text(params["detail"].string).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            } else if item.payload["protocol"].string == "kodo" && !params["schedule"].string.isEmpty {
                 ScrollView { Text(params["text"].string).font(.subheadline).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }.frame(maxHeight: 240)
             } else if !cmd.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
@@ -1115,10 +1273,33 @@ struct InteractionView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 6))
             }
 
-            if let form = nativeQuestionForm(item.payload) {
+            if item.type != "interaction" {
+                HStack(spacing: 10) {
+                    Button {
+                        Task { await model.markInboxRead(item.id) }
+                    } label: {
+                        Label("标为已读", systemImage: "checkmark")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    Button(role: .destructive) {
+                        Task { await model.deleteInboxItem(item.id) }
+                    } label: {
+                        Label("删除", systemImage: "trash")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                }
+            } else if let form = nativeQuestionForm(item.payload) {
                 NativeQuestionFields(model: model, item: item, form: form)
             } else if item.actions?.isEmpty != false {
                 StructuredInteractionReply(model: model, item: item)
+                HStack(spacing: 10) {
+                    Button("标为已读") { Task { await model.markInboxRead(item.id) } }
+                        .font(.caption)
+                    Button("删除", role: .destructive) { Task { await model.deleteInboxItem(item.id) } }
+                        .font(.caption)
+                }
             } else {
                 VStack(spacing: 10) {
                     ForEach(Array((item.actions ?? []).enumerated()), id: \.offset) { index, action in

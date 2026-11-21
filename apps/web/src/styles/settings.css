@@ -924,6 +924,23 @@ button.sx-toggle.is-on .sx-toggle__knob,
   border-color: color-mix(in srgb, var(--control-solid) 24%, transparent);
   color: var(--text);
 }
+.sx-applied-harnesses {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.sx-tag--applied {
+  gap: 5px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--control-solid) 8%, var(--surface-paper));
+  border-color: color-mix(in srgb, var(--control-solid) 22%, var(--border-subtle));
+  font-weight: 560;
+}
+.sx-tag--applied svg {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
 .sx-provider-alert {
   margin: 12px 18px 0;
   padding: 9px 13px;
@@ -3072,6 +3089,162 @@ button.sx-toggle.is-on .sx-toggle__knob,
 }
 .pairing-card {
   padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.remote-account-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.remote-btn-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.remote-btn-row a.nx-btn,
+.remote-btn-row button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+}
+.remote-auth-box {
+  margin: 0 18px 18px;
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.remote-auth-box__head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.remote-auth-box__head strong {
+  font-size: 13.5px;
+  font-weight: 620;
+  color: var(--text);
+}
+.remote-auth-box__head span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.remote-auth-code-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.remote-auth-code {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 14px;
+  border-radius: 9px;
+  background: var(--surface-paper);
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--text);
+}
+.remote-auth-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: var(--radius-control);
+  font-size: 12.5px;
+  font-weight: 560;
+  text-decoration: none;
+  background: var(--control-solid);
+  color: var(--on-control);
+  transition: background var(--dur-micro) ease;
+}
+.remote-auth-link:hover {
+  background: var(--control-solid-hover);
+}
+.remote-auth-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.remote-approval-list {
+  margin: 0 18px 18px;
+  padding: 14px 16px;
+  border-radius: var(--radius-card);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.remote-approval-list__head {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.remote-approval-list__head svg {
+  color: var(--brand-coral);
+}
+.remote-approval-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--surface-paper);
+  border: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
+}
+.remote-approval-item__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.remote-approval-item__info strong {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.remote-approval-item__info span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.remote-client-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.remote-notice-banner {
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: var(--radius-control);
+  background: var(--success-tint);
+  border: 1px solid var(--success-border);
+  color: var(--success-text);
+  font-size: 12.5px;
+  font-weight: 540;
+}
+.remote-status-note {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-secondary);
 }
 .pairing-card__hero {
   display: flex;
@@ -3767,4 +3940,96 @@ button.sx-toggle.is-on .sx-toggle__knob,
   .ap-row__controls--slider input[type="range"] {
     width: 96px;
   }
+}
+
+/* ── Main Agent SOUL.md / USER.md / MEMORY.md Studio ── */
+.agent-docs-panel {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.agent-docs-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.agent-docs-bar .nx-segmented {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.agent-docs-path {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+}
+
+.agent-docs-path code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle);
+  padding: 2px 7px;
+  border-radius: 6px;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-docs-hint {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.agent-docs-editor {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 220px;
+  padding: 12px 14px;
+  border-radius: var(--radius-row);
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.65;
+  resize: vertical;
+  outline: none;
+  transition:
+    border-color var(--dur-fast) ease,
+    box-shadow var(--dur-fast) ease,
+    background var(--dur-fast) ease;
+}
+
+.agent-docs-editor:focus {
+  border-color: var(--border-strong);
+  background: var(--surface-paper);
+  box-shadow: var(--focus-shadow);
+}
+
+.agent-docs-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.agent-docs-meta {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
 }

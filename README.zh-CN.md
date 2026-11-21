@@ -14,20 +14,23 @@
   <img src="brand/logos/kooyu-wordmark.svg" height="44" alt="Kooyu" />
 </picture>
 
-<h3>本地优先、跨平台的 AI 编程代理统一工作台</h3>
+<h3>掌控全部编程引擎的本地优先个人 AI 助手</h3>
 
 <p>
-  在一个界面中统一管理 10+ 原生编程引擎、多协议模型来源与角色映射、用量与耗时账单，并通过独立本地 Session Host 实现 Desktop、Android、iOS 与 Web 无缝协作。
+  将 <strong>Claude Code</strong>、<strong>Codex</strong>、<strong>DeepSeek</strong>、<strong>Gemini CLI</strong>、<strong>OpenCode</strong>、<strong>Cursor</strong>、<strong>ZCode</strong>、<strong>Kimi Code</strong> 等多款编程 Harness 收归同一私人 AI 助手。支持智能路由与限流无感接力、隔离分支同题竞技场、本地持久记忆与零 Token 定时值守，并可随时通过桌面端、网页工作台、iOS / Android 与微信/飞书/Telegram 拍板接管——所有代码、记忆与密钥始终留在你自己的设备。
 </p>
 
 <p>
+  <a href="https://kooyu.app">
+    <img src="https://img.shields.io/badge/官方网站-kooyu.app-141518?style=flat-square" alt="官方网站" />
+  </a>
   <a href="https://github.com/sh2001sh/Kooyu/releases">
     <img src="https://img.shields.io/github/v/release/sh2001sh/Kooyu?include_prereleases&style=flat-square&label=Release&color=F17561" alt="最新版本" />
   </a>
   <a href="https://github.com/sh2001sh/Kooyu/actions/workflows/native-apps.yml">
     <img src="https://img.shields.io/github/actions/workflow/status/sh2001sh/Kooyu/native-apps.yml?branch=main&style=flat-square&label=CI%20%26%20Build" alt="构建状态" />
   </a>
-  <img src="https://img.shields.io/badge/Platforms-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android%20%7C%20iOS-141518?style=flat-square" alt="支持平台" />
+  <img src="https://img.shields.io/badge/Platforms-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android%20%7C%20iOS%20%7C%20Web-141518?style=flat-square" alt="支持平台" />
   <a href="LICENSE">
     <img src="https://img.shields.io/github/license/sh2001sh/Kooyu?style=flat-square&color=10A37F" alt="MIT 协议" />
   </a>
@@ -40,11 +43,11 @@
 </p>
 
 <p>
-  <a href="#-下载安装">下载安装</a> ·
   <a href="#-核心特性">核心特性</a> ·
   <a href="#-支持的编程引擎">支持引擎</a> ·
+  <a href="#-快速开始与下载">下载安装</a> ·
   <a href="#-各平台安装说明">安装指南</a> ·
-  <a href="#-手机扫码连接">手机配对</a> ·
+  <a href="#-全端接力与-e2ee-连接">全端连接</a> ·
   <a href="#-从源码构建">源码构建</a>
 </p>
 
@@ -62,19 +65,29 @@
 
 ## ✨ 核心特性
 
-- **统一调度 10+ 原生编程引擎** — 直接与 **Claude Code**、**Codex**、**DeepSeek Harness**、**ZCode**、**OpenCode**、**Gemini CLI**、**Cursor**、**Kimi Code**、**Grok Build**、**pi** 对话，或由内置的 **Kooyu 主控 Agent** 跨项目统筹调度与自动续接。
-- **独立持久化 Session Host** — 采用解耦的 Node + SQLite 本地 Host（`127.0.0.1:4310`）。关闭桌面窗口自动最小化至托盘；即便退出界面，后台任务、定时计划与原生会话也不会中断。
-- **统一模型来源、端点协议路由与角色映射** — 一次配置 OpenAI 兼容（`Chat Completions` / `Responses`）与 `Anthropic Messages` 端点，自动从 `models.dev` 同步上下文窗口与能力参数；通过「应用到引擎」弹窗为每个引擎独立绑定端点和模型（完整支持 **Claude Code 五槽位角色模型映射**：主模型 / Haiku / Sonnet / Opus / 子代理），绝不改写本机全局 CLI 配置。
-- **原生多端体验与 Apple HIG 极简设计** — 桌面端基于 **Electron + React/TypeScript**，Android 基于 **Kotlin / Jetpack Compose**，iOS 基于 **SwiftUI**，同时保留 Web/PWA。内置 5 套精选配色与深浅外观、带独立行号的 IDE 级代码块、Unified Diff 逐行高亮、`Ctrl/⌘+K` 命令面板与停靠式工作区文件检查器。
-- **按项目选择性导入对话 & 多语言实时切换** — 扫描本机各引擎历史会话，自由勾选指定项目中的单条或多条对话导入 Kooyu；支持 **简体中文 / English / 日本語** 多端实时切换并自动同步。
-- **多端语音输入** — 桌面/Web 端支持浏览器实时语音识别 + Host Whisper/OpenAI 兼容转写双引擎；Android 原生 `SpeechRecognizer` 与 iOS 原生 `SFSpeechRecognizer` 开箱即用。
-- **用量洞察与耗时明细账单** — 按项目、引擎、模型统计 Token、缓存命中、费用与本地预算，并完整记录每轮对话的 **首字时间（TTFT）** 与 **总耗时**。
-- **软件内一键检查更新** — 在 **设置 → 通用 → 软件更新** 中支持切换「正式版 / 预览版」通道，自动校验 `SHA256SUMS.txt` 并拉起桌面安装程序或 Android 原生升级安装器。
+### 多 Harness 统一编排与工程护城河
+- **一个主控，统筹 10+ 编程引擎** — 可直接与 **Claude Code**、**Codex**、**DeepSeek Harness**、**Gemini CLI**、**OpenCode**、**ZCode**、**Cursor**、**Kimi Code**、**Grok Build**、**pi** 对话，也可把复杂任务交给内置 **Kooyu 主控助手**统一拆解。内置多套**工作剧本**（实现+跨引擎审查、并行拆分、测试与 CI 守卫、深度调研），实时查看进度卡片，一键下钻接管或交还主控。
+- **智能路由与 429 限流自动接力（`ROUTING.md`）** — 按任务类型与本机可用引擎自动路由最佳 Harness；当某一引擎触发 HTTP `429`、速率限制或订阅配额耗尽时，Kooyu 自动汇总当前进展与工作区改动，无感移交备用链中的下一个引擎续跑。
+- **多引擎同题竞技场（Multi-Harness Arena）** — 面对核心性能或重构难题，一键在 2～3 组隔离 Git Worktree 中向不同引擎并行派发同一任务，自动运行真实 `git diff` 与测试/基准命令（`checkCommand`）输出记分卡，一键采纳胜出方案。
+- **无痕 Git Checkpoints（「后悔药」时间轴）与一键 PR 交付** — 通过独立临时索引将已追踪与未追踪文件快照写入隐藏引用 `refs/kooyu/checkpoints/*`，零 `git log` / stash 污染，回滚前自动保留安全点；配合逐块 Hunk Diff 审查与工作台内直接合入 / 发 PR，大胆并发零心理负担。
+
+### 越用越懂你的自进化个人 AI 助手
+- **受管工作区大脑与本地持久记忆** — 通过热加载本地文档（`SOUL.md`、`USER.md`、`MEMORY.md`、`RULES.md`、`HEARTBEAT.md`、`AGENTS.md`、`ROUTING.md`）完整掌控助手人格、偏好、记忆、行为规则、值守计划与路由策略，桌面端、Web、Android、iOS 均可直接查看编辑。
+- **四端结构化决策卡与偏好学习** — 高风险或存在多方案抉择时，Kooyu 在桌面/Web/Android/iOS 弹出交互式决策卡；勾选「记住此偏好，以后自动执行」即可直接沉淀至 `RULES.md` 并于下一轮即时生效。
+- **零向量本地知识库直检与每日记忆蒸馏** — 只读挂载本机 Obsidian 笔记库或项目 `docs/` 目录，基于康熙部首归一与中英文加权检索直接定位 `relativePath:line` 精确行切片，无需外置向量库与 Embedding 费用；每日自动从日志提炼候选经验提案，经你确认后并入长期记忆或工程手册。
+- **跨引擎技能沉淀（5 版回滚）与离线研报** — 将跑通的工作流一键沉淀为版本化技能（内置密钥与路径穿越防线、保留 5 个历史版本随时回滚），并可同步分发至 `~/.agents/skills/` 供 Claude Code / Codex / Gemini / OpenCode 共享复用；支持生成严格离线 CSP 保护的主题化交互研报（`show_page`）。
+- **零 Token 预检值守与引擎健康雷达** — 定时自动化支持先跑本地脱敏预检脚本（`checkScript`），无异常静默跳过（**0 Token 消耗**），仅命中告警时推送或唤醒助手；内置引擎卡死巡检与 `NO_REPLY` 安静回合收敛。
+
+### 顺手的桌面入口与全端安全协同
+- **全局快捷键悬浮胶囊（`Alt+Space` / `Cmd+Shift+K`）** — 在桌面任意应用中一键呼出无边框悬浮胶囊，自动带入剪贴板内容并支持选择引擎，直发 Kooyu 主对话。
+- **实时预览、内置终端与共享登录态受管浏览器** — 同屏实时预览 Web 项目（控制台报错一键回传修复）、打开交互式 PTY 终端，并支持可视化接管受管 Chromium 完成登录，登录态 Cookie 按域加密落盘（`0600`）并在后续任务间自动同步复用。
+- **零知识 E2EE 全端协同与 IM 接入** — 支持通过 **Kooyu 账号**（[kooyu.app](https://kooyu.app)）在桌面端与网页工作台自动发现并连接电脑，**iOS / Android** 原生 App 支持扫码与账号登录双通道；同时支持语音实时通话、截图画圈批注以及**微信、企业微信、飞书、Telegram** 消息审批。
+- **统一模型中心与透明用量账本** — 一次配置模型来源与多角色槽位（完整支持 **Claude Code** 五角色映射），绝不污染原生 CLI 全局配置；按项目、引擎与模型清晰统计 Token、费用与首字响应耗时（TTFT）。
 
 <div align="center">
-  <img src="docs/assets/features-overview.png" width="100%" alt="Kooyu 模型来源应用弹窗与用量耗时明细" />
+  <img src="docs/assets/features-overview.png" width="100%" alt="Kooyu 模型来源配置与用量速度分析" />
   <br />
-  <sub>左：模型来源「应用到引擎」弹窗（多协议端点切换与 Claude Code 角色映射） · 右：用量分析与首字时间/总耗时明细</sub>
+  <sub>左：统一模型中心与引擎角色映射 · 右：按项目、引擎与模型统计的用量、费用与首字延迟账单</sub>
 </div>
 
 <details>
@@ -90,43 +103,48 @@
 
 ## 🤖 支持的编程引擎
 
-Kooyu 自动扫描系统 `PATH` 中的 CLI 与标准桌面安装目录，完整保留各引擎的原生会话 ID、权限语义与登录状态。
+Kooyu 自动发现本机已安装的 CLI 工具与桌面编程应用，完整保留各引擎的原生会话历史、权限模式与账号登录状态。
 
-| 引擎 | 定位 | 原生协议 / 运行时 | 隔离 Provider 绑定 | 自动发现安装 |
-| :--- | :--- | :--- | :---: | :---: |
-| **Kooyu** | 产品主控 Agent | 内置 `pi` SDK | ✅ | 内置 |
-| **Claude Code** | 原生编程引擎 | Native CLI / Agent SDK | ✅（五槽位角色映射 + Anthropic / Chat 网关） | ✅ |
-| **Codex** | 原生编程引擎 | `codex app-server` | ✅（OpenAI Responses） | ✅ |
-| **DeepSeek Harness** | 原生编程引擎 | 原生 RPC / CLI | ✅ | ✅ |
-| **ZCode** | 原生编程引擎 | 原生 CLI / 随包运行时 | ✅ | ✅ |
-| **OpenCode** | 原生编程引擎 | 无头 HTTP + SSE 服务 | ✅ | ✅ |
-| **Gemini CLI** | 原生编程引擎 | ACP | ✅（内置 Google → Chat 本地网关） | ✅ |
-| **Cursor** | 原生编程引擎 | ACP（`agent`） | 仅原生账号 | ✅ |
-| **Kimi Code** | 原生编程引擎 | 原生 Server API / ACP | ✅ | ✅ |
-| **Grok Build** | 原生编程引擎 | ACP / 原生 CLI | ✅ | ✅ |
-| **pi** | 独立编程引擎 | `pi` SDK / CLI | ✅ | 内置 |
+| 引擎 | 角色定位 | 自定义模型来源 | 自动发现安装 |
+| :--- | :--- | :---: | :---: |
+| **Kooyu** | 内置个人 AI 助手与主控编排 | ✅ | 内置 |
+| **Claude Code** | 原生编程代理 | ✅（五槽位角色映射） | ✅ |
+| **Codex** | 原生编程代理 | ✅ | ✅ |
+| **DeepSeek Harness** | 原生编程代理 | ✅ | ✅ |
+| **Gemini CLI** | 原生编程代理 | ✅ | ✅ |
+| **OpenCode** | 原生编程代理 | ✅ | ✅ |
+| **ZCode** | 原生编程代理 | ✅ | ✅ |
+| **Cursor** | 原生编程代理 | 原生账号 | ✅ |
+| **Kimi Code** | 原生编程代理 | ✅ | ✅ |
+| **Grok Build** | 原生编程代理 | ✅ | ✅ |
+| **pi** | 独立编程代理 | ✅ | 内置 |
 
-> 更多协议能力与自定义 `installations.json` 入口覆盖说明，见 [docs/harness-catalog.md](docs/harness-catalog.md) 与 [docs/provider-configuration.md](docs/provider-configuration.md)。
+> 详细能力矩阵与自定义入口路径配置见 [docs/harness-catalog.md](docs/harness-catalog.md) 与 [docs/provider-configuration.md](docs/provider-configuration.md)。
 
 ---
 
-## 📦 下载安装
+## 📦 快速开始与下载
 
-所有平台安装包均由 GitHub Actions 自动构建并发布到 [**GitHub Releases**](https://github.com/sh2001sh/Kooyu/releases)。
+### 一行命令秒速体验（无需安装桌面包）
 
-### 最新构建 — `v0.2.1`（[`preview-0.2.1-10`](https://github.com/sh2001sh/Kooyu/releases/tag/preview-0.2.1-10)）
+```bash
+npx kooyu@latest
+```
+
+### 各平台原生安装包
+
+所有平台安装包均由 GitHub Actions 自动构建并发布至 [**GitHub Releases**](https://github.com/sh2001sh/Kooyu/releases)，也可直接前往官网 [**kooyu.app/download**](https://kooyu.app/download) 下载。
 
 | 平台 | 架构 / 格式 | 下载地址 |
 | :--- | :--- | :--- |
-| **Windows** | x64 安装程序（`.exe`） | [Kooyu-Setup-0.2.1.exe](https://github.com/sh2001sh/Kooyu/releases/download/preview-0.2.1-10/Kooyu-Setup-0.2.1.exe) |
-| **macOS** | Apple Silicon M1–M4（`.dmg` / `.zip`） | [Kooyu-0.2.1-arm64.dmg](https://github.com/sh2001sh/Kooyu/releases/download/preview-0.2.1-10/Kooyu-0.2.1-arm64.dmg) · [ZIP](https://github.com/sh2001sh/Kooyu/releases/download/preview-0.2.1-10/Kooyu-0.2.1-arm64-mac.zip) |
-| **macOS** | Intel x64（`.dmg` / `.zip`） | [Kooyu-0.2.1.dmg](https://github.com/sh2001sh/Kooyu/releases/download/preview-0.2.1-10/Kooyu-0.2.1.dmg) · [ZIP](https://github.com/sh2001sh/Kooyu/releases/download/preview-0.2.1-10/Kooyu-0.2.1-mac.zip) |
-| **Linux** | x64（`.AppImage` / `.deb`） | [Kooyu-0.2.1.AppImage](https://github.com/sh2001sh/Kooyu/releases/download/preview-0.2.1-10/Kooyu-0.2.1.AppImage) · [kooyu_0.2.1_amd64.deb](https://github.com/sh2001sh/Kooyu/releases/download/preview-0.2.1-10/kooyu_0.2.1_amd64.deb) |
-| **Android** | 通用安装包（`.apk`） | [Kooyu-0.2.1-android-debug.apk](https://github.com/sh2001sh/Kooyu/releases/download/preview-0.2.1-10/Kooyu-0.2.1-android-debug.apk) |
-| **iOS** | Apple Silicon 模拟器包（`.zip`） | [Kooyu-0.2.1-ios-simulator.zip](https://github.com/sh2001sh/Kooyu/releases/download/preview-0.2.1-10/Kooyu-0.2.1-ios-simulator.zip) |
-| **校验清单** | SHA-256 哈希文件 | [SHA256SUMS.txt](https://github.com/sh2001sh/Kooyu/releases/download/preview-0.2.1-10/SHA256SUMS.txt) |
+| **Windows** | x64 安装程序（`.exe`） | [GitHub Releases](https://github.com/sh2001sh/Kooyu/releases) |
+| **macOS** | Apple Silicon M1–M4 / Intel x64（`.dmg` / `.zip`） | [GitHub Releases](https://github.com/sh2001sh/Kooyu/releases) |
+| **Linux** | x64（`.AppImage` / `.deb`） | [GitHub Releases](https://github.com/sh2001sh/Kooyu/releases) |
+| **Android** | 通用安装包（`.apk`） | [GitHub Releases](https://github.com/sh2001sh/Kooyu/releases) |
+| **iOS** | Apple Silicon 模拟器包（`.zip`） / 源码签名构建 | [GitHub Releases](https://github.com/sh2001sh/Kooyu/releases) |
+| **Web / CLI** | 本地 Host + 浏览器工作台 | `npx kooyu@latest` |
 
-> 后续新版本请直接访问 [Releases 页面](https://github.com/sh2001sh/Kooyu/releases) 或在软件内一键检查更新。
+> 在软件内打开 **设置 → 通用 → 软件更新** 即可在 **正式版** 与 **预览版** 通道间切换并自动校验 SHA-256 升级。
 
 ---
 
@@ -134,41 +152,34 @@ Kooyu 自动扫描系统 `PATH` 中的 CLI 与标准桌面安装目录，完整�
 
 ### Windows
 
-1. 下载并运行 **`Kooyu-Setup-0.2.1.exe`**。
-2. 由于桌面安装包暂未购买商业代码签名证书，首次运行可能弹出 Windows SmartScreen 提示，点击 **「更多信息 → 仍要运行」** 即可（详见 [docs/windows-installation.md](docs/windows-installation.md)）。
-3. 覆盖安装新版会自动保留本地历史对话与配置数据。
+1. 前往 [GitHub Releases](https://github.com/sh2001sh/Kooyu/releases) 下载并运行 **`Kooyu-Setup-<version>.exe`**。
+2. 由于桌面安装包暂未配置商业代码签名证书，首次运行若弹出 Windows SmartScreen 提示，点击 **「更多信息 → 仍要运行」** 即可（详见 [docs/windows-installation.md](docs/windows-installation.md)）。
+3. 启动后可在任意界面按 **`Alt + Space`** 呼出全局悬浮胶囊；覆盖安装新版会自动保留本地历史对话与配置数据。
 
 ### macOS
 
-1. Apple Silicon 芯片下载 **`Kooyu-0.2.1-arm64.dmg`**，Intel 芯片下载 **`Kooyu-0.2.1.dmg`**，打开后将 **Kooyu.app** 拖入 **应用程序（Applications）** 文件夹。
+1. 下载对应芯片架构的 `.dmg`（Apple Silicon 选 `arm64`，Intel 选 x64），打开后将 **Kooyu.app** 拖入 **应用程序（Applications）**。
 2. 因尚未配置 Apple 开发者公证，首次打开前在终端执行一次隔离属性清理：
    ```bash
    xattr -cr /Applications/Kooyu.app
    ```
-3. 随后即可正常启动 Kooyu。
+3. 启动后可在任意界面按 **`Cmd + Shift + K`** 呼出全局悬浮胶囊。
 
 ### Linux
 
-- **AppImage**：
-  ```bash
-  chmod +x Kooyu-0.2.1.AppImage
-  ./Kooyu-0.2.1.AppImage
-  ```
-- **Debian / Ubuntu（`.deb`）**：
-  ```bash
-  sudo apt install ./kooyu_0.2.1_amd64.deb
-  ```
+```bash
+# AppImage
+chmod +x Kooyu-*.AppImage
+./Kooyu-*.AppImage
 
-### Android
+# Debian / Ubuntu (.deb)
+sudo apt install ./kooyu_*_amd64.deb
+```
 
-1. 在手机下载 **`Kooyu-0.2.1-android-debug.apk`** 并按提示允许「安装未知来源应用」。
-2. 官方 CI 始终保持固定调试签名证书，后续新版本可直接覆盖升级，不会丢失已配对设备凭据。
-3. 打开 App 后点击「扫描桌面二维码」即可连接电脑。
+### Android 与 iOS
 
-### iOS
-
-- 发布包中的 `Kooyu-0.2.1-ios-simulator.zip` 供 Apple Silicon Mac 的 iOS 模拟器直接运行（`xcrun simctl install booted Kooyu.app`）。
-- 如需安装到真机 iPhone / iPad，请使用自己的 Apple 开发者账号在 Xcode 中构建签名，详见 [apps/ios/README.md](apps/ios/README.md)。
+- **Android**：下载安装 `Kooyu-*-android-debug.apk`（保持一致的升级签名证书，后续新版可直接覆盖升级不丢配对），打开后可登录 Kooyu 账号或扫描桌面二维码连接。
+- **iOS**：`Kooyu-*-ios-simulator.zip` 供 Apple Silicon Mac 的 iOS 模拟器直接运行；真机安装请使用自有 Apple 开发者账号在 Xcode 中签名构建，详见 [apps/ios/README.md](apps/ios/README.md)。
 
 ### 校验安装包完整性（SHA-256）
 
@@ -182,24 +193,16 @@ shasum -a 256 -c SHA256SUMS.txt --ignore-missing
 Get-FileHash .\Kooyu-Setup-0.2.1.exe -Algorithm SHA256
 ```
 
-### 软件内自动更新
-
-在桌面端（或托盘菜单「检查更新…」）与移动端打开 **设置 → 通用 → 软件更新**：
-- 支持自由切换 **正式版**（`v*` 标签）或 **预览版**（`preview-*` 自动构建）通道。
-- 下载完成后自动核对 `SHA256SUMS.txt`，校验通过后一键唤起桌面安装器或 Android 系统安装界面。
-
 ---
 
-## 📱 手机扫码连接
+## 📱 全端接力与 E2EE 连接
 
-无需公网 IP、端口转发、VPN 或手动配置隧道，三步即可在手机上实时查看会话、发消息、审批操作：
+无需公网 IP、端口转发或 VPN，几秒即可通过网页工作台、手机 App 或另一台电脑远程连接你的主机：
 
-1. 在电脑端打开 **设置 → 手机连接 → 生成配对码**。
-2. 桌面 Host 自动通过 HTTPS/WSS 接入 `relay.kooyu.app`（也支持部署自有 Relay，见 `deploy/kodo-relay/`）。
-3. 使用 Android / iOS 客户端扫码（或手机系统相机扫码打开 Web/PWA）即可完成配对。
-4. 配对邀请码 2 分钟内单次有效；设备 Token 仅以哈希保存（30 天有效），随时可在桌面端一键撤销授权。
-
-> 详细原理与私有化部署方案见 [docs/mobile-relay.md](docs/mobile-relay.md) 与 [docs/self-hosted-operations.md](docs/self-hosted-operations.md)。
+1. **账号发现（桌面端 & 网页工作台）**：在工作电脑绑定 Kooyu 账号后，登录 [kooyu.app/account](https://kooyu.app/account) 或另一台桌面端即可安全发现并发起授权连接。
+2. **扫码秒连（iOS & Android）**：在宿主机桌面端打开 **设置 → 手机连接 → 生成配对码**，用原生 App 扫码即可建立连接（2 分钟单次有效）。
+3. **零知识端到端加密**：中继仅转发密文，所有对话、代码 Diff 与审批指令均在设备端加解密；每台新设备连接均须宿主机显式点击批准，随时一键撤销。
+4. **私有化部署**：如需完全自托管，可使用 `deploy/` 中的 Docker / Caddy / systemd 模板部署自有 Host 与中继，详见 [docs/mobile-relay.md](docs/mobile-relay.md) 与 [docs/self-hosted-operations.md](docs/self-hosted-operations.md)。
 
 ---
 
@@ -207,48 +210,47 @@ Get-FileHash .\Kooyu-Setup-0.2.1.exe -Algorithm SHA256
 
 ```mermaid
 flowchart LR
-  subgraph Clients["多端原生与 Web 客户端"]
-    Desktop["桌面端\n(Electron + React)"]
-    Web["Web / PWA\n(Vite + React)"]
-    Android["Android 原生\n(Kotlin + Compose)"]
-    iOS["iOS 原生\n(SwiftUI)"]
+  subgraph Clients["多端客户端与消息入口"]
+    Desktop["桌面端 + 全局悬浮胶囊\n(Windows · macOS · Linux)"]
+    Mobile["移动端与网页工作台\n(Android · iOS · PWA)"]
+    IM["即时通讯接入\n(微信 · 企微 · 飞书 · Telegram)"]
   end
 
-  Relay["Kooyu Relay 中继\n(HTTPS / WSS · 支持私有部署)"]
+  Bridge["零知识 E2EE 加密中继\n(账号发现或私有部署)"]
 
-  subgraph Host["独立本地 Session Host (Node + SQLite)"]
-    API["HTTP / SSE 服务\n127.0.0.1:4310"]
-    Vault["系统凭据库\n(Keychain / DPAPI / Secret Service)"]
-    DB[("SQLite 数据库\nFTS5 搜索 · 用量 · 长期记忆")]
-    Supervisor["Kooyu 主控 Agent\n(pi SDK)"]
-    Adapters["10 种原生引擎适配器\n(Claude · Codex · DeepSeek · ZCode\nOpenCode · Gemini · Cursor · Kimi · Grok · pi)"]
+  subgraph Host["独立本地 Session Host"]
+    API["工作台 API 与实时事件流"]
+    Supervisor["Kooyu 个人 AI 助手\n(工作区文档 · 持久记忆 · 技能沉淀 · 值守雷达)"]
+    Router["智能路由 · 429 接力 · 同题竞技场"]
+    Adapters["10+ 原生编程代理"]
+    Tools["隔离分支 · Git 无痕快照 · 实时预览\n内置终端 · 共享登录浏览器 · 本地知识库"]
+    Storage[("本地 SQLite · Markdown 文档 · 系统密钥库")]
   end
 
   Desktop --> API
-  Web --> API
-  Android --> Relay --> API
-  iOS --> Relay
-  API --> DB
-  API --> Vault
+  Mobile --> Bridge --> API
+  IM --> API
   API --> Supervisor
-  API --> Adapters
+  Supervisor --> Router --> Adapters
+  API --> Tools
+  API --> Storage
 ```
 
 ### 仓库目录结构
 
 | 目录 | 说明 |
 | :--- | :--- |
-| `apps/desktop` | Electron 桌面外壳、系统托盘、原生更新器与麦克风权限集成 |
-| `apps/web` | React + TypeScript 工作台前端、外观工作室、语音输入与 Playwright UI 测试 |
+| `apps/desktop` | Electron 桌面外壳、托盘常驻、全局悬浮胶囊 HUD、远程连接与自动更新 |
+| `apps/web` | 跨端工作台界面、决策卡、Git/PR 交付、实时预览、内置终端与 Playwright 测试 |
 | `apps/android` | Android 原生应用（Kotlin / Jetpack Compose / Material 3 / APK 升级） |
-| `apps/ios` | iOS 原生应用（Swift 6 / SwiftUI / XcodeGen） |
-| `packages/host` | 独立 Node Session Host、SQLite 存储、引擎适配器、Provider 网关、更新与语音服务 |
-| `packages/protocol` | 前后端及移动端共享的 Zod Schema 与 TypeScript 协议定义 |
-| `packages/platform` | 跨平台目录规范、Host 发现机制与系统工具 |
-| `services/relay` | 轻量级 HTTPS/WSS 移动端配对中继服务 |
-| `deploy/` | Host 与 Relay 的 Docker、Compose、Caddy 与 systemd 部署模板 |
+| `apps/ios` | iOS 原生应用（Swift / SwiftUI / XcodeGen） |
+| `packages/host` | 独立本地 Session Host、工作区文档与记忆蒸馏、技能沉淀、本地知识库、智能路由/竞技场、Git 快照、受管浏览器、IM 与模型中心 |
+| `packages/protocol` | 前后端及移动端共享的协议 Schema 与 TypeScript 类型定义 |
+| `packages/platform` | 跨平台目录规范（默认 `Kooyu/host`，兼容旧版 `Kodo/host`）、Host 发现与系统工具 |
+| `services/relay` | 可私有化部署的轻量 E2EE 连接与离线加密信箱中继服务 |
+| `deploy/` | Host 与中继服务的 Docker、Compose、Caddy 与 systemd 部署模板 |
 | `brand/` | Kooyu 正式 SVG Logo、应用图标与设计 Token |
-| `docs/` | 架构设计、引擎矩阵、Provider 配置、移动中继与发布文档 |
+| `docs/` | 架构设计、引擎矩阵、模型配置、自部署与发布指南 |
 
 ---
 
@@ -257,7 +259,7 @@ flowchart LR
 ### 环境要求
 
 - **Node.js `>= 24.13.0`** 与 **npm `11+`**
-- 本地安装任意支持的编程引擎 CLI / 桌面客户端（或在 Kooyu 内直接配置 API Provider）
+- 本地安装任意支持的编程代理 CLI / 桌面应用（或在 Kooyu 内直接配置 API 模型来源）
 
 ### 本地开发与运行
 
@@ -268,14 +270,14 @@ npm ci
 npm run build
 ```
 
-- **启动 Electron 桌面端**（自动拉起或复用独立 Host）：
+- **启动桌面端**（自动拉起或复用独立 Host）：
   ```bash
   npm run start:desktop
   ```
 - **仅启动本地 Web 工作台**（访问 `http://127.0.0.1:4310`）：
   ```bash
   npm run start:host
-  # 或启动 Vite 前端热更新（自动连接本机 Host）：
+  # 或启动前端热更新（自动连接本机 Host）：
   npm run dev:web
   ```
 
@@ -299,29 +301,30 @@ xcodebuild -project Kooyu.xcodeproj -scheme Kooyu -destination 'generic/platform
 npm run lint
 npm run format:check
 npm run typecheck
-npm test              # Host 单元与集成测试（500+ 用例）
-npm run test:relay    # Relay 安全回归测试
+npm test              # Host 单元与集成测试
+npm run test:relay    # 中继服务安全与信箱测试
 npm run test:platform # Host 发现与启动器测试
-npm run test:ui       # Playwright 全量 UI 回归测试（160+ 用例）
+npm run test:ui       # Playwright 全量 UI 回归测试
 ```
 
 ### 数据目录与环境变量
 
 | 操作系统 | 默认 Host 数据目录 |
 | :--- | :--- |
-| **Windows** | `%LOCALAPPDATA%\Kodo\host` |
-| **macOS** | `~/Library/Application Support/Kodo/host` |
-| **Linux** | `${XDG_DATA_HOME:-~/.local/share}/Kodo/host` |
+| **Windows** | `%LOCALAPPDATA%\Kooyu\host` |
+| **macOS** | `~/Library/Application Support/Kooyu/host` |
+| **Linux** | `${XDG_DATA_HOME:-~/.local/share}/Kooyu/host` |
 
-> 为兼容既有数据，内部存储目录、npm 包名及 `KODO_*` 环境变量（`KODO_DATA_DIR`、`KODO_HOST_PORT`、`KODO_HOST_URL`）保持向后兼容。
+> 环境变量默认使用 `KOOYU_*` 前缀（`KOOYU_DATA_DIR`、`KOOYU_HOST_PORT`、`KOOYU_HOST_URL`、`KOOYU_RELAY_ORIGIN`、`KOOYU_QUICK_CAPTURE_SHORTCUT`）。已存在的旧版 `Kodo/host` 数据目录、钥匙串 `"Kodo"` 条目与 `KODO_*` 环境变量均自动向后兼容，无感平滑升级。
 
 ---
 
 ## 🔒 安全与隐私
 
-- **本地优先架构** — 所有对话记录、记忆与用量账单均保存在本机 SQLite，Host 默认仅监听回环地址 `127.0.0.1`。
-- **系统级密钥托管** — API Key 与 OAuth 凭据存入操作系统凭据库（Windows 凭据管理器、macOS 钥匙串、Linux Secret Service），绝不明文落盘至项目目录。
-- **不污染全局原生配置** — 自定义 Provider 与角色模型映射仅按会话隔离注入，不会覆盖 `~/.claude`、`~/.codex` 等用户本机原生配置。
+- **本地优先架构** — 代码、对话历史、长期记忆、挂载知识库与用量账单均保存在本机，Host 默认仅监听回环地址 `127.0.0.1`。
+- **系统级密钥托管与子进程脱敏** — API Key 与 OAuth 凭据存入操作系统凭据库（Windows 凭据管理器、macOS 钥匙串、Linux Secret Service，服务名 `Kooyu`）；预检脚本与竞技场测试命令自动剥离宿主机敏感环境变量。
+- **不污染全局原生配置** — 自定义模型来源与角色映射仅按会话隔离生效，不会改写 `~/.claude`、`~/.codex` 等本机原生 CLI 配置。
+- **分级远程权限控制** — 本地 MCP、IM 凭据管理仅限本机操作；交互式终端与远端 Git 推送默认关闭，须在本机显式授予指定设备后方可使用。
 
 ---
 
@@ -329,7 +332,7 @@ npm run test:ui       # Playwright 全量 UI 回归测试（160+ 用例）
 
 本项目采用 [**MIT License**](LICENSE) 开源协议。
 
-- 上游 `pi` 运行时与 SDK 说明：[docs/upstream.md](docs/upstream.md)
-- 运行依赖与第三方 SDK 条款：[third-party/runtime-dependencies.md](third-party/runtime-dependencies.md)
-- `models.dev` 模型目录声明：[third-party/models.dev/NOTICE.md](third-party/models.dev/NOTICE.md)
-- Craft Agents 设计变量提取边界：[third-party/craft-agents/EXTRACTION.md](third-party/craft-agents/EXTRACTION.md)
+- 官方网站与文档：[https://kooyu.app](https://kooyu.app)
+- 运行依赖与第三方开源许可：[third-party/runtime-dependencies.md](third-party/runtime-dependencies.md)
+- 模型目录数据声明：[third-party/models.dev/NOTICE.md](third-party/models.dev/NOTICE.md)
+- 设计变量来源说明：[third-party/craft-agents/EXTRACTION.md](third-party/craft-agents/EXTRACTION.md)

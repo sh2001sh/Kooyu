@@ -207,8 +207,14 @@ export function setSecretVault(vault: SecretVault | undefined) {
 }
 
 /** Ref-addressed view used by provider, binding and search credentials. */
-export const kodoSecrets = {
-  get: (ref: string) => secretVault().get("Kodo", ref),
-  set: (ref: string, value: string) => secretVault().set("Kodo", ref, value),
-  delete: (ref: string) => secretVault().delete("Kodo", ref),
+export const kooyuSecrets = {
+  get: async (ref: string) =>
+    (await secretVault().get("Kooyu", ref)) ?? (await secretVault().get("Kodo", ref)),
+  set: (ref: string, value: string) => secretVault().set("Kooyu", ref, value),
+  delete: async (ref: string) => {
+    await secretVault().delete("Kooyu", ref);
+    await secretVault().delete("Kodo", ref);
+  },
 };
+/** @deprecated Alias preserved for compatibility; use `kooyuSecrets`. */
+export const kodoSecrets = kooyuSecrets;

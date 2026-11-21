@@ -1,3 +1,6 @@
+import { browserFetch } from "./lib/cloud-browser";
+import { RemoteEvents } from "./lib/remote-events";
+import { DelegationCards, EscalateToKooyuButton } from "./components/DelegationCards";
 import {
   useCallback,
   useEffect,
@@ -45,7 +48,7 @@ import { Composer } from "./components/Composer";
 import { RunStatus } from "./components/RunStatus";
 import { CanvasAura } from "./components/CanvasAura";
 import { DraftWorkspace, type DraftPreset } from "./components/DraftWorkspace";
-import { HarnessBadge } from "./components/KodoBrand";
+import { HarnessBadge } from "./components/KooyuBrand";
 import { DeleteDialog, ProjectModal, ProjectEditModal } from "./components/Modals";
 import { SessionDetail } from "./components/SessionDetail";
 import { GoalPill, useGoals } from "./components/GoalPanel";
@@ -85,6 +88,16 @@ import "./styles/settings.css";
 type Wire = Record<string, any>;
 type SearchHit = { sessionId: string; eventId?: string; snippet?: string };
 type Action = (work: () => Promise<unknown>) => Promise<void>;
+
+const AUTH_REQUIRED_CODES = new Set([
+  "UNAUTHORIZED",
+  "ACCOUNT_REQUIRED",
+  "TOKEN_EXPIRED",
+  "DEVICE_REVOKED",
+  "DEVICE_APPROVAL_REQUIRED",
+]);
+const isAuthRequiredError = (e: unknown): boolean =>
+  e instanceof HostError && AUTH_REQUIRED_CODES.has(e.code);
 
 function App() {
   const {
@@ -284,7 +297,7 @@ function App() {
       setPairNeeded(false);
       return next;
     } catch (e) {
-      if (e instanceof HostError && e.code === "UNAUTHORIZED") setPairNeeded(true);
+      if (isAuthRequiredError(e)) setPairNeeded(true);
       throw e;
     }
   }, []);
@@ -331,7 +344,7 @@ function App() {
   }, [dark]);
 
   useEffect(() => {
-    let stream: EventSource | undefined,
+    let stream: EventSource | RemoteEvents | undefined,
       cancelled = false;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let generation = 0;
@@ -348,7 +361,9 @@ function App() {
           // Snapshot supplies current projections; fetch transcript by page, stream only new events.
           const cursor = snapshot.eventCursor ?? 0;
           sessionStorage.setItem(`kodo.cursor.${snapshot.hostId}`, String(cursor));
-          stream = new EventSource(apiPath("/events?after=" + cursor));
+          stream = remoteClient
+            ? new RemoteEvents(cursor)
+            : new EventSource(apiPath("/events?after=" + cursor));
           stream.onopen = () => setConnected(true);
           stream.onerror = () => {
             if (cancelled || current !== generation) return;
@@ -398,7 +413,7 @@ function App() {
               })
               .catch(() => {});
           }
-          stream.onmessage = (message) => {
+          stream.onmessage = (message: MessageEvent<string>) => {
             const e = JSON.parse(message.data) as RuntimeEvent;
             sessionStorage.setItem(`kodo.cursor.${snapshot.hostId}`, String(e.sequence));
             // The host ingests the user message at dispatch: the command left the queue.
@@ -481,8 +496,7 @@ function App() {
         .catch((e) => {
           if (cancelled || current !== generation) return;
           setError(e.message);
-          if (!(e instanceof HostError && e.code === "UNAUTHORIZED"))
-            retry = setTimeout(start, 2000);
+          if (!isAuthRequiredError(e)) retry = setTimeout(start, 2000);
         });
     };
     const foreground = () => {
@@ -1189,7 +1203,7 @@ function App() {
           "--sidebar-width": `${layout.width}px`,
           "--sidebar-collapsed": "68px",
           "--window-controls-inset": isWindowsElectron
-            ? "138px"
+            ? "0px"
             : "max(0px, 100vw - env(titlebar-area-width, 100vw))",
         } as CSSProperties
       }
@@ -1597,6 +1611,14 @@ function App() {
               </div>
 
               <div className="chat-actions desktop-only-flex">
+                {snapshot && (
+                  <EscalateToKooyuButton
+                    session={session}
+                    snapshot={snapshot}
+                    act={act}
+                    busy={busy}
+                  />
+                )}
                 {workspace && (
                   <button
                     type="button"
@@ -1691,6 +1713,19 @@ function App() {
                       }
                     }}
                   >
+                    {snapshot && (
+                      <DelegationCards
+                        session={session}
+                        snapshot={snapshot}
+                        choose={choose}
+                        act={act}
+                        busy={busy}
+                        onReviewDiff={(workerId) => {
+                          choose(workerId);
+                          setDetail("changes");
+                        }}
+                      />
+                    )}
                     {hasTranscript ? (
                       <div className="transcript-inner">
                         <div className="actions" aria-label="历史分页">
@@ -1899,6 +1934,7 @@ function App() {
                   </div>
 
                   <Composer
+                    events={events}
                     session={session}
                     harnessDesc={snapshot?.harnesses.find((item) => item.id === session.harnessId)}
                     binding={snapshot?.bindings.find((item) => item.id === session.bindingId)}
@@ -1973,6 +2009,9 @@ function App() {
                     onOpenFile={(path) => {
                       setFilePreview({ sessionId: session.id, path, key: Date.now() });
                       setDetail("files");
+                    }}
+                    onSendToAgent={(text) => {
+                      setCompose((prev) => (prev.trim() ? `${prev.trim()}\n\n${text}` : text));
                     }}
                     session={session}
                     snapshot={snapshot}
@@ -2400,13 +2439,35 @@ if (
   document.documentElement.dataset.platform = "darwin";
 }
 
-createRoot(document.getElementById("root")!).render(
-  <AppPreferencesProvider>
-    <FirstRun>
-      <App />
-    </FirstRun>
-  </AppPreferencesProvider>,
-);
+const preview = new URLSearchParams(location.hash.slice(1));
+if (preview.has("preview") && /^\/h\/[a-f0-9]{64}\/?$/.test(location.pathname)) {
+  const target = document.getElementById("root")!;
+  const host = location.pathname.split("/")[2]!;
+  history.replaceState(null, "", location.pathname);
+  target.textContent = "正在验证预览授权…";
+  void (async () => {
+    const response = await browserFetch(
+      new Request(location.origin + "/h/" + host + "/api/preview/redeem", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: preview.get("preview"), open: preview.get("open") }),
+      }),
+      host,
+    );
+    if (!response.ok) throw Error();
+    const result = await response.json();
+    location.replace(result.url);
+  })().catch(() => {
+    target.textContent = "请在已获此电脑授权的浏览器中打开有效预览链接。";
+  });
+} else
+  createRoot(document.getElementById("root")!).render(
+    <AppPreferencesProvider>
+      <FirstRun>
+        <App />
+      </FirstRun>
+    </AppPreferencesProvider>,
+  );
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
   void navigator.serviceWorker.register("/sw.js").catch(() => {});
 }

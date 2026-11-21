@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "@kodo/platform": "0.0.0",
-    "@kodo/protocol": "0.0.0"
+    "@kodo/protocol": "0.0.0",
+    "jose": "6.2.18"
   },
   "devDependencies": {
     "electron": "39.1.0"

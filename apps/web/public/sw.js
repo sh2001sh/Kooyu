@@ -1,11 +1,33 @@
-const CACHE = "kooyu-shell-v4";
+importScripts("/account-worker.js");
+self.addEventListener("install", () => self.skipWaiting());
+const CACHE = "kooyu-shell-v5";
+self.addEventListener("push", (event) => {
+  event.waitUntil(
+    self.registration.showNotification("Kooyu", {
+      body: "打开 Kooyu 查看更新。",
+      tag: "kooyu-wake",
+      icon: "/icon.svg",
+    }),
+  );
+});
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: "window" }).then((windows) => {
+      const client = windows.find((w) => new URL(w.url).origin === self.location.origin);
+      if (client) return client.focus();
+      return self.clients.openWindow(self.registration.scope);
+    }),
+  );
+});
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(["/icon.svg"])));
 });
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches
-      .keys()
+    self.clients
+      .claim()
+      .then(() => caches.keys())
       .then((keys) =>
         Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))),
       ),

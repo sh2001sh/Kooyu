@@ -30,12 +30,16 @@ interface BrowserSpeechRecognition {
   onresult: ((event: BrowserSpeechRecognitionEvent) => void) | null;
   onerror: ((event: BrowserSpeechRecognitionErrorEvent) => void) | null;
   onend: (() => void) | null;
-  start(): void;
+  start(track?: MediaStreamTrack): void;
   stop(): void;
   abort(): void;
 }
 
 type SpeechRecognitionCtor = new () => BrowserSpeechRecognition;
+
+export function callRecognition() {
+  return getSpeechRecognitionCtor();
+}
 
 function getSpeechRecognitionCtor(): SpeechRecognitionCtor | null {
   if (typeof window === "undefined") return null;
@@ -232,7 +236,9 @@ export function useVoiceInput({
 
     let stream: MediaStream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true },
+      });
     } catch (err) {
       const name = err instanceof DOMException ? err.name : "";
       if (name === "NotAllowedError" || name === "PermissionDeniedError") {
@@ -418,7 +424,7 @@ export function useVoiceInput({
       // Optional visual meter via mic stream when supported alongside Web Speech.
       if (navigator.mediaDevices?.getUserMedia) {
         void navigator.mediaDevices
-          .getUserMedia({ audio: true })
+          .getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } })
           .then((stream) => {
             if (stateRef.current !== "listening") {
               for (const track of stream.getTracks()) track.stop();

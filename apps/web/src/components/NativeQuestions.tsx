@@ -5,7 +5,12 @@ type Question = {
   key: string;
   text: string;
   body?: string;
-  options: { label: string; description?: string; id?: string }[];
+  options: {
+    label: string;
+    description?: string;
+    id?: string;
+    alwaysRule?: { mode: "ask" | "allow"; text: string };
+  }[];
   multiple: boolean;
   custom: boolean;
   secret: boolean;
@@ -15,7 +20,9 @@ export function nativeQuestions(payload: Wire): Question[] | null {
   const codex = payload.protocol === "codex" && payload.method === "item/tool/requestUserInput";
   const opencode = payload.protocol === "opencode" && payload.type === "question.asked";
   const kimi = payload.protocol === "kimi" && payload.method === "question/request";
-  if (!claude && !codex && !opencode && !kimi) return null;
+  const kodo = payload.protocol === "kodo" && payload.method === "question/request";
+  const idBased = kimi || kodo;
+  if (!claude && !codex && !opencode && !idBased) return null;
   const questions = (claude ? payload.input : payload.params)?.questions;
   if (!Array.isArray(questions) || !questions.length || questions.length > 20) return null;
   const normalized: Question[] = [];
@@ -23,7 +30,7 @@ export function nativeQuestions(payload: Wire): Question[] | null {
     if (
       !q ||
       typeof q.question !== "string" ||
-      ((codex || kimi) && (typeof q.id !== "string" || !q.id))
+      ((codex || idBased) && (typeof q.id !== "string" || !q.id))
     )
       return null;
     const options = q.options ?? [];
@@ -32,29 +39,29 @@ export function nativeQuestions(payload: Wire): Question[] | null {
       options.length > 100 ||
       options.some(
         (o: Wire) =>
-          !o || typeof o.label !== "string" || (kimi && (typeof o.id !== "string" || !o.id)),
+          !o || typeof o.label !== "string" || (idBased && (typeof o.id !== "string" || !o.id)),
       ) ||
-      new Set(options.map((o: Wire) => (kimi ? o.id : o.label))).size !== options.length
+      new Set(options.map((o: Wire) => (idBased ? o.id : o.label))).size !== options.length
     )
       return null;
-    const key = codex || kimi ? q.id : claude ? q.question : String(index);
+    const key = codex || idBased ? q.id : claude ? q.question : String(index);
     if (normalized.some((item) => item.key === key)) return null;
     normalized.push({
       key,
       text: q.question,
-      ...(kimi && typeof q.body === "string" ? { body: q.body } : {}),
+      ...(idBased && typeof q.body === "string" ? { body: q.body } : {}),
       options,
       multiple: claude
         ? q.multiSelect === true
-        : kimi
+        : idBased
           ? q.multi_select === true
           : opencode && q.multiple === true,
       custom:
         !options.length ||
         (codex
           ? q.isOther === true
-          : kimi
-            ? q.allow_other === true
+          : idBased
+            ? q.allow_other !== false
             : opencode
               ? q.custom !== false
               : true),
@@ -83,13 +90,15 @@ export function NativeQuestions({
   const [custom, setCustom] = useState<Record<string, string>>({});
   const [skipped, setSkipped] = useState<Record<string, boolean>>({});
   const kimi = payload.protocol === "kimi";
+  const kodo = payload.protocol === "kodo";
+  const idBased = kimi || kodo;
   const answers = questions.map((_q, index) =>
     custom[index]?.trim() ? [custom[index]!.trim()] : (selected[index] ?? []),
   );
   const ready = answers.every((answer, index) => answer.length > 0 || (kimi && skipped[index]));
   const submit = () => {
     if (!ready || disabled) return;
-    const answer = kimi
+    const answer = idBased
       ? {
           answers: Object.fromEntries(
             questions.map((q, index) => {
@@ -140,11 +149,11 @@ export function NativeQuestions({
           {q.body && <p className="interaction__choice-desc">{q.body}</p>}
           <div className="interaction__choices">
             {q.options.map((option) => {
-              const value = kimi ? option.id! : option.label;
+              const value = idBased ? option.id! : option.label;
               const isSelected =
                 !skipped[index] &&
                 (selected[index] ?? []).includes(value) &&
-                ((kimi && q.multiple) || !custom[index]?.trim());
+                ((idBased && q.multiple) || !custom[index]?.trim());
               return (
                 <label
                   key={value}
@@ -156,7 +165,8 @@ export function NativeQuestions({
                     checked={isSelected}
                     disabled={disabled || skipped[index]}
                     onChange={(e) => {
-                      if (!kimi || !q.multiple) setCustom((values) => ({ ...values, [index]: "" }));
+                      if (!idBased || !q.multiple)
+                        setCustom((values) => ({ ...values, [index]: "" }));
                       setSelected((values) => ({
                         ...values,
                         [index]: q.multiple
@@ -168,9 +178,23 @@ export function NativeQuestions({
                     }}
                   />
                   <div className="interaction__choice-content">
-                    <span className="interaction__choice-label">{option.label}</span>
+                    <span className="interaction__choice-label">
+                      {option.label}
+                      {option.alwaysRule && (
+                        <span className="interaction__badge" style={{ marginLeft: 6 }}>
+                          并记入规则
+                        </span>
+                      )}
+                    </span>
                     {typeof option.description === "string" && (
                       <small className="interaction__choice-desc">{option.description}</small>
+                    )}
+                    {option.alwaysRule && (
+                      <small className="interaction__choice-desc">
+                        规则（{option.alwaysRule.mode === "allow" ? "以后直接照做" : "以后先问我"}
+                        ）：
+                        {option.alwaysRule.text}
+                      </small>
                     )}
                   </div>
                 </label>

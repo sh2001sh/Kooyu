@@ -4,6 +4,7 @@ import { boundedJson } from "./http.js";
 import { KodoError } from "@kodo/protocol";
 import type { SessionService } from "../session-service.js";
 import type { ProviderVault } from "../providers/service.js";
+import { GitHubOAuth } from "./github-oauth.js";
 interface OAuthConfig {
   connectionId: string;
   clientId: string;
@@ -26,12 +27,15 @@ interface OAuthState {
 }
 const hash = (x: string) => createHash("sha256").update(x).digest("base64url");
 export class OAuthService {
+  readonly github: GitHubOAuth;
   private refreshing = new Map<string, Promise<void>>();
   constructor(
     private readonly service: SessionService,
     private readonly vault: ProviderVault,
     private readonly fetcher: typeof fetch = fetch,
-  ) {}
+  ) {
+    this.github = new GitHubOAuth(service, vault, fetcher);
+  }
   async configure(value: unknown) {
     const p = z
       .object({

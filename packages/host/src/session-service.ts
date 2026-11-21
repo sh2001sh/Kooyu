@@ -1,3 +1,19 @@
+import { IntakeFilter } from "./automations/intake.js";
+import { HeartbeatMonitor } from "./automations/heartbeat.js";
+import { SkillSedimentService } from "./configuration/skill-sediment.js";
+import { MemoryConsolidationService } from "./memory/consolidation.js";
+import { KnowledgeService } from "./knowledge/service.js";
+import { InteractivePageService } from "./pages/service.js";
+import { GitCheckpointService } from "./workspaces/checkpoints.js";
+import { MultiHarnessArenaService } from "./delegation/arena.js";
+import { isQuotaOrRateLimitError, prepareQuotaFallbackHandoff } from "./delegation/routing.js";
+import { PreviewService } from "./workspaces/preview.js";
+import { TerminalService } from "./execution/terminals.js";
+import { deviceAccess } from "./clients/access.js";
+import { BackgroundJobManager, createBackgroundJobTools } from "./execution/background-jobs.js";
+import { IMChannelService } from "./messaging/im.js";
+import { WorktreeService } from "./workspaces/worktrees.js";
+import { DelegationService } from "./delegation/service.js";
 import { validatePermissionMode } from "./configuration/permissions.js";
 import { sessionActivity, agentTranscript } from "./session-activity.js";
 import { z } from "zod";
@@ -18,6 +34,7 @@ import {
   conversationMessageIndex,
   watchSchema,
   projectGrantSchema,
+  askUserInputSchema,
   bindingDefaultsSchema,
   projectDefaultsSchema,
   HARNESS_IDS,
@@ -78,7 +95,7 @@ import { appSettings } from "./configuration/preferences.js";
 import { boundModelOption } from "./providers/model-option.js";
 import { DSH_FALLBACK_MODEL, readDshNativeConfig } from "./harnesses/dsh-native.js";
 import { nativeConfigLocations, nativeDefaults } from "./harnesses/native-defaults.js";
-import { createHarnessTools } from "./kodo/tools.js";
+import { createHarnessTools, stableRequestId } from "./kodo/tools.js";
 import { createWorkTools } from "./kodo/work-tools.js";
 import { NotificationService } from "./notifications/service.js";
 import { GoalService } from "./goals/service.js";
@@ -104,6 +121,7 @@ import { createSelfHostedTools } from "./kodo/self-hosted-tools.js";
 import { ExecutorService } from "./execution/service.js";
 import { AppUpdater } from "./updater.js";
 type Wake = {
+  createdAt?: string;
   id: string;
   watchId: string;
   generation: number;
@@ -148,11 +166,13 @@ export interface ServiceOptions {
   /** Search API transport; tests inject a fake. */
   webFetch?: typeof fetch;
   applicationFetch?: typeof fetch;
+  openIMStream?: typeof import("./messaging/im-streams.js").openIMStream;
   /** APNs uses the HTTP/2 provider API rather than Fetch. Tests may isolate its transport. */
   apnsTransport?: import("./notifications/apns.js").ApnsTransport;
   webEnv?: NodeJS.ProcessEnv;
   /** Tests only: allow web_fetch to reach loopback fixtures. */
   webAllowPrivateNetwork?: boolean;
+  onUpdateInstallLaunched?: (platform: string) => void;
 }
 export class SessionService {
   private readonly branchMutations = new Set<string>();
@@ -168,6 +188,7 @@ export class SessionService {
   readonly files: FileService;
   readonly executors: ExecutorService;
   readonly browser: BrowserService;
+  readonly intake: IntakeFilter;
   readonly webhooks: WebhookService;
   readonly delivery: NotificationDispatcher;
   readonly applications: ApplicationService;
@@ -178,6 +199,19 @@ export class SessionService {
   readonly permissions: PermissionService;
   readonly memory: MemoryService;
   readonly automations: AutomationService;
+  readonly heartbeat: HeartbeatMonitor;
+  readonly curatedSkills: SkillSedimentService;
+  readonly consolidation: MemoryConsolidationService;
+  readonly knowledge: KnowledgeService;
+  readonly pages: InteractivePageService;
+  readonly checkpoints: GitCheckpointService;
+  readonly arena: MultiHarnessArenaService;
+  readonly previews = new PreviewService();
+  readonly terminals = new TerminalService();
+  readonly backgroundJobs: BackgroundJobManager;
+  readonly im: IMChannelService;
+  readonly worktrees: WorktreeService;
+  readonly delegations: DelegationService;
   readonly capacity: ExecutionCapacity;
   private readonly workTimer: ReturnType<typeof setInterval>;
   private runtimeModels = new Map<string, string>();
@@ -214,6 +248,7 @@ export class SessionService {
   private readonly deadlineTimer: ReturnType<typeof setInterval>;
   private readonly maintenanceTimer: ReturnType<typeof setInterval>;
   private readonly nativeSyncTimer: ReturnType<typeof setInterval>;
+  private worktreeSweep?: ReturnType<WorktreeService["sweepDeleting"]>;
   private nativeSyncJob?: Promise<NativeSyncResult>;
   private nativeSyncOffset = 0;
   private readonly implementations: HarnessAdapter[];
@@ -229,13 +264,24 @@ export class SessionService {
     options: ServiceOptions = {},
   ) {
     this.dataDir =
-      options.dataDir ?? join(process.env.LOCALAPPDATA ?? process.cwd(), "Kodo", "host");
+      options.dataDir ?? join(process.env.LOCALAPPDATA ?? process.cwd(), "Kooyu", "host");
     this.providers = new ProviderService(store, {
       vault: options.providerVault,
       fetcher: options.providerFetch,
     });
     this.engines = new EngineManager(store, this.dataDir);
-    this.updater = new AppUpdater(store, this.dataDir, { fetcher: options.providerFetch });
+    this.updater = new AppUpdater(store, this.dataDir, {
+      fetcher: options.providerFetch,
+      onInstallLaunched: options.onUpdateInstallLaunched,
+      prepareInstall: () => this.pauseForUpdate(),
+      rollbackInstall: () => {
+        const h = this.health();
+        if (h.frozen) {
+          this.lifecycle.resume(h.processIdentity, h.generation);
+          this.resumeWork();
+        }
+      },
+    });
     this.feed = new NotificationService(store, this.notifications);
     this.goals = new GoalService(this, this.feed);
     this.web = new WebService(store, {
@@ -248,10 +294,62 @@ export class SessionService {
     this.lifecycle = new LifecycleGate(store);
     this.actions = new ActionJournal(store, this.lifecycle);
     this.permissions = new PermissionService(store);
-    this.memory = new MemoryService(store);
-    this.capacity = new ExecutionCapacity(Number(process.env.KOOYU_MAX_EXECUTIONS ?? 4));
+    this.memory = new MemoryService(store, this.dataDir);
+    this.capacity = new ExecutionCapacity(
+      Number(process.env.KOOYU_MAX_EXECUTIONS ?? 4),
+      Number(process.env.KOOYU_INTERACTIVE_RESERVE ?? 2),
+    );
+    this.backgroundJobs = new BackgroundJobManager(store, ({ job, recentOutput }) => {
+      if (
+        this.disposed ||
+        store.command(job.id) ||
+        !store.sessions().some((s) => s.id === job.sessionId)
+      )
+        return;
+      const session = store.session(job.sessionId);
+      store.saveCommand({
+        id: job.id,
+        sessionId: session.id,
+        kind: "send",
+        origin: "automation",
+        controllerId: null,
+        generation: session.ownerEpoch,
+        bindingRevision: session.bindingRevision,
+        status: "accepted",
+        nativeRunId: null,
+        createdAt: new Date().toISOString(),
+        body: {
+          mode: "queue",
+          text: JSON.stringify({
+            type: "background-job-exit",
+            jobId: job.id,
+            exitCode: job.exitCode,
+            recentOutput,
+          }),
+        },
+      });
+      store.afterCommit(() => this.schedule(session.id));
+    });
+    this.worktrees = new WorktreeService({
+      store,
+      addWorkspace: (project, root) => this.addWorkspace(project, root),
+      jobs: () => this.backgroundJobs,
+      hasActiveSession: (id) =>
+        this.terminals.busy(id) ||
+        store.sessions().some((s) => s.workspaceId === id && s.runState !== "idle"),
+    });
+    this.delegations = new DelegationService(this);
     this.automations = new AutomationService(this);
+    this.heartbeat = new HeartbeatMonitor(this);
+    this.curatedSkills = new SkillSedimentService(this.dataDir);
+    this.consolidation = new MemoryConsolidationService(this);
+    this.knowledge = new KnowledgeService(store);
+    this.pages = new InteractivePageService(store, this.dataDir);
+    this.checkpoints = new GitCheckpointService(store);
+    this.arena = new MultiHarnessArenaService(this);
     const vault = options.providerVault ?? systemVault;
+    this.intake = new IntakeFilter(this);
+    this.im = new IMChannelService(this, vault, options.applicationFetch, options.openIMStream);
     this.webhooks = new WebhookService(this, vault);
     this.delivery = new NotificationDispatcher(
       store,
@@ -270,11 +368,22 @@ export class SessionService {
     this.workTimer = setInterval(() => {
       if (this.disposed) return;
       try {
+        this.terminals.sweep(
+          (owner) =>
+            owner === "desktop" ||
+            (Date.parse(
+              this.store.record<{ expiresAt: string }>("device-public", owner)?.expiresAt ?? "",
+            ) > Date.now() &&
+              deviceAccess(this, owner).operations.includes("terminal.access")),
+        );
+        this.drainWakes();
         this.resumeWork();
         void this.automations.scan().catch(() => {});
+        void this.heartbeat.tick().catch(() => {});
         void this.webhooks.scan().catch(() => {});
         void this.delivery.scan().catch(() => {});
         void this.outbox.scan().catch(() => {});
+        void this.im.scan().catch(() => {});
       } catch (e) {
         this.failClosed(e);
       }
@@ -300,12 +409,22 @@ export class SessionService {
     }, 3600000);
     this.maintenanceTimer.unref();
     this.nativeSyncTimer = setInterval(() => {
+      if (!this.worktreeSweep) {
+        this.worktreeSweep = this.worktrees.sweepDeleting();
+        void this.worktreeSweep
+          .catch((error) => console.error(this.errorText(error)))
+          .finally(() => {
+            this.worktreeSweep = undefined;
+          });
+      }
       void this.syncNativeSessions().catch((error) =>
         console.error("Native history sync failed:", this.errorText(error)),
       );
     }, 60000);
     this.nativeSyncTimer.unref();
     try {
+      this.delegations.reconcileOnStartup();
+      this.backgroundJobs.drainExitNotifications();
       this.attachOrphanedSessions();
       this.backfillUsageModels();
       this.backfillUsageTimings();
@@ -313,8 +432,30 @@ export class SessionService {
       console.error(`Session project attachment failed: ${this.errorText(error)}`);
     }
   }
+  harnessCapabilities(id: HarnessId) {
+    return this.adapter(id).descriptor.capabilities;
+  }
   private adapter(id: HarnessId): HarnessAdapter {
     return this.implementations.find((a) => a.descriptor.id === id) ?? getAdapter(id);
+  }
+  async pauseForUpdate(): Promise<void> {
+    this.lifecycle.quiesce();
+    const active = this.store
+      .sessions()
+      .filter(
+        (s) =>
+          s.phase === "native" ||
+          s.runState !== "idle" ||
+          this.store
+            .commands(s.id)
+            .some((c) => ["accepted", "dispatched", "unknown"].includes(c.status)),
+      );
+    await Promise.allSettled(active.map((s) => this.stop(s.id, true)));
+    this.store.put("lifecycle", "update-paused", {
+      at: new Date().toISOString(),
+      generation: this.lifecycle.status().generation,
+      sessionIds: active.map((s) => s.id),
+    });
   }
   health() {
     const pending = this.store
@@ -382,12 +523,13 @@ export class SessionService {
         };
       }),
       supervisions: this.store.watches(),
+      delegationTickets: this.delegations.list(),
       bindings: this.store.records<HarnessBinding>("harness-binding"),
       inbox: this.store
         .records<InboxItem>("inbox")
         .filter((i) => !this.store.record("deleted-session", i.sessionId)),
       devices: this.store.records("device-public"),
-      projectGrants: this.store.records<ProjectGrant>("project-grant"),
+      projectGrants: this.store.records<ProjectGrant>("project-grant").filter((g) => !g.revoked),
       bindingDefaults: this.bindingDefaults(),
     };
   }
@@ -986,6 +1128,17 @@ export class SessionService {
       createdAt: new Date().toISOString(),
     };
     this.store.saveCommand(receipt);
+    const runToolAction = <T>(callId: string, args: unknown, operation: () => Promise<T>) =>
+      this.actions.run(
+        {
+          sessionId: id,
+          turnId: this.store.record<{ id: string }>("active-tool-turn", id)?.id ?? "initial",
+          toolCallId: callId,
+          actor: session.harnessId,
+        },
+        args,
+        operation,
+      );
     try {
       const handle = await this.adapter(session.harnessId).connect(session, {
         cwd: workspace?.rootPath ?? null,
@@ -1026,22 +1179,31 @@ export class SessionService {
                 ...createHarnessTools(this, session),
                 ...createWorkTools(this, session),
                 ...createSelfHostedTools(this, session),
+                ...(workspace?.rootPath
+                  ? createBackgroundJobTools(
+                      this.backgroundJobs,
+                      session,
+                      workspace.rootPath,
+                      runToolAction,
+                    )
+                  : []),
               ]
             : undefined,
-        toolAction: (callId, args, operation) =>
-          this.actions.run(
-            {
-              sessionId: id,
-              turnId: this.store.record<{ id: string }>("active-tool-turn", id)?.id ?? "initial",
-              toolCallId: callId,
-              actor: session.harnessId,
-            },
-            args,
-            operation,
-          ),
+        toolAction: runToolAction,
         memoryContext:
           session.kind === "supervisor"
             ? () => this.memory.promptContext(this.store.session(id).projectId)
+            : undefined,
+        soulPrompt:
+          session.kind === "supervisor"
+            ? () => this.memory.docs?.initialSystemPrompt() ?? null
+            : undefined,
+        isQuietTurn:
+          session.kind === "supervisor"
+            ? (commandId) => {
+                const origin = this.store.command(commandId)?.origin;
+                return origin === "automation" || origin === "wake";
+              }
             : undefined,
         sdkSessionOwners: () =>
           Object.fromEntries(
@@ -1364,6 +1526,15 @@ export class SessionService {
         session.runState =
           p.result === "rejected" && p.mode !== "steer" ? "idle" : knownEnded ? "idle" : "unknown";
         this.inbox(`error:${event.id}`, sessionId, "error", event.payload);
+        const errText =
+          typeof p.message === "string" ? p.message : typeof p.error === "string" ? p.error : "";
+        if (session.harnessId !== "kodo" && errText && isQuotaOrRateLimitError(errText)) {
+          this.store.afterCommit(() => {
+            try {
+              prepareQuotaFallbackHandoff(this, sessionId, errText);
+            } catch {}
+          });
+        }
       }
       if (type === "usage") this.usage(session, event, p);
       if (["turn-ended", "settled", "disconnected"].includes(type)) {
@@ -1392,6 +1563,9 @@ export class SessionService {
         !this.store.record<{ running: boolean }>("background", sessionId)?.running
       )
         this.store.afterCommit(() => this.capacity.release(sessionId));
+      if (type === "settled" && session.harnessId === "kodo" && session.kind === "supervisor") {
+        this.store.afterCommit(() => this.releaseIdleTodosIfDone(sessionId));
+      }
       this.store.saveSession(session);
       for (const watch of this.store
         .watches()
@@ -1733,6 +1907,29 @@ export class SessionService {
       )
         throw new KodoError("CONFLICT", `会话「${s.title}」正在运行，请先停止再移除项目。`);
     }
+    const revokeProjectAuthority = () => {
+      this.delegations.onProjectDeleted(id);
+      this.worktrees.detachProject(id);
+      for (const grant of this.store.records<ProjectGrant>("project-grant")) {
+        if (grant.projectId !== id || grant.revoked) continue;
+        const key = `${grant.controllerSessionId}:${id}`;
+        this.store.put("project-grant", key, {
+          ...grant,
+          revoked: true,
+          revision: (grant.revision ?? 1) + 1,
+          generation: (grant.generation ?? 1) + 1,
+        });
+        const authority = this.store.record<{ targets: string[]; projects: string[] }>(
+          "grant",
+          grant.controllerSessionId,
+        );
+        if (authority)
+          this.store.put("grant", grant.controllerSessionId, {
+            ...authority,
+            projects: authority.projects.filter((p) => p !== id),
+          });
+      }
+    };
     if (sessions === "keep") {
       // Close live connections; the conversations themselves are kept as they are.
       for (const s of members) {
@@ -1740,11 +1937,15 @@ export class SessionService {
         this.runtime.delete(s.id);
         await runtime?.close().catch(() => {});
       }
-      this.store.put("removed-project", id, { id, at: new Date().toISOString() });
+      this.store.transaction(() => {
+        revokeProjectAuthority();
+        this.store.put("removed-project", id, { id, at: new Date().toISOString() });
+      });
       return { removed: true, sessionsDeleted: 0, sessionsKept: members.length };
     }
     for (const s of members) await this.deleteSession(s.id);
     this.store.transaction(() => {
+      revokeProjectAuthority();
       // Deleted conversations keep their rows; release them from the project being removed.
       this.store.db
         .prepare("UPDATE sessions SET project_id=NULL, scope='global' WHERE project_id=?")
@@ -1752,11 +1953,6 @@ export class SessionService {
       this.store.db.prepare("UPDATE workspaces SET project_id=NULL WHERE project_id=?").run(id);
       this.store.remove("project-binding-defaults", id);
       this.store.remove("removed-project", id);
-      for (const grant of this.store.records<{ projectId?: string; controllerSessionId?: string }>(
-        "project-grant",
-      ))
-        if (grant.projectId === id && grant.controllerSessionId)
-          this.store.remove("project-grant", `${grant.controllerSessionId}:${id}`);
       this.store.db.prepare("DELETE FROM projects WHERE id=?").run(id);
     });
     return { removed: true, sessionsDeleted: members.length, sessionsKept: 0 };
@@ -2149,6 +2345,9 @@ export class SessionService {
     } else {
       targetWorkspaces = allWorkspaces;
     }
+
+    if (options.projectId && !targetWorkspaces.length && !options.directory)
+      return { candidates: [], warnings: [] };
 
     const scanCwds: Array<{ cwd: string | null; workspace: Workspace | null }> = options.directory
       ? [
@@ -2549,6 +2748,33 @@ export class SessionService {
     this.store.transaction(() => this.store.saveSession(bound));
     return bound;
   }
+  /** Queue an automated message to a supervisor session without modifying user-takeover pause state. */
+  dispatchAutomatedMessage(controllerId: string, requestId: string, text: string): Command | null {
+    const existing = this.store.command(requestId);
+    if (existing) return existing;
+    if (this.disposed || this.failed.has(controllerId) || this.lifecycle.status().frozen)
+      return null;
+    const pause = this.store.record<{ reason?: string }>("pause", controllerId);
+    if (pause?.reason === "停止并暂停托管") return null;
+    const session = this.store.sessions().find((s) => s.id === controllerId);
+    if (!session || session.archived) return null;
+    const command: Command = {
+      id: requestId,
+      sessionId: session.id,
+      kind: "send",
+      origin: "automation",
+      controllerId: null,
+      generation: session.ownerEpoch,
+      bindingRevision: session.bindingRevision,
+      status: "accepted",
+      nativeRunId: null,
+      createdAt: new Date().toISOString(),
+      body: { mode: "queue", text },
+    };
+    this.store.saveCommand(command);
+    this.store.afterCommit(() => this.schedule(session.id));
+    return command;
+  }
   acceptSend(sessionId: string, value: unknown, controllerId: string | null = null): Command {
     if (this.branchMutations.has(sessionId))
       throw new KodoError("CONFLICT", "正在切换消息分支，请稍后发送。");
@@ -2781,13 +3007,34 @@ export class SessionService {
           });
           continue;
         }
+        if (
+          (c.body.wakes as Wake[] | undefined)?.some((wake) => {
+            const ticket = this.delegations.findByWatchId(wake.watchId);
+            return (
+              !ticket ||
+              !this.delegations.revalidateMandate(ticket).ok ||
+              !this.store
+                .watches()
+                .some((w) => w.id === wake.watchId && w.generation === wake.generation)
+            );
+          })
+        ) {
+          this.store.transaction(() => {
+            this.store.saveCommand({ ...c, status: "cancelled" });
+            for (const wake of c.body.wakes as Wake[])
+              this.store.db
+                .prepare("UPDATE wakes SET state='pending' WHERE id=? AND state='dispatched'")
+                .run(wake.id);
+          });
+          continue;
+        }
         if (c.body.wake) {
           const w = this.store.watches().find((w) => w.id === (c.body.wake as Wire).watchId);
           if (!w || w.state !== "active" || w.generation !== (c.body.wake as Wire).generation) {
             this.store.saveCommand({ ...c, status: "cancelled" });
             continue;
           }
-          const reason = this.limitReason(w);
+          const reason = this.checkSupervisionLimits(w);
           if (reason) {
             this.changeWatch(w.id, "paused");
             this.inbox(`limit:${c.id}`, w.targetSessionId, "limit", { reason });
@@ -2936,6 +3183,8 @@ export class SessionService {
             this.store.saveWatch(w);
           }
         }
+        for (const wake of (c.body.wakes as Wake[] | undefined) ?? [])
+          this.store.db.prepare("UPDATE wakes SET state='confirmed' WHERE id=?").run(wake.id);
         if (c.body.wake)
           this.store.db
             .prepare("UPDATE wakes SET state='confirmed' WHERE id=?")
@@ -2970,7 +3219,7 @@ export class SessionService {
       return;
     }
   }
-  private inbox(id: string, sessionId: string, type: string, payload: unknown): void {
+  inbox(id: string, sessionId: string, type: string, payload: unknown): void {
     if (this.store.record("inbox", id)) return;
     this.store.transaction(() => {
       this.store.put("inbox", id, {
@@ -3010,6 +3259,92 @@ export class SessionService {
     return (
       !!answer && typeof answer === "object" && "decision" in answer && answer.decision === "accept"
     );
+  }
+  /**
+   * Sends a structured multi-choice decision card to the user across all paired clients
+   * (Desktop, Web, iOS, Android) using Kooyu's native `interaction` channel.
+   * When the user selects an option carrying `alwaysRule`, automatically persists that
+   * standing rule into `RULES.md` so future similar actions follow it immediately.
+   */
+  async askUser(
+    sessionId: string,
+    requestId: string,
+    rawInput: unknown,
+  ): Promise<{
+    cancelled?: boolean;
+    answers: Record<string, unknown>;
+    savedRules: { mode: "ask" | "allow"; text: string; alreadyExisted: boolean }[];
+  }> {
+    const session = this.store.session(sessionId);
+    if (session.kind !== "supervisor" || session.harnessId !== "kodo")
+      throw new KodoError("UNAUTHORIZED", "只有 Kooyu 主对话可以发起决策卡片。");
+    const parsed = askUserInputSchema.parse(rawInput);
+    const interactionId = `${sessionId}:${requestId}`;
+    const prior = this.store.record<{ answer: unknown }>("interaction-answer", interactionId);
+    const answer =
+      prior?.answer ??
+      (await this.interact(sessionId, requestId, {
+        protocol: "kodo",
+        method: "question/request",
+        params: parsed,
+      }));
+
+    if (answer && typeof answer === "object" && (answer as { cancelled?: boolean }).cancelled) {
+      return { cancelled: true, answers: {}, savedRules: [] };
+    }
+
+    const answersMap =
+      answer &&
+      typeof answer === "object" &&
+      "answers" in answer &&
+      typeof (answer as Wire).answers === "object" &&
+      (answer as Wire).answers !== null
+        ? ((answer as Wire).answers as Record<string, unknown>)
+        : {};
+
+    // Extract any selected options that carry an `alwaysRule` and persist them idempotently to RULES.md
+    const savedRules: { mode: "ask" | "allow"; text: string; alreadyExisted: boolean }[] = [];
+    for (const q of parsed.questions) {
+      const reply = answersMap[q.id];
+      const chosenIds = new Set<string>();
+      if (typeof reply === "string") {
+        chosenIds.add(reply);
+      } else if (Array.isArray(reply)) {
+        for (const item of reply) if (typeof item === "string") chosenIds.add(item);
+      } else if (reply && typeof reply === "object") {
+        const r = reply as Wire;
+        if (typeof r.option_id === "string") chosenIds.add(r.option_id);
+        if (Array.isArray(r.option_ids)) {
+          for (const item of r.option_ids) if (typeof item === "string") chosenIds.add(item);
+        }
+        if (Array.isArray(r.answers)) {
+          for (const item of r.answers) if (typeof item === "string") chosenIds.add(item);
+        }
+      }
+      for (const option of q.options) {
+        if (!option.alwaysRule) continue;
+        if (chosenIds.has(option.id) || chosenIds.has(option.label)) {
+          const ruleReqId = createHash("sha256")
+            .update(`ask-user-rule:${interactionId}:${q.id}:${option.id}`)
+            .digest("hex");
+          const uuid = `${ruleReqId.slice(0, 8)}-${ruleReqId.slice(8, 12)}-4${ruleReqId.slice(13, 16)}-a${ruleReqId.slice(17, 20)}-${ruleReqId.slice(20, 32)}`;
+          const saved = this.memory.addRuleFromApproval(
+            option.alwaysRule.mode,
+            option.alwaysRule.text,
+            uuid,
+          );
+          if (saved) {
+            savedRules.push({
+              mode: saved.rule.mode,
+              text: saved.rule.text,
+              alreadyExisted: saved.alreadyExisted,
+            });
+          }
+        }
+      }
+    }
+
+    return { answers: answersMap, savedRules };
   }
   private cancelProtocolRequests(sessionId: string, protocol: "kodo" | "acp"): void {
     for (const [id, pending] of this.interactions) {
@@ -3082,6 +3417,51 @@ export class SessionService {
     this.ingest(pending.sessionId, "state", { interactionResolved: id, runState: "running" });
     return { status: "processed" };
   }
+  markInboxRead(id: string): { status: string; resolved: boolean } {
+    const item = this.store.record<InboxItem>("inbox", id);
+    if (!item) return { status: "read", resolved: true };
+    const liveInteraction = item.type === "interaction" && this.interactions.has(id);
+    const nextResolved = item.resolved || !liveInteraction;
+    this.store.put("inbox", id, {
+      ...item,
+      read: true,
+      resolved: nextResolved,
+      ...(item.type === "interaction" && !liveInteraction && !item.resolved ? { stale: true } : {}),
+    });
+    try {
+      this.feed.markRead(`inbox:${id}`);
+    } catch {}
+    return { status: "read", resolved: nextResolved };
+  }
+  markAllInboxRead(): { status: string; count: number } {
+    const items = this.store.records<InboxItem>("inbox").filter((i) => !i.resolved && !i.read);
+    let count = 0;
+    for (const item of items) {
+      const liveInteraction = item.type === "interaction" && this.interactions.has(item.id);
+      if (liveInteraction) continue;
+      this.markInboxRead(item.id);
+      count++;
+    }
+    return { status: "read", count };
+  }
+  deleteInboxItem(id: string): { status: string; deleted: boolean } {
+    const item = this.store.record<InboxItem>("inbox", id);
+    const pending = this.interactions.get(id);
+    if (pending) {
+      this.interactions.delete(id);
+      pending.resolve({ cancelled: true });
+      try {
+        this.ingest(pending.sessionId, "state", { interactionResolved: id });
+      } catch {}
+    }
+    if (item) {
+      this.store.remove("inbox", id);
+    }
+    try {
+      this.feed.markRead(`inbox:${id}`);
+    } catch {}
+    return { status: "deleted", deleted: Boolean(item) };
+  }
   private pauseTargetInside(
     id: string,
     reason: string,
@@ -3102,6 +3482,7 @@ export class SessionService {
       w.state = "paused";
       w.generation++;
       this.store.saveWatch(w);
+      this.delegations.onWatchChanged(w.id, w.state);
       this.store.db
         .prepare("UPDATE wakes SET state='cancelled' WHERE watch_id=? AND state='pending'")
         .run(w.id);
@@ -3117,6 +3498,37 @@ export class SessionService {
           this.store.db
             .prepare("UPDATE wakes SET state='cancelled' WHERE id=?")
             .run((c.body.wake as Wire).id);
+        } else if (Array.isArray(c.body.wakes)) {
+          const allWakes = c.body.wakes as Wire[];
+          const matching = allWakes.filter((w) => w?.targetId === id);
+          if (matching.length > 0) {
+            for (const w of matching) {
+              this.store.db.prepare("UPDATE wakes SET state='cancelled' WHERE id=?").run(w.id);
+            }
+            const remaining = allWakes.filter((w) => w?.targetId !== id);
+            if (remaining.length === 0) {
+              this.store.saveCommand({ ...c, status: "cancelled", error: reason });
+            } else {
+              let nextText = c.body.text;
+              if (typeof c.body.text === "string") {
+                try {
+                  const parsed = JSON.parse(c.body.text) as {
+                    type?: string;
+                    reports?: Array<{ workerSessionId?: string | null }>;
+                    [k: string]: unknown;
+                  };
+                  if (parsed?.type === "harness-batch-report" && Array.isArray(parsed.reports)) {
+                    parsed.reports = parsed.reports.filter((r) => r.workerSessionId !== id);
+                    nextText = JSON.stringify(parsed);
+                  }
+                } catch {}
+              }
+              this.store.saveCommand({
+                ...c,
+                body: { ...c.body, wakes: remaining, text: nextText },
+              });
+            }
+          }
         }
       }
     this.store.put("pause", id, { reason, at: new Date().toISOString() });
@@ -3133,6 +3545,7 @@ export class SessionService {
     pause = true,
     requestId: string = randomUUID(),
     controllerId: string | null = null,
+    stopBackground = pause,
   ): Promise<{ status: string; cancel: string }> {
     const previous = this.store.command(requestId);
     if (previous) {
@@ -3182,6 +3595,9 @@ export class SessionService {
       return receipt;
     };
     this.ingest(id, "supervision", { action: pause ? "stop-and-pause" : "cancel-turn" });
+    if (stopBackground) {
+      await this.backgroundJobs.stopSession(id).catch(() => {});
+    }
     const current = this.store.session(id);
     if (current.runState === "idle" && current.executionState === "settled")
       return finish("not running; native execution settled", "confirmed");
@@ -3274,6 +3690,7 @@ export class SessionService {
       w.state = state;
       w.generation++;
       this.store.saveWatch(w);
+      this.delegations.onWatchChanged(w.id, w.state);
       this.store.db
         .prepare("UPDATE wakes SET state='cancelled' WHERE watch_id=? AND state='pending'")
         .run(w.id);
@@ -3312,10 +3729,11 @@ export class SessionService {
     if (payload.outcome === "failed") w.failures = (w.failures ?? 0) + 1;
     else w.failures = 0;
     if (w.mode === "continue") {
-      const reason = this.limitReason(w);
+      const reason = this.checkSupervisionLimits(w);
       if (reason) {
         w.state = "paused";
         w.generation++;
+        this.delegations.onWatchChanged(w.id, w.state, reason);
         this.inbox(`limit:${w.id}:${w.generation}`, w.targetSessionId, "limit", { reason });
       } else {
         const wake: Wake = {
@@ -3327,6 +3745,7 @@ export class SessionService {
           controllerId: w.controllerSessionId,
           targetId: w.targetSessionId,
           commandId: randomUUID(),
+          createdAt: new Date().toISOString(),
         };
         this.store.db
           .prepare("INSERT OR IGNORE INTO wakes VALUES (?,?,?,?,?)")
@@ -3343,12 +3762,23 @@ export class SessionService {
     if (!w.continuous) this.store.put("watch-fired", w.id, { generation: w.generation });
     this.store.saveWatch(w);
   }
-  private limitReason(w: Supervision): string | null {
+  checkSupervisionLimits(w: Supervision): string | null {
     const l = w.limits ?? {};
     if (l.endAt && Date.now() >= Date.parse(l.endAt)) return "已到结束时间";
     if ((l.maxContinuations ?? 0) > 0 && (w.continuations ?? 0) >= l.maxContinuations!)
       return "达到自动续聊次数";
     if ((l.maxFailures ?? 0) > 0 && (w.failures ?? 0) >= l.maxFailures!) return "达到连续失败阈值";
+    if (l.maxTotalTokens) {
+      const usage = this.store
+        .records<Usage>("usage")
+        .filter((u) => u.sessionId === w.targetSessionId || u.sessionId === w.controllerSessionId);
+      const total = usage.reduce(
+        (sum, u) =>
+          sum + (u.input ?? 0) + (u.output ?? 0) + (u.cacheRead ?? 0) + (u.cacheWrite ?? 0),
+        0,
+      );
+      if (total >= l.maxTotalTokens) return "达到托管 Token 上限";
+    }
     if ((l.budgetUsd ?? 0) > 0) {
       const ids = [w.targetSessionId, w.controllerSessionId],
         usage = this.store.records<Usage>("usage").filter((u) => ids.includes(u.sessionId));
@@ -3389,22 +3819,118 @@ export class SessionService {
         this.ingest(w.targetSessionId, "supervision", { action: "deadline-paused", watchId: w.id });
       }
   }
+  private readonly reporting = new Map<string, Promise<void>>();
+
+  private queueDelegationReport(key: string, wakes: Wake[]) {
+    if (this.reporting.has(key)) return;
+    const task = this.flushDelegationReport(wakes)
+      .catch((error) => {
+        if (!this.disposed) console.error("Delegation report:", this.errorText(error));
+      })
+      .finally(() => this.reporting.delete(key));
+    this.reporting.set(key, task);
+  }
+
+  private async flushDelegationReport(wakes: Wake[]) {
+    const tickets = wakes.map((w) => this.delegations.findByWatchId(w.watchId)!);
+    const first = tickets[0]!;
+    const members = first.batchId ? this.delegations.list({ batchId: first.batchId }) : tickets;
+    const watches = this.store.watches();
+    const age = Date.now() - Math.min(...wakes.map((w) => Date.parse(w.createdAt ?? "1970-01-01")));
+    const urgent = tickets.some(
+      (t) =>
+        t.workerSessionId &&
+        ["waiting-input", "failed"].includes(this.progress(t.workerSessionId).status),
+    );
+    const missing = members.some(
+      (t) =>
+        t.status === "provisioning" ||
+        (watches.some((w) => w.id === t.watchId && w.state === "active") &&
+          !wakes.some((w) => w.watchId === t.watchId)),
+    );
+    if (!urgent && (age < 1500 || (first.waitPolicy === "all" && missing && age < 1800000))) return;
+    const reports = await Promise.all(
+      [...new Map(tickets.map((t) => [t.id, t])).values()].map((t) =>
+        this.delegations.buildReport(t),
+      ),
+    );
+    if (this.disposed || this.lifecycle.status().frozen) return;
+    const controller = this.store.session(first.controllerSessionId);
+    this.store.transaction(() => {
+      for (const wake of wakes) {
+        const row = this.store.db.prepare("SELECT state FROM wakes WHERE id=?").get(wake.id);
+        const ticket = this.delegations.findByWatchId(wake.watchId);
+        if (row?.state !== "pending" || !ticket || !this.delegations.revalidateMandate(ticket).ok)
+          return;
+      }
+      const id = stableRequestId(
+        "batch-wake",
+        wakes
+          .map((w) => w.id)
+          .sort()
+          .join(","),
+      );
+      if (!this.store.command(id)) {
+        this.store.saveCommand({
+          id,
+          sessionId: controller.id,
+          kind: "send",
+          origin: "wake",
+          controllerId: null,
+          generation: controller.ownerEpoch,
+          bindingRevision: controller.bindingRevision,
+          status: "accepted",
+          nativeRunId: null,
+          createdAt: new Date().toISOString(),
+          body: {
+            mode: "queue",
+            wakes,
+            text: JSON.stringify({
+              type: "harness-batch-report",
+              batchId: first.batchId,
+              reports,
+              members: members.map((t) => ({
+                ticketId: t.id,
+                workerSessionId: t.workerSessionId,
+                status: t.status,
+                reason: t.lastError,
+              })),
+            }),
+          },
+        });
+      }
+      for (const wake of wakes)
+        this.store.db.prepare("UPDATE wakes SET state='dispatched' WHERE id=?").run(wake.id);
+      this.store.afterCommit(() => this.schedule(controller.id));
+    });
+  }
+
   private drainWakes(): void {
     if (this.disposed || this.lifecycle.status().frozen) return;
     const wakes = this.store.db
       .prepare("SELECT data FROM wakes WHERE state='pending'")
       .all()
       .map((r) => JSON.parse(r.data as string) as Wake);
+    const batches = new Map<string, Wake[]>();
     for (const wake of wakes) {
       const w = this.store.watches().find((w) => w.id === wake.watchId);
       if (!w || w.state !== "active" || w.mode !== "continue" || w.generation !== wake.generation) {
         this.store.db.prepare("UPDATE wakes SET state='cancelled' WHERE id=?").run(wake.id);
         continue;
       }
-      const limit = this.limitReason(w);
+      const ticket = this.delegations.findByWatchId(w.id);
+      const mandate = ticket && this.delegations.revalidateMandate(ticket);
+      const limit = mandate && !mandate.ok ? mandate.reason : this.checkSupervisionLimits(w);
       if (limit) {
         this.changeWatch(w.id, "paused");
         this.inbox(`limit:${wake.id}`, w.targetSessionId, "limit", { reason: limit });
+        continue;
+      }
+      if (ticket) {
+        const key = ticket.batchId ?? ticket.controllerSessionId;
+        const group = batches.get(key) ?? [];
+        group.push(wake);
+        batches.set(key, group);
         continue;
       }
       const controller = this.store.session(w.controllerSessionId);
@@ -3454,6 +3980,7 @@ export class SessionService {
       });
       this.schedule(controller.id);
     }
+    for (const [key, group] of batches) this.queueDelegationReport(key, group);
   }
   grantTarget(controllerId: string, targetId: string): void {
     const grant = this.store.record<{ targets: string[]; projects: string[] }>(
@@ -3478,18 +4005,40 @@ export class SessionService {
           controllerId,
         ) ?? { targets: [], projects: [] },
         key = `${controllerId}:${projectId}`;
+      const previous = this.store.record<ProjectGrant>("project-grant", key);
+      const revision = (previous?.revision ?? 0) + 1;
+      const generation =
+        (previous?.generation ?? 1) +
+        (input.mode === "revoke" || (previous && previous.mode !== input.mode) ? 1 : 0);
       if (input.mode === "revoke") {
         grant.projects = grant.projects.filter((id) => id !== projectId);
-        this.store.remove("project-grant", key);
+        if (previous)
+          this.store.put("project-grant", key, {
+            ...previous,
+            revoked: true,
+            revision,
+            generation,
+          });
       } else {
         if (!grant.projects.includes(projectId)) grant.projects.push(projectId);
-        this.store.put("project-grant", key, { ...input, controllerSessionId: controllerId });
+        this.store.put("project-grant", key, {
+          ...input,
+          controllerSessionId: controllerId,
+          revoked: false,
+          revision,
+          generation,
+        });
       }
       this.store.put("grant", controllerId, grant);
     });
     this.ingest(controllerId, "supervision", { action: "project-grant", ...input });
   }
-  createManagedDraft(controllerId: string, requestId: string, input: Wire): Session {
+  createManagedDraft(
+    controllerId: string,
+    requestId: string,
+    input: Wire,
+    options: { skipAutoWatch?: boolean } = {},
+  ): Session {
     const normalized = createSessionSchema.parse({ ...input, kind: "direct" }),
       c = this.store.session(controllerId),
       projectId = normalized.projectId,
@@ -3512,6 +4061,7 @@ export class SessionService {
     if (
       !projectId ||
       !grant?.projects.includes(projectId) ||
+      this.store.record<ProjectGrant>("project-grant", `${controllerId}:${projectId}`)?.revoked ||
       (c.projectId && c.projectId !== projectId)
     )
       throw new KodoError("UNAUTHORIZED", "新建会话需要用户授权项目范围。");
@@ -3522,7 +4072,7 @@ export class SessionService {
         "project-grant",
         `${controllerId}:${projectId}`,
       );
-      if (policy?.mode === "create-and-control")
+      if (!options.skipAutoWatch && !policy?.revoked && policy?.mode === "create-and-control")
         this.watch({
           controllerSessionId: controllerId,
           targetSessionId: s.id,
@@ -3562,7 +4112,10 @@ export class SessionService {
           w.state === "active",
       );
     if (!w) throw new KodoError("UNAUTHORIZED", "目标自动继续未启用或已被用户暂停。");
-    const reason = this.limitReason(w);
+    const ticket = this.delegations.findByWatchId(w.id);
+    const valid = ticket && this.delegations.revalidateMandate(ticket);
+    if (valid && !valid.ok) throw new KodoError("UNAUTHORIZED", valid.reason);
+    const reason = this.checkSupervisionLimits(w);
     if (reason) throw new KodoError("CONFLICT", reason);
     const pending = this.store
       .commands(target.id)
@@ -4406,13 +4959,53 @@ export class SessionService {
   }
   async maintenance() {
     if (this.disposed) return;
+    this.backgroundJobs.drainExitNotifications();
+    this.intake.collect();
     const events = this.store.collect();
     const notifications = this.feed.collect();
     const uploads = this.files.collect();
     const credentials = await collectProviderCredentials(this.store);
     if (this.store.records("provider").length && appSettings(this.store).autoRefreshModels)
       await this.providers.refreshCatalog(false).catch(() => {});
+    await this.compactIdleRuntimes().catch(() => {});
+    try {
+      this.consolidation.runDailyIfDue();
+    } catch {}
     return { events, notifications, uploads, credentials };
+  }
+  private releaseIdleTodosIfDone(sessionId: string): void {
+    if (this.disposed) return;
+    try {
+      const current = this.activity(sessionId).todos;
+      if (!current?.items?.length) return;
+      const hasOpenInteractions = [...this.interactions.values()].some(
+        (pending) => pending.sessionId === sessionId,
+      );
+      if (hasOpenInteractions) return;
+      const hasActiveDelegations = this.delegations
+        .list({ controllerSessionId: sessionId })
+        .some((ticket) => ["provisioning", "running", "waiting-input"].includes(ticket.status));
+      if (hasActiveDelegations) return;
+      const hasRunningBg = this.backgroundJobs.list({ sessionId, status: "running" }).length > 0;
+      if (hasRunningBg) return;
+      this.ingest(sessionId, "todo", { items: [] });
+    } catch {}
+  }
+  private async compactIdleRuntimes(): Promise<void> {
+    for (const [sessionId, runtime] of this.runtime.entries()) {
+      if (!runtime.compactIfIdle) continue;
+      const session = this.store.sessions().find((s) => s.id === sessionId);
+      if (!session || session.harnessId !== "kodo" || session.runState !== "idle") continue;
+      const hasOpenInteractions = [...this.interactions.values()].some(
+        (pending) => pending.sessionId === sessionId,
+      );
+      if (hasOpenInteractions) continue;
+      const hasActiveDelegations = this.delegations
+        .list({ controllerSessionId: sessionId })
+        .some((ticket) => ["provisioning", "running", "waiting-input"].includes(ticket.status));
+      if (hasActiveDelegations) continue;
+      await runtime.compactIfIdle().catch(() => {});
+    }
   }
   async dispose(): Promise<void> {
     for (const id of this.textBuffers.keys()) {
@@ -4426,11 +5019,17 @@ export class SessionService {
     this.updater.close();
     this.lifecycle.close();
     this.executors.dispose();
+    await Promise.allSettled(this.reporting.values());
+    this.previews.dispose();
+    this.im.close();
+    this.terminals.dispose();
+    await this.backgroundJobs.dispose();
     clearInterval(this.workTimer);
     await this.delivery.drain();
     clearInterval(this.deadlineTimer);
     clearInterval(this.maintenanceTimer);
     clearInterval(this.nativeSyncTimer);
+    await this.worktreeSweep?.catch(() => {});
     await this.nativeSyncJob;
     for (const i of this.interactions.values()) i.resolve({ cancelled: true });
     this.interactions.clear();
@@ -4438,6 +5037,7 @@ export class SessionService {
     this.runtime.clear();
     await this.browser.close();
     await this.actions.drain();
+    await this.applications.localMcp.dispose();
     await this.providers.close();
     await this.engines.close();
   }

@@ -1,0 +1,55 @@
+.native-windowbar {
+  display: none;
+}
+
+html[data-platform="win32"] {
+  --native-titlebar-height: env(titlebar-area-height, 38px);
+}
+
+html[data-platform="win32"] #root {
+  box-sizing: border-box;
+  height: 100dvh;
+  padding-top: var(--native-titlebar-height);
+}
+
+html[data-platform="win32"] .native-windowbar {
+  position: fixed;
+  inset: 0 0 auto;
+  height: var(--native-titlebar-height);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 150px 0 14px;
+  background: var(--surface-navigator);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  z-index: 10000;
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+html[data-platform="win32"] .native-windowbar__mark {
+  opacity: 0.85;
+  flex-shrink: 0;
+}
+
+html[data-platform="win32"] .native-windowbar__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html[data-platform="win32"] .app,
+html[data-platform="win32"] .setup-shell {
+  height: calc(100dvh - var(--native-titlebar-height));
+  min-height: 0;
+  /* Controls now live above the entire workspace, including its right panel. */
+  --window-controls-inset: 0px !important;
+}
+
+html[data-platform="win32"] .setup-layout {
+  min-height: calc(100dvh - var(--native-titlebar-height) - 54px);
+}

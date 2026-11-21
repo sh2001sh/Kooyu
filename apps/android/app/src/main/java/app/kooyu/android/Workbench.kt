@@ -31,12 +31,13 @@ data class WorkbenchState(
     val conversation: JSONObject? = null,
     val selected: String? = null, val olderCursor: Int? = null, val loadingHistory: Boolean = false,
     val usage: UsageReport? = null, val usageLoading: Boolean = false, val usageError: String = "",
-    val addingDevice: Boolean = false, val composerDraft: String = "", val composerAttachments: List<ManagedAttachment> = emptyList(), val online: Boolean = false,
+    val requestedCloudHost: String? = null, val addingDevice: Boolean = false, val composerDraft: String = "", val composerAttachments: List<ManagedAttachment> = emptyList(), val online: Boolean = false,
     val busy: Boolean = false, val error: String = "", val notice: String = "",
 ) {
     val connection: Connection? get() = book.active
     val connections: List<Connection> get() = book.devices
     val older: Boolean get() = olderCursor != null
+    val canMail: Boolean get() = !online && !busy && connection?.mailboxSeed != null && connection?.pending == null
     val canWrite: Boolean get() = online && !busy && connection?.pending == null
 }
 class Workbench(app: Application) : AndroidViewModel(app) {
@@ -51,6 +52,7 @@ class Workbench(app: Application) : AndroidViewModel(app) {
     private var settingsRefreshedAt = 0L
     private var settingsRefresh: Job? = null
     init {
+        CloudDevice.vault = vault
         try { mutable.update { it.copy(book = vault.load()) } }
         catch (_: Exception) { mutable.update { it.copy(error = "无法读取设备凭据，请重试或清除损坏的本机连接。") } }
     }
@@ -71,7 +73,7 @@ class Workbench(app: Application) : AndroidViewModel(app) {
             }
         }
     }
-    fun addDevice(show: Boolean) { if (!mutable.value.busy) mutable.update { it.copy(addingDevice = show, error = "") } }
+    fun addDevice(show: Boolean, requestedCloudHost: String? = null) { if (!mutable.value.busy) mutable.update { it.copy(addingDevice = show, requestedCloudHost = requestedCloudHost, error = "") } }
     fun switchDevice(id: String) {
         if (mutable.value.busy || mutable.value.book.activeHostId == id) return
         runCatching { val next = mutable.value.book.select(id); commit(next); reset(next) }.onFailure { e -> mutable.update { it.copy(error = e.message ?: "无法切换设备。") } }
@@ -83,9 +85,19 @@ class Workbench(app: Application) : AndroidViewModel(app) {
     }
     fun removeDevice(id: String) {
         if (mutable.value.busy) return
-        mutable.value.connections.firstOrNull { it.hostId == id }?.let { BackgroundReminders.stopHost(getApplication(), it, "连接已移除，后台提醒已停止。") }
-        runCatching { val active = mutable.value.book.activeHostId == id; val next = mutable.value.book.remove(id); commit(next); if (active) reset(next) }
-            .onFailure { e -> mutable.update { it.copy(error = e.message ?: "无法移除本机连接。") } }
+        val connection = mutable.value.connections.firstOrNull { it.hostId == id } ?: return
+        mutable.update { it.copy(busy=true) }
+        viewModelScope.launch {
+            try {
+                CloudDevice.logout(connection)
+                BackgroundReminders.stopHost(getApplication(), connection, "连接已移除，后台提醒已停止。")
+                val active=mutable.value.book.activeHostId==id
+                val next=mutable.value.book.remove(id)
+                commit(next)
+                if(active)reset(next)
+            } catch(e:Exception) {mutable.update {it.copy(error=e.message ?: "无法撤销设备。")}}
+            finally {mutable.update {it.copy(busy=false)}}
+        }
     }
     fun clearDamagedConnections() {
         if (mutable.value.busy) return
@@ -121,7 +133,7 @@ class Workbench(app: Application) : AndroidViewModel(app) {
                 workspaces = snapshot.optJSONArray("workspaces")?.objects()?.map(HostWorkspace::parse) ?: emptyList(),
                 harnesses = snapshot.optJSONArray("harnesses")?.objects()?.map(HostHarness::parse) ?: emptyList(),
                 bindings = snapshot.optJSONArray("bindings")?.objects() ?: emptyList(),
-                inbox = snapshot.getJSONArray("inbox").objects().filter { p -> !p.optBoolean("resolved") }.map(InboxItem::parse), online = true, error = if (it.online) it.error else "") }
+                inbox = snapshot.getJSONArray("inbox").objects().filter { p -> !p.optBoolean("resolved") && !p.optBoolean("read") }.map(InboxItem::parse), online = true, error = if (it.online) it.error else "") }
             if (reconnecting) mutable.update { it.copy(notice = "连接已恢复 · ${it.inbox.size} 项待处理，可在「待办」查看。") }
             refreshSettings(c, generation)
             val selected = mutable.value.selected
@@ -146,11 +158,30 @@ class Workbench(app: Application) : AndroidViewModel(app) {
                     path.contains("/commands/") && op.optString("method") == "PATCH" -> path + "?requestId=" + op.getString("id")
                     else -> null
                 }
-                if (receiptPath != null) {
-                    val receipt = try { api.get(receiptPath) } catch (e: CancellationException) { throw e } catch (_: Exception) { null }
-                    if (receipt != null && current(c, generation) && mutable.value.connection?.pending?.optString("id") == op.getString("id")) {
-                        if (!op.optBoolean("management") || receipt.optString("status") in listOf("confirmed", "failed")) {
-                            clearPending(); mutable.update { it.copy(notice = if (receipt.optString("status") == "failed") receipt.optJSONObject("error")?.optString("message") ?: "操作未完成。" else "已从设备核对操作回执。") }
+                if (receiptPath == null) {
+                    // Operations without a Host receipt endpoint must not permanently write-lock the app.
+                    if (current(c, generation) && mutable.value.connection?.pending?.optString("id") == op.getString("id")) {
+                        clearPending()
+                    }
+                } else {
+                    var notFound = false
+                    val receipt = try { api.get(receiptPath) }
+                    catch (e: CancellationException) { throw e }
+                    catch (e: HostError) { if (e.status == 404) notFound = true; null }
+                    catch (_: Exception) { null }
+                    if (current(c, generation) && mutable.value.connection?.pending?.optString("id") == op.getString("id")) {
+                        if (notFound) {
+                            clearPending()
+                        } else if (receipt != null && (!op.optBoolean("management") || receipt.optString("status") in listOf("confirmed", "failed", "unknown"))) {
+                            clearPending()
+                            val status = receipt.optString("status")
+                            mutable.update {
+                                it.copy(
+                                    notice = if (status == "failed" || status == "unknown")
+                                        receipt.optJSONObject("error")?.optString("message")?.ifBlank { "操作未完成，请核对后重试。" } ?: "操作未完成。"
+                                    else "已从设备核对操作回执。"
+                                )
+                            }
                         }
                     }
                 }
@@ -219,6 +250,29 @@ class Workbench(app: Application) : AndroidViewModel(app) {
     suspend fun send(text: String, mode: String? = null, attachmentIds: List<String> = emptyList()): Boolean {
         val id = mutable.value.selected ?: return false
         if ((text.isBlank() && attachmentIds.isEmpty()) || text.length > 200000) return false
+        if (mutable.value.canMail && attachmentIds.isEmpty()) {
+            val c = mutable.value.connection ?: return false
+            val generation = epoch
+            mutable.update { it.copy(busy = true) }
+            try {
+                val host = HostAPI.origin(c.url).pathSegments.last { it.isNotEmpty() }
+                val envelope = SecureTunnel.mail(c,host,id,text)
+                val pending = JSONObject().put("id",envelope.getString("commandId")).put("path","/sessions/$id/send")
+                commit(mutable.value.book.put(c.copy(pending=pending)))
+                HostAPI(c).postMail(envelope)
+                if (!current(c,generation)) return false
+                clearPending()
+                mutable.update { it.copy(composerDraft="",notice="已投递离线信箱，设备上线后接收。") }
+                return true
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                if (current(c,generation)) {
+                    if (e is HostError && e.status in 400..499) clearPending()
+                    mutable.update { it.copy(error=e.message ?: "无法确认离线投递结果。") }
+                }
+                return false
+            } finally { if (current(c,generation)) mutable.update { it.copy(busy=false) } }
+        }
         val runState = mutable.value.sessions.firstOrNull { it.id == id }?.runState ?: "unknown"
         val sent = execute("/sessions/" + id + "/send", body = JSONObject().put("text", text).put("mode", mode ?: composerSendMode(runState)).put("attachmentIds", org.json.JSONArray(attachmentIds))) != null
         if (sent && mutable.value.selected == id) mutable.update { it.copy(composerDraft = "", composerAttachments = emptyList()) }
@@ -260,6 +314,54 @@ class Workbench(app: Application) : AndroidViewModel(app) {
     suspend fun cancelTurn() { mutable.value.selected?.let { execute("/sessions/$it/stop", body = JSONObject().put("pause", false)) } }
     suspend fun stop() { mutable.value.selected?.let { execute("/sessions/" + it + "/stop", body = JSONObject().put("pause", true)) } }
     suspend fun answer(item: InboxItem, action: NativeAction) { execute("/interactions/" + encoded(item.id), body = JSONObject().put("answer", action.answer)) }
+    suspend fun markInboxRead(id: String): Boolean {
+        val c = mutable.value.connection ?: return false
+        val generation = epoch
+        return try {
+            HostAPI(c).post("/inbox/" + encoded(id) + "/read", JSONObject())
+            if (current(c, generation)) {
+                mutable.update { it.copy(inbox = it.inbox.filterNot { item -> item.id == id }, notice = "已标为已读。") }
+                refresh()
+            }
+            true
+        } catch (e: CancellationException) { throw e }
+        catch (e: Exception) {
+            if (current(c, generation)) mutable.update { it.copy(error = e.message ?: "标记已读失败，请重试。") }
+            false
+        }
+    }
+    suspend fun markAllInboxRead(): Boolean {
+        val c = mutable.value.connection ?: return false
+        val generation = epoch
+        return try {
+            HostAPI(c).post("/inbox/read-all", JSONObject())
+            if (current(c, generation)) {
+                mutable.update { it.copy(inbox = it.inbox.filter { item -> item.type == "interaction" && item.actions.isNotEmpty() }, notice = "已全部标为已读。") }
+                refresh()
+            }
+            true
+        } catch (e: CancellationException) { throw e }
+        catch (e: Exception) {
+            if (current(c, generation)) mutable.update { it.copy(error = e.message ?: "全部已读失败，请重试。") }
+            false
+        }
+    }
+    suspend fun deleteInboxItem(id: String): Boolean {
+        val c = mutable.value.connection ?: return false
+        val generation = epoch
+        return try {
+            HostAPI(c).perform("/inbox/" + encoded(id), "DELETE", null)
+            if (current(c, generation)) {
+                mutable.update { it.copy(inbox = it.inbox.filterNot { item -> item.id == id }, notice = "已删除消息。") }
+                refresh()
+            }
+            true
+        } catch (e: CancellationException) { throw e }
+        catch (e: Exception) {
+            if (current(c, generation)) mutable.update { it.copy(error = e.message ?: "删除消息失败，请重试。") }
+            false
+        }
+    }
     suspend fun execute(path: String, method: String = "POST", body: JSONObject? = JSONObject(), refreshAfter: Boolean = true): JSONObject? {
         val state = mutable.value
         val c = state.connection ?: return null
@@ -268,23 +370,28 @@ class Workbench(app: Application) : AndroidViewModel(app) {
         mutable.update { it.copy(busy = true, error = "") }
         val id = UUID.randomUUID().toString()
         val management = path.startsWith("/automations") && path != "/automations/preview" || path.startsWith("/memory") || Regex("/goals/[^/]+/review").matches(path)
-        if (path.endsWith("/send") || path.endsWith("/stop") || path.endsWith("/settings") || path.endsWith("/branch") || path.endsWith("/message-branches") || path.startsWith("/interactions/") || path.contains("/commands/") && method == "PATCH") body?.put("requestId", id)
+        val hasReceipt = management || path.endsWith("/send") || path.endsWith("/stop") || path.endsWith("/settings") || (path.contains("/commands/") && method == "PATCH")
+        if (path.endsWith("/send") || path.endsWith("/stop") || path.endsWith("/settings") || path.endsWith("/branch") || path.endsWith("/message-branches") || path.startsWith("/interactions/") || (path.contains("/commands/") && method == "PATCH") || path == "/providers" || path == "/provider-models" || path == "/harness-bindings" || path == "/harness-provider-bindings") {
+            if (body != null && !body.has("requestId")) body.put("requestId", id)
+        }
         try {
-            val pending = JSONObject().put("id", id).put("path", path).put("method", method).put("body", body).put("management", management)
-            commit(mutable.value.book.put(c.copy(pending = pending)))
+            if (hasReceipt) {
+                val pending = JSONObject().put("id", id).put("path", path).put("method", method).put("body", body).put("management", management)
+                commit(mutable.value.book.put(c.copy(pending = pending)))
+            }
             var result = if (management) HostAPI(c).post("/client/operations", JSONObject().put("requestId", id).put("path", "/api$path").put("method", method).put("body", body ?: JSONObject()))
                 else HostAPI(c).perform(path, method, if (method == "DELETE") null else body)
             if (!current(c, generation)) return null
             if (management) {
                 val status = result.optString("status")
                 if (status != "confirmed") {
-                    if (status == "failed") clearPending()
-                    mutable.update { it.copy(error = result.optJSONObject("error")?.optString("message") ?: "操作结果待核对，不会自动重发。") }
+                    if (status == "failed" || status == "unknown") clearPending()
+                    mutable.update { it.copy(error = result.optJSONObject("error")?.optString("message") ?: "操作未完成，请核对后重试。") }
                     return null
                 }
                 result = result.optJSONObject("result") ?: JSONObject()
             }
-            clearPending()
+            if (hasReceipt) clearPending()
             if (path == "/app-settings" && method == "PATCH") mutable.update { it.copy(appSettings = result) }
             mutable.update { it.copy(notice = if (result.has("cancel")) "停止回执：" + result.optString("cancel") else "设备已保存操作。") }
             if (refreshAfter) refresh()
@@ -292,8 +399,9 @@ class Workbench(app: Application) : AndroidViewModel(app) {
         } catch (e: CancellationException) { throw e }
         catch (e: Exception) {
             if (current(c, generation)) {
-                if (e is HostError && e.status in 400..499) runCatching { clearPending() }
-                mutable.update { it.copy(error = (e.message ?: "连接中断") + "\n结果未知时请先核对，应用不会自动重发。") }
+                if (!hasReceipt || (e is HostError && e.status in 400..499)) runCatching { clearPending() }
+                val suffix = if (hasReceipt && !(e is HostError && e.status in 400..499)) "\n结果未知时请先核对，应用不会自动重发。" else ""
+                mutable.update { it.copy(error = (e.message ?: "连接中断") + suffix) }
             }
             return null
         } finally { if (current(c, generation)) mutable.update { it.copy(busy = false) } }

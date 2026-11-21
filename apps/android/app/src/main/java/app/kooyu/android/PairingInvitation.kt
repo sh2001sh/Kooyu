@@ -20,11 +20,13 @@ data class PairingInvitation(val address: String, val code: String) {
             require(uri.scheme.equals("https", ignoreCase = true) && !uri.host.isNullOrBlank() &&
                 uri.rawUserInfo == null && uri.rawQuery == null &&
                 (uri.rawPath.isNullOrEmpty() || uri.rawPath == "/" || Regex("/h/[a-f0-9]{64}/?").matches(uri.rawPath))) { message }
-            val match = Regex("pair=([a-fA-F0-9]{32})").matchEntire(uri.rawFragment ?: "")
+            val match = Regex("pair=((?:V2-)?[a-fA-F0-9]{32})(?:&transaction=[a-f0-9-]{36}&claim=[A-Za-z0-9_-]{43}&host=[a-f0-9-]{36})?").matchEntire(uri.rawFragment ?: "")
             require(match != null) { message }
             val address = try { HostAPI.origin(raw.trim().substringBefore('#')).toString().trimEnd('/') }
                 catch (_: Exception) { throw IllegalArgumentException(message) }
-            return PairingInvitation(address, match.groupValues[1].uppercase(Locale.ROOT))
+            return PairingInvitation(address, match.groupValues[1].uppercase(Locale.ROOT) + match.value.removePrefix("pair=" + match.groupValues[1]))
         }
     }
 }
+
+

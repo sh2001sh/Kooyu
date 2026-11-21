@@ -30,7 +30,7 @@ test("v3 unicode61 search index migrates without losing Chinese history or event
   db.close();
   const store = new Store(path);
   try {
-    assert.equal(store.db.prepare("PRAGMA user_version").get()!.user_version, 9);
+    assert.equal(store.db.prepare("PRAGMA user_version").get()!.user_version, 10);
     assert.equal(store.search("中文")[0]?.eventId, "native-history:synthetic");
     assert.equal(store.search("中文搜索")[0]?.sessionId, "s");
   } finally {

@@ -24,7 +24,7 @@ import type {
 } from "@kodo/protocol";
 import { HARNESS_PROVIDER_PROTOCOLS, bindingReasoningLevels } from "@kodo/protocol/client";
 import { api } from "../../lib/host-client";
-import { formatDate, shortModelLabel } from "../../lib/harnesses";
+import { HARNESS_NAMES, formatDate, shortModelLabel } from "../../lib/harnesses";
 import { catalogModelSource, groupCatalogModels } from "../../lib/catalog-models";
 import {
   CLAUDE_MODEL_MAP_SLOTS,
@@ -34,7 +34,7 @@ import {
   type ClaudeModelSlot,
 } from "../../lib/model-mapping";
 import { useAppPreferences } from "../../lib/preferences";
-import { HarnessBadge } from "../KodoBrand";
+import { HarnessBadge, HarnessGlyph } from "../KooyuBrand";
 import { SettingsPage, SettingsRow, SettingsSection, StatusDot, SxSelect } from "./SettingsKit";
 import {
   ModelPricingEditor,
@@ -220,7 +220,7 @@ function ProviderCard({
   const [endpointChoices, setEndpointChoices] = useState<Partial<Record<HarnessId, string>>>({});
   const [expandedConfigId, setExpandedConfigId] = useState<HarnessId | null>(null);
   const [newModel, setNewModel] = useState("");
-  const [modelsOpen, setModelsOpen] = useState(true);
+  const [modelsOpen, setModelsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const failed = p.discovery?.some((d) => d.status === "error");
   const endpoint = p.endpoints[0];
@@ -236,9 +236,12 @@ function ProviderCard({
   const activeHarnesses = compatibleHarnesses.filter(
     (h) => activeBindingFor(h.id)?.providerId === p.id,
   );
-  const usedBy = snapshot
-    ? activeHarnesses.length
-    : bindings.filter((b) => b.providerId === p.id).length;
+  const appliedHarnessChips: Array<{ id: HarnessId; name: string }> = snapshot
+    ? activeHarnesses.map((h) => ({ id: h.id, name: h.name }))
+    : [...new Set(bindings.filter((b) => b.providerId === p.id).map((b) => b.harnessId))].map(
+        (id) => ({ id, name: HARNESS_NAMES[id] ?? id }),
+      );
+  const usedBy = appliedHarnessChips.length;
 
   const lockedEndpoint =
     selectedEndpointId === "all" ? undefined : p.endpoints.find((e) => e.id === selectedEndpointId);
@@ -773,16 +776,39 @@ function ProviderCard({
               <StatusDot tone="ok">已连接</StatusDot>
             )}
             <span className="sx-tag">{models.length} 个模型</span>
-            <button
-              type="button"
-              className={`sx-tag sx-tag--btn ${applying ? "is-active" : ""}`}
-              onClick={() => {
-                setApplying((v) => !v);
-                setApplyError("");
-              }}
-            >
-              {usedBy ? `${usedBy} 个引擎在用` : "尚未被引擎使用"}
-            </button>
+            {appliedHarnessChips.length > 0 ? (
+              <div
+                className="sx-applied-harnesses"
+                aria-label={`已应用到 ${appliedHarnessChips.map((h) => h.name).join("、")}`}
+              >
+                {appliedHarnessChips.map((h) => (
+                  <button
+                    key={h.id}
+                    type="button"
+                    className={`sx-tag sx-tag--btn sx-tag--applied ${applying ? "is-active" : ""}`}
+                    title={`已应用到 ${h.name}，点击调整应用范围`}
+                    onClick={() => {
+                      setApplying(true);
+                      setApplyError("");
+                    }}
+                  >
+                    <HarnessGlyph harnessId={h.id} size={11} />
+                    <span>{h.name}</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <button
+                type="button"
+                className={`sx-tag sx-tag--btn ${applying ? "is-active" : ""}`}
+                onClick={() => {
+                  setApplying(true);
+                  setApplyError("");
+                }}
+              >
+                尚未被引擎使用
+              </button>
+            )}
           </div>
         </div>
       }

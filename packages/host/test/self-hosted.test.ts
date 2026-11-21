@@ -27,7 +27,7 @@ test("migration snapshots are private and failed migrations roll back original d
     first.db.exec("PRAGMA user_version=8");
     first.close();
     const migrated = new Store(file);
-    assert.equal(migrated.db.prepare("PRAGMA user_version").get()!.user_version, 9);
+    assert.equal(migrated.db.prepare("PRAGMA user_version").get()!.user_version, 10);
     migrated.close();
     const before = readdirSync(dir).filter((f) => f.includes(".pre-v8-"));
     assert.equal(before.length, 1);
@@ -60,7 +60,11 @@ test("migration snapshots are private and failed migrations roll back original d
     rmSync(dir, { recursive: true, force: true });
   }
 });
-function setup(fetcher?: typeof fetch, apnsTransport?: ApnsTransport) {
+function setup(
+  fetcher?: typeof fetch,
+  apnsTransport?: ApnsTransport,
+  openIMStream?: typeof import("../src/messaging/im-streams.js").openIMStream,
+) {
   const dir = mkdtempSync(join(tmpdir(), "kooyu-work-")),
     store = new Store(":memory:"),
     secrets = new Map<string, string>();
@@ -78,6 +82,7 @@ function setup(fetcher?: typeof fetch, apnsTransport?: ApnsTransport) {
     adapters: [],
     providerVault: vault,
     applicationFetch: fetcher,
+    openIMStream,
     apnsTransport,
   });
   const project = service.createProject({ name: "work" });
@@ -93,6 +98,73 @@ function setup(fetcher?: typeof fetch, apnsTransport?: ApnsTransport) {
     rmSync(dir, { recursive: true, force: true });
   };
   return { store, service, controller, project, secrets, vault, cleanup };
+}
+
+for (const kind of ["feishu", "wecom"] as const) {
+  test(
+    kind + " long connection scopes inbound messages and ignores the old reader after rebinding",
+    async () => {
+      let receive!: (m: import("../src/messaging/im-streams.js").IncomingText) => void;
+      let closed = 0;
+      const sent: string[][] = [];
+      const f = setup(undefined, undefined, async (actual, app, secret, onMessage) => {
+        assert.equal(actual, kind);
+        assert.equal(app, "app");
+        assert.equal(secret, "fixture");
+        receive = onMessage;
+        return {
+          close() {
+            closed++;
+          },
+          async send(...args) {
+            sent.push(args);
+            return { messageId: "receipt" };
+          },
+        };
+      });
+      try {
+        const c = await f.service.applications.connect({
+          requestId: randomUUID(),
+          applicationId: kind,
+          version: "1.0.0",
+          name: kind,
+          token: "fixture",
+        });
+        assert.ok(c);
+        const binding = {
+          connectionId: c.id,
+          controllerId: f.controller.id,
+          ownerExternalUserId: "owner",
+          chatId: "chat",
+          appId: "app",
+        };
+        f.service.im.bind(binding);
+        await f.service.im.scan();
+        const message = { id: "first", sender: "owner", chat: "chat", text: "fixture" };
+        receive(message);
+        receive(message);
+        receive({ ...message, id: "second", chat: "other" });
+        const stale = receive;
+        const requestId = randomUUID();
+        await f.service.im.send(c.id, "chat", "reply", requestId, "fixture");
+        assert.deepEqual(sent, [["chat", "reply", requestId]]);
+        f.service.im.bind({ ...binding, chatId: "new-chat" });
+        assert.equal(closed, 1);
+        stale({ ...message, id: "late" });
+        await f.service.im.scan();
+        receive({ ...message, id: "third", chat: "new-chat" });
+        assert.deepEqual(
+          f.store.db
+            .prepare("SELECT disposition FROM intake_events ORDER BY rowid")
+            .all()
+            .map((row) => row.disposition),
+          ["proposed", "dropped", "proposed"],
+        );
+      } finally {
+        await f.cleanup();
+      }
+    },
+  );
 }
 
 test("APNs stores signing/device secrets in Vault, signs bounded ES256 requests and accepts deliveries", async () => {
@@ -966,6 +1038,89 @@ test("OAuth state is single-use and config changes or revocation cannot revive c
     await s.cleanup();
   }
 });
+for (const channel of ["wecom", "feishu", "weixin", "telegram"] as const) {
+  test(channel + " Outbox replays a confirmed receipt without sending twice", async () => {
+    const deliveries: string[] = [];
+    const s = setup(
+      async (url, init) => {
+        const address = String(url);
+        if (address.endsWith("/sendMessage") || address.endsWith("/sendmessage")) {
+          deliveries.push(String(init?.body));
+          return Response.json(
+            channel === "telegram"
+              ? { ok: true, result: { message_id: 42 } }
+              : { message_id: "42" },
+          );
+        }
+        return Response.json({ ok: true, result: [], msgs: [] });
+      },
+      undefined,
+      async () => ({
+        close() {},
+        async send(chat, text, id) {
+          deliveries.push(JSON.stringify({ chat, text, id }));
+          return { id };
+        },
+      }),
+    );
+    try {
+      const connection = (await s.service.applications.connect({
+        requestId: randomUUID(),
+        applicationId: channel,
+        version: "1.0.0",
+        name: channel,
+        token: "123:fixture",
+      }))!;
+      const binding = {
+        controllerId: s.controller.id,
+        connectionId: connection.id,
+        chatId: "42",
+        ownerExternalUserId: "42",
+        appId: "fixture",
+      };
+      if (channel === "weixin") {
+        s.store.put("im-binding", connection.id, {
+          ...binding,
+          generation: connection.generation,
+          offset: 0,
+          weixinOrigin: "https://ilinkai.weixin.qq.com",
+        });
+        s.store.put("im-reply-context", connection.id, {
+          generation: connection.generation,
+          context: "fixture",
+        });
+      } else s.service.im.bind(binding);
+      await s.service.im.scan();
+      const operation = channel + ".messages.create";
+      const g = grant(s, [operation], ["42"], {
+        connectionId: connection.id,
+        applicationId: channel,
+        applicationVersion: "1.0.0",
+      });
+      const goal = await s.service.goals.create(
+        { requestId: randomUUID(), controllerSessionId: s.controller.id, title: "reply" },
+        "user",
+      );
+      const request = {
+        requestId: randomUUID(),
+        goalId: goal.id,
+        connectionId: connection.id,
+        grantId: g.id,
+        resource: "42",
+        operation,
+        arguments: { text: "fixture reply" },
+      };
+      s.service.outbox.enqueue(request, s.controller.id);
+      await s.service.outbox.scan();
+      assert.equal(s.service.outbox.enqueue(request, s.controller.id).status, "sent");
+      await s.service.outbox.scan();
+      assert.equal(deliveries.length, 1);
+    } finally {
+      await s.cleanup();
+    }
+  });
+}
+
 test("outbox unknown blocks only its destination, then evidence permits later replies", async () => {
   const seen: string[] = [];
   const s = setup(async (url) => {
@@ -1272,5 +1427,69 @@ test("encrypted backup verifies hashes, excludes credentials and restores a new 
     );
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("Telegram polling filters owners, deduplicates inbox proposals and discards an in-flight revoked connection", async () => {
+  let updates = [1, 2].map((id) => ({
+    update_id: id,
+    message: { text: "fixture", chat: { id: 42 }, from: { id } },
+  }));
+  let hold = false;
+  let unblock!: () => void;
+  let called!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    called = resolve;
+  });
+  const f = setup(async () => {
+    if (hold) {
+      called();
+      await new Promise<void>((resolve) => {
+        unblock = resolve;
+      });
+    }
+    return Response.json({ ok: true, result: updates });
+  });
+  try {
+    const c = await f.service.applications.connect({
+      requestId: randomUUID(),
+      name: "test",
+      applicationId: "telegram",
+      version: "1.0.0",
+      token: "1:fixture",
+    });
+    assert.ok(c);
+    f.service.im.bind({
+      connectionId: c.id,
+      controllerId: f.controller.id,
+      ownerExternalUserId: "2",
+      chatId: "42",
+    });
+    await f.service.im.scan();
+    await f.service.im.scan();
+    assert.equal(f.service.im.bindings()[0]?.offset, 3);
+    assert.deepEqual(
+      f.store.db
+        .prepare("SELECT disposition FROM intake_events ORDER BY rowid")
+        .all()
+        .map((row) => row.disposition),
+      ["dropped", "proposed"],
+    );
+    assert.equal(
+      f.store
+        .records<{ payload?: { type?: string } }>("inbox")
+        .filter((i) => i.payload?.type === "intake-proposal").length,
+      1,
+    );
+    updates = [{ update_id: 3, message: { text: "later", chat: { id: 42 }, from: { id: 2 } } }];
+    hold = true;
+    const scanning = f.service.im.scan();
+    await pending;
+    f.service.applications.revoke(c.id, c.revision);
+    unblock();
+    await scanning;
+    assert.equal(f.service.im.bindings()[0]?.offset, 3);
+  } finally {
+    await f.cleanup();
   }
 });

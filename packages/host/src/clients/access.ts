@@ -2,6 +2,7 @@ import {
   KodoError,
   PROTOCOL_VERSION,
   deviceAccessSchema,
+  delegatedOperations,
   type ClientCapabilities,
   type ClientOperationAccess,
   type DeviceAccess,
@@ -49,6 +50,8 @@ export function saveDeviceAccess(
   });
 }
 const LOCAL_ONLY = new Set([
+  "mcp.local.manage",
+  "im.manage",
   "host.admin",
   "engines.manage",
   "skills.manage",
@@ -61,6 +64,8 @@ const LOCAL_ONLY = new Set([
   "executors.manage",
 ]);
 const PAIRED = new Set([
+  "preview.read",
+  "workspaces.git.local",
   "goals.read",
   "goals.write",
   "goals.review",
@@ -84,12 +89,13 @@ export function operationAccess(
   identity: ClientIdentity,
   operation: string,
 ): ClientOperationAccess {
+  const delegated = delegatedOperations.find((key) => key === operation);
   const requirement =
-    !LOCAL_ONLY.has(operation) && !PAIRED.has(operation) && operation !== "goals.check"
+    !LOCAL_ONLY.has(operation) && !PAIRED.has(operation) && !delegated
       ? "unsupported"
       : LOCAL_ONLY.has(operation)
         ? "local-administrator"
-        : operation === "goals.check"
+        : delegated
           ? "explicit-delegation"
           : "paired-device";
   const supported = requirement !== "unsupported";
@@ -97,8 +103,8 @@ export function operationAccess(
     supported &&
     (identity.local ||
       requirement === "paired-device" ||
-      (operation === "goals.check" &&
-        deviceAccess(service, identity.deviceId).operations.includes("goals.check")));
+      (delegated !== undefined &&
+        deviceAccess(service, identity.deviceId).operations.includes(delegated)));
   const frozen =
     service.lifecycle.status().frozen &&
     ["goals.check", "automations.run", "browser.control"].includes(operation);
@@ -107,7 +113,7 @@ export function operationAccess(
     ? "此 Host 不支持此操作。"
     : !allowed
       ? requirement === "explicit-delegation"
-        ? "需由 Host 本机管理员显式授予此设备执行检查的权限。"
+        ? "需由 Host 本机管理员显式授予此设备执行该操作的权限。"
         : "仅允许 Host 本机管理员操作。"
       : frozen
         ? "Host 已冻结新执行。"
@@ -140,7 +146,11 @@ export function clientCapabilities(
       "goals.read",
       "goals.write",
       "goals.review",
-      "goals.check",
+      ...delegatedOperations,
+      "workspaces.git.local",
+      "preview.read",
+      "mcp.local.manage",
+      "im.manage",
       "files.read",
       "files.upload",
       "notifications.read",

@@ -14,6 +14,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,6 +22,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -39,11 +41,31 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
-@Composable fun InteractionCard(item: InboxItem, enabled: Boolean, answer: (NativeAction) -> Unit) {
+private fun inboxPayloadSummary(payload: JSONObject): String {
+    val err = payload.opt("error")
+    val candidates = listOf(
+        payload.optString("message"),
+        (err as? JSONObject)?.optString("message") ?: (err as? String ?: ""),
+        payload.optString("summary"),
+        payload.optString("reason"),
+        payload.optString("title"),
+    )
+    return candidates.firstOrNull { it.isNotBlank() }?.trim().orEmpty()
+}
+
+@Composable fun InteractionCard(
+    item: InboxItem,
+    enabled: Boolean,
+    onMarkRead: (() -> Unit)? = null,
+    onDelete: (() -> Unit)? = null,
+    onApproveIntake: ((String) -> Unit)? = null,
+    answer: (NativeAction) -> Unit
+) {
     val c = Kooyu.colors
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
-    val form = remember(item.id, item.payload) { questionForm(item.payload) }
+    val isInteraction = item.type == "interaction"
+    val form = remember(item.id, item.payload, isInteraction) { if (isInteraction) questionForm(item.payload) else null }
     var confirming by remember(item.id) { mutableStateOf<NativeAction?>(null) }
     var approvedLabel by remember(item.id) { mutableStateOf<String?>(null) }
     var details by remember(item.id) { mutableStateOf(false) }
@@ -53,6 +75,27 @@ import org.json.JSONObject
     val params = item.payload.optJSONObject("params") ?: item.payload.optJSONObject("input") ?: item.payload
     val command = params.optString("command", params.optString("cmd", ""))
     val path = params.optString("path", params.optString("file", ""))
+    val summary = remember(item.id, item.payload) { inboxPayloadSummary(item.payload) }
+
+    val headerIcon = when {
+        !isInteraction && item.type == "notification" -> Icons.Outlined.NotificationsNone
+        !isInteraction -> Icons.Outlined.ErrorOutline
+        form != null -> Icons.AutoMirrored.Outlined.HelpOutline
+        else -> Icons.Outlined.Shield
+    }
+    val headerTint = when {
+        approvedLabel != null -> c.doneText
+        !isInteraction && item.type != "notification" -> c.destructive
+        else -> c.brandCoral
+    }
+    val headerTitle = when {
+        approvedLabel != null -> "已批准 · $approvedLabel"
+        !isInteraction && item.type == "limit" -> "托管达到限制"
+        !isInteraction && item.type == "notification" -> "会话通知"
+        !isInteraction -> "运行需要检查"
+        form != null -> params.optString("title").ifBlank { "等待你回答" }
+        else -> "等待你确认"
+    }
 
     Surface(
         shape = RoundedCornerShape(18.dp),
@@ -67,19 +110,19 @@ import org.json.JSONObject
                     Modifier
                         .size(30.dp)
                         .clip(RoundedCornerShape(9.dp))
-                        .background(if (approvedLabel != null) c.successTint else c.sunken)
+                        .background(if (approvedLabel != null) c.successTint else if (!isInteraction && item.type != "notification") c.destructiveTint else c.sunken)
                         .border(0.5.dp, c.borderSubtle, RoundedCornerShape(9.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        if (form != null) Icons.Outlined.HelpOutline else Icons.Outlined.Shield,
+                        headerIcon,
                         null,
-                        tint = if (approvedLabel != null) c.doneText else c.brandCoral,
+                        tint = headerTint,
                         modifier = Modifier.size(16.dp)
                     )
                 }
                 Text(
-                    if (approvedLabel != null) "已批准 · $approvedLabel" else if (form != null) "等待你回答" else "等待你确认",
+                    headerTitle,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
                     color = if (approvedLabel != null) c.doneText else c.text,
@@ -108,6 +151,15 @@ import org.json.JSONObject
                 }
             }
 
+            if (item.payload.optString("protocol") == "kodo" && form != null && params.optString("detail").isNotBlank()) {
+                Text(
+                    params.optString("detail"),
+                    fontSize = 13.sp,
+                    lineHeight = 19.sp,
+                    color = c.textSecondary,
+                )
+            }
+
             if (item.payload.optString("protocol") == "kodo" && params.optString("schedule").isNotBlank()) {
                 SelectionContainer {
                     Text(
@@ -120,15 +172,60 @@ import org.json.JSONObject
                 }
             }
 
-            if (form != null) {
+            if (!isInteraction) {
+                if (summary.isNotBlank()) {
+                    SelectionContainer {
+                        Text(
+                            summary,
+                            fontSize = 13.5.sp,
+                            lineHeight = 20.sp,
+                            color = c.text
+                        )
+                    }
+                }
+                if (onMarkRead != null || onDelete != null) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (onMarkRead != null) {
+                            Button(
+                                onClick = onMarkRead,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.weight(1f).heightIn(min = 42.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = c.sunken, contentColor = c.text)
+                            ) {
+                                Icon(Icons.Outlined.Done, null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(5.dp))
+                                Text("标为已读", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            }
+                        }
+                        if (onDelete != null) {
+                            Button(
+                                onClick = onDelete,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.weight(1f).heightIn(min = 42.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = c.destructiveTint, contentColor = c.destructive)
+                            ) {
+                                Icon(Icons.Outlined.DeleteOutline, null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(5.dp))
+                                Text("删除", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            }
+                        }
+                    }
+                }
+            } else if (form != null) {
                 NativeQuestionFields(item, form, enabled, answer)
             } else if (item.actions.isEmpty()) {
-                Text(
-                    "此请求没有声明快捷选项，可展开「请求详情」核对后填写结构化回答。",
-                    fontSize = 13.sp,
-                    lineHeight = 19.sp,
-                    color = c.textSecondary
-                )
+                if (summary.isNotBlank()) {
+                    SelectionContainer {
+                        Text(summary, fontSize = 13.5.sp, lineHeight = 20.sp, color = c.text)
+                    }
+                } else {
+                    Text(
+                        "此请求没有声明快捷选项，可展开「请求详情」核对后填写结构化回答，或直接标为已读/删除。",
+                        fontSize = 13.sp,
+                        lineHeight = 19.sp,
+                        color = c.textSecondary
+                    )
+                }
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     val primaryIndex = item.actions.indexOfFirst { !it.destructive }.takeIf { it >= 0 } ?: 0
@@ -183,12 +280,27 @@ import org.json.JSONObject
                 }
             }
 
-            // Compact inline disclosure pills (replaces clunky stacked unstyled TextButtons!)
+            // Compact inline disclosure & quick-dismiss pills (horizontally scrollable so they never wrap awkwardly)
             Row(
-                Modifier.fillMaxWidth(),
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                val intakeEventId = remember(item.id, item.payload) {
+                    if (item.payload.optString("type") == "intake-proposal") item.payload.optString("intakeEventId").ifBlank { null } else null
+                }
+                if (intakeEventId != null && onApproveIntake != null) {
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = c.brandCoral,
+                        modifier = Modifier.clickable(enabled = enabled) { onApproveIntake(intakeEventId) }
+                    ) {
+                        Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Icon(Icons.Outlined.PlayArrow, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                            Text("批准并派发执行", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                        }
+                    }
+                }
                 Surface(
                     shape = RoundedCornerShape(999.dp),
                     color = if (details) c.accentTint else c.sunken,
@@ -200,7 +312,7 @@ import org.json.JSONObject
                         Text(if (details) "收起详情" else "请求详情", fontSize = 11.5.sp, fontWeight = FontWeight.Medium, color = c.textSecondary)
                     }
                 }
-                if (form == null) {
+                if (isInteraction && form == null) {
                     Surface(
                         shape = RoundedCornerShape(999.dp),
                         color = if (custom) c.accentTint else c.sunken,
@@ -210,6 +322,32 @@ import org.json.JSONObject
                         Row(Modifier.padding(horizontal = 11.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             Icon(Icons.Outlined.DataObject, null, tint = c.textSecondary, modifier = Modifier.size(13.dp))
                             Text("结构化回答", fontSize = 11.5.sp, fontWeight = FontWeight.Medium, color = c.textSecondary)
+                        }
+                    }
+                }
+                if (isInteraction && onMarkRead != null) {
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = c.sunken,
+                        border = BorderStroke(0.5.dp, c.borderSubtle),
+                        modifier = Modifier.clickable { onMarkRead() }
+                    ) {
+                        Row(Modifier.padding(horizontal = 11.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Icon(Icons.Outlined.Done, null, tint = c.textSecondary, modifier = Modifier.size(13.dp))
+                            Text("标为已读", fontSize = 11.5.sp, fontWeight = FontWeight.Medium, color = c.textSecondary)
+                        }
+                    }
+                }
+                if (isInteraction && onDelete != null) {
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = c.destructiveTint,
+                        border = BorderStroke(0.5.dp, c.destructive.copy(alpha = 0.25f)),
+                        modifier = Modifier.clickable { onDelete() }
+                    ) {
+                        Row(Modifier.padding(horizontal = 11.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Icon(Icons.Outlined.DeleteOutline, null, tint = c.destructive, modifier = Modifier.size(13.dp))
+                            Text("删除", fontSize = 11.5.sp, fontWeight = FontWeight.Medium, color = c.destructive)
                         }
                     }
                 }

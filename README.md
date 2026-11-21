@@ -14,20 +14,23 @@
   <img src="brand/logos/kooyu-wordmark.svg" height="44" alt="Kooyu" />
 </picture>
 
-<h3>Local-First, Multi-Platform Workspace for 10+ AI Coding Agents</h3>
+<h3>Your Local-First Personal AI Assistant Commanding Every Coding Harness</h3>
 
 <p>
-  Organize projects, orchestrate native coding harnesses, route custom model providers, track latency &amp; spend, and stay connected from Desktop, Android, iOS, or Web — all backed by one durable local Session Host.
+  Unify <strong>Claude Code</strong>, <strong>Codex</strong>, <strong>DeepSeek</strong>, <strong>Gemini CLI</strong>, <strong>OpenCode</strong>, <strong>Cursor</strong>, <strong>ZCode</strong>, <strong>Kimi Code</strong>, and more under one personal AI assistant. Route tasks intelligently, race engines side-by-side in isolated Git worktrees, keep persistent local memory and zero-token background watches, and approve from Desktop, Web, iOS, Android, or IM — while your code, memory, and keys stay strictly on your own machine.
 </p>
 
 <p>
+  <a href="https://kooyu.app">
+    <img src="https://img.shields.io/badge/Website-kooyu.app-141518?style=flat-square" alt="Official Website" />
+  </a>
   <a href="https://github.com/sh2001sh/Kooyu/releases">
     <img src="https://img.shields.io/github/v/release/sh2001sh/Kooyu?include_prereleases&style=flat-square&label=Release&color=F17561" alt="Latest Release" />
   </a>
   <a href="https://github.com/sh2001sh/Kooyu/actions/workflows/native-apps.yml">
     <img src="https://img.shields.io/github/actions/workflow/status/sh2001sh/Kooyu/native-apps.yml?branch=main&style=flat-square&label=CI%20%26%20Build" alt="CI Status" />
   </a>
-  <img src="https://img.shields.io/badge/Platforms-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android%20%7C%20iOS-141518?style=flat-square" alt="Platforms" />
+  <img src="https://img.shields.io/badge/Platforms-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android%20%7C%20iOS%20%7C%20Web-141518?style=flat-square" alt="Platforms" />
   <a href="LICENSE">
     <img src="https://img.shields.io/github/license/sh2001sh/Kooyu?style=flat-square&color=10A37F" alt="MIT License" />
   </a>
@@ -40,11 +43,11 @@
 </p>
 
 <p>
-  <a href="#-downloads">Downloads</a> ·
   <a href="#-highlights">Highlights</a> ·
-  <a href="#-supported-engines">Supported Engines</a> ·
+  <a href="#-supported-harnesses">Supported Harnesses</a> ·
+  <a href="#-quick-start--downloads">Downloads</a> ·
   <a href="#-installation--setup">Installation</a> ·
-  <a href="#-mobile-pairing">Mobile Pairing</a> ·
+  <a href="#-cross-device--e2ee-sync">Cross-Device Sync</a> ·
   <a href="#-build-from-source">Build from Source</a>
 </p>
 
@@ -62,19 +65,29 @@
 
 ## ✨ Highlights
 
-- **One Workspace for 10+ Coding Harnesses** — Chat directly with **Claude Code**, **Codex**, **DeepSeek Harness**, **ZCode**, **OpenCode**, **Gemini CLI**, **Cursor**, **Kimi Code**, **Grok Build**, and **pi**, or delegate multi-session workflows to the built-in **Kooyu** supervisor agent.
-- **Durable Local Session Host** — Runs an independent Node + SQLite Host (`127.0.0.1:4310`). Closing the desktop window hides to the system tray; quitting the UI never interrupts running agent turns, schedules, or approvals.
-- **Unified Provider Hub, Endpoint Routing & Role Mapping** — Configure OpenAI-compatible (`Chat Completions` / `Responses`) and `Anthropic Messages` endpoints once, auto-sync model metadata from `models.dev`, and bind per engine (including **5-slot Claude Code role mapping**: default, Haiku, Sonnet, Opus, and subagent) without mutating your global CLI config files.
-- **Native Multi-Platform Experience** — Built with **Electron + React/TypeScript** on desktop, **Kotlin / Jetpack Compose** on Android, **SwiftUI** on iOS, and responsive Web/PWA — featuring 5 curated palettes, Light/Dark/System themes, IDE-style code cards with line numbers, unified diff coloring, `Ctrl/⌘+K` Command Palette, and a docked split file inspector.
-- **Selective Conversation Import & Multi-Language UI** — Scan local projects across engines and selectively import only the historical conversations you want into Kooyu, with instant `English` / `简体中文` / `日本語` switching synced across paired devices.
-- **Multi-Platform Voice Input** — Dictate prompts hands-free with dual-engine Web Speech API + Host Whisper/OpenAI-compatible transcription fallback on Desktop/Web, native `SpeechRecognizer` on Android, and `SFSpeechRecognizer` on iOS.
-- **Usage Analytics & Latency Ledger** — Track token volume, cache hits, cost estimates, budgets, and per-turn **TTFT (Time to First Token)** & **Total Duration** across projects, engines, and models.
-- **Built-In Software Updater** — Check Stable or Preview releases inside **Settings → General → Software Update**, verify `SHA256SUMS.txt` integrity automatically, and hand off directly to the native Desktop or Android installer.
+### Multi-Harness Orchestration & Engineering Moat
+- **One Supervisor, 10+ Coding Harnesses** — Chat directly with **Claude Code**, **Codex**, **DeepSeek Harness**, **Gemini CLI**, **OpenCode**, **ZCode**, **Cursor**, **Kimi Code**, **Grok Build**, and **pi**, or delegate complex goals to the built-in **Kooyu Supervisor**. Launch ready-made **Playbooks** (implement & cross-review, parallel split, CI/test guard, deep research) and step in or hand back control with one click.
+- **Smart Routing & Seamless 429 Quota Handoff (`ROUTING.md`)** — Route tasks automatically to the best available Harness by intent and local availability. When an engine hits HTTP `429`, rate limits, or subscription exhaustion, Kooyu packages live progress and workspace context for seamless fallback handoff to the next engine in your chain.
+- **Multi-Harness Arena** — Pit 2–3 Harnesses against the same tough problem in parallel isolated Git worktrees, run real `git diff` + test/benchmark commands (`checkCommand`), inspect the side-by-side scorecard, and accept the winning branch with one click.
+- **Zero-Pollution Git Checkpoints & One-Click Git / PR Delivery** — Capture instant tracked + untracked snapshots in hidden refs (`refs/kooyu/checkpoints/*`) without touching your branch, stash, or `git log` (with automatic pre-restore safety snapshots). Review diffs hunk-by-hunk, merge safely, or open Pull Requests right inside your workspace.
+
+### Self-Evolving Personal AI Assistant
+- **Managed Local Brain & Workspace Docs** — Customize Kooyu's persona, preferences, long-term memory, approval rules, watch routines, engineering playbook, and routing strategy via hot-reloaded local Markdown docs (`SOUL.md`, `USER.md`, `MEMORY.md`, `RULES.md`, `HEARTBEAT.md`, `AGENTS.md`, `ROUTING.md`) editable directly in Desktop, Web, Android, and iOS Settings.
+- **Interactive Decision Cards & Rule Learning** — Before risky or ambiguous actions, Kooyu surfaces structured multi-option decision cards across all four platforms. Choosing *"Approve & remember"* automatically writes durable rules into `RULES.md` and hot-reloads on the next turn.
+- **Zero-Vector Local Knowledge Base & Memory Distillation** — Mount local Obsidian vaults or project `docs/` directories read-only for deterministic CJK-normalized full-text search down to exact `relativePath:line` citations — zero vector DBs, zero embedding costs. Deterministic daily memory consolidation distills recurring patterns from daily logs into user-approved proposals.
+- **Cross-Harness Skill Sedimentation & Offline Reports** — Turn proven workflows into versioned skills with 5-version rollback, secret/traversal guards, and optional sharing to `~/.agents/skills/` for reuse across Claude Code, Codex, Gemini CLI, and OpenCode. Generate offline-safe themed HTML briefs (`show_page`) with strict CSP.
+- **Zero-Token Preflight Automations & Health Radar** — Run local shell preflight scripts (`checkScript`) with stripped ambient secrets so quiet checks cost **0 LLM tokens**; wake Kooyu or notify you only on real hits. Built-in Harness Health Radar watches for stalled sessions and suppresses idle noise via `NO_REPLY`.
+
+### Everyday Frictionless Workspace & Cross-Device Reach
+- **Global Quick-Capture HUD (`Alt+Space` / `Cmd+Shift+K`)** — Summon a floating frameless capsule from any desktop app, pre-filled with your clipboard text and Harness selector, to dispatch directly to Kooyu without breaking flow.
+- **Live Preview, Built-in Terminal & Shared-Login Browser** — Preview web apps side-by-side (feeding console errors straight back to your agent), open real PTY terminals, and visually take over a managed Chromium browser whose signed-in cookies persist safely across tasks (`0600` local store).
+- **Zero-Knowledge E2EE Multi-Device Sync & IM Channels** — Connect via **Kooyu Account** ([kooyu.app](https://kooyu.app)) across Desktop & Web Workbench, pair **iOS / Android** native apps via QR or account login, talk hands-free with **Voice Conversations**, annotate screenshots, and approve tasks directly from **WeChat, WeCom, Feishu, or Telegram**.
+- **Unified Model Hub & Transparent Usage Ledger** — Configure model providers once (including **Claude Code** 5-role slot mapping) without overwriting native CLI configs. Track per-project token spend, budgets, and time-to-first-token (TTFT) latency at a glance.
 
 <div align="center">
-  <img src="docs/assets/features-overview.png" width="100%" alt="Kooyu Provider Routing Modal and Usage Analytics Ledger" />
+  <img src="docs/assets/features-overview.png" width="100%" alt="Kooyu Provider Routing and Usage Insights" />
   <br />
-  <sub>Left: Unified Provider "Apply To" modal with endpoint protocol tabs &amp; Claude Code role mapping · Right: Usage &amp; Latency Ledger with TTFT and total duration</sub>
+  <sub>Left: Unified Model Provider Hub with per-engine role mapping · Right: Project usage, spend, and TTFT speed ledger</sub>
 </div>
 
 <details>
@@ -88,45 +101,50 @@
 
 ---
 
-## 🤖 Supported Engines
+## 🤖 Supported Harnesses
 
-Kooyu auto-discovers both `PATH` CLIs and installed desktop applications, while keeping native session IDs, permissions, and auth boundaries transparent.
+Kooyu automatically discovers your installed CLI tools and desktop coding apps while preserving each engine's native session history, permissions, and account login.
 
-| Engine | Role | Protocol / Runtime | Isolated Provider Binding | Desktop Auto-Discovery |
-| :--- | :--- | :--- | :---: | :---: |
-| **Kooyu** | Built-in Supervisor Agent | Embedded `pi` SDK | ✅ | Built-in |
-| **Claude Code** | Native Coding Harness | Native CLI / Agent SDK | ✅ (5-slot Role Mapping + Anthropic / Chat Gateway) | ✅ |
-| **Codex** | Native Coding Harness | `codex app-server` | ✅ (OpenAI Responses) | ✅ |
-| **DeepSeek Harness** | Native Coding Harness | Native RPC / CLI | ✅ | ✅ |
-| **ZCode** | Native Coding Harness | Native CLI / Bundled Runtime | ✅ | ✅ |
-| **OpenCode** | Native Coding Harness | Headless HTTP + SSE Server | ✅ | ✅ |
-| **Gemini CLI** | Native Coding Harness | ACP | ✅ (Built-in Google → Chat Gateway) | ✅ |
-| **Cursor** | Native Coding Harness | ACP (`agent`) | Native account only | ✅ |
-| **Kimi Code** | Native Coding Harness | Native Server API / ACP | ✅ | ✅ |
-| **Grok Build** | Native Coding Harness | ACP / Native CLI | ✅ | ✅ |
-| **pi** | Standalone Coding Harness | `pi` SDK / CLI | ✅ | Built-in |
+| Harness | Role | Custom Provider Support | Auto-Discovery |
+| :--- | :--- | :---: | :---: |
+| **Kooyu** | Built-in Personal Assistant & Supervisor | ✅ | Built-in |
+| **Claude Code** | Native Coding Agent | ✅ (5-slot Role Mapping) | ✅ |
+| **Codex** | Native Coding Agent | ✅ | ✅ |
+| **DeepSeek Harness** | Native Coding Agent | ✅ | ✅ |
+| **Gemini CLI** | Native Coding Agent | ✅ | ✅ |
+| **OpenCode** | Native Coding Agent | ✅ | ✅ |
+| **ZCode** | Native Coding Agent | ✅ | ✅ |
+| **Cursor** | Native Coding Agent | Native account | ✅ |
+| **Kimi Code** | Native Coding Agent | ✅ | ✅ |
+| **Grok Build** | Native Coding Agent | ✅ | ✅ |
+| **pi** | Standalone Coding Agent | ✅ | Built-in |
 
-> See [docs/harness-catalog.md](docs/harness-catalog.md) and [docs/provider-configuration.md](docs/provider-configuration.md) for detailed protocol capabilities and custom `installations.json` overrides.
+> See [docs/harness-catalog.md](docs/harness-catalog.md) and [docs/provider-configuration.md](docs/provider-configuration.md) for detailed capability matrices and custom installation overrides.
 
 ---
 
-## 📦 Downloads
+## 📦 Quick Start & Downloads
 
-Pre-built installers for all platforms are published automatically to [**GitHub Releases**](https://github.com/sh2001sh/Kooyu/releases).
+### Instant CLI Launch (No Desktop Installer Required)
 
-### Latest Build — `v0.2.1` ([`preview-0.2.1-10`](https://github.com/sh2001sh/Kooyu/releases/tag/preview-0.2.1-10))
+```bash
+npx kooyu@latest
+```
+
+### Native Installers (GitHub Releases)
+
+Pre-built installers for all platforms are published automatically to [**GitHub Releases**](https://github.com/sh2001sh/Kooyu/releases) and available on [**kooyu.app/download**](https://kooyu.app/download).
 
 | Platform | Architecture / Format | Download |
 | :--- | :--- | :--- |
-| **Windows** | x64 Installer (`.exe`) | [Kooyu-Setup-0.2.1.exe](https://github.com/sh2001sh/Kooyu/releases/download/preview-0.2.1-10/Kooyu-Setup-0.2.1.exe) |
-| **macOS** | Apple Silicon M1–M4 (`.dmg` / `.zip`) | [Kooyu-0.2.1-arm64.dmg](https://github.com/sh2001sh/Kooyu/releases/download/preview-0.2.1-10/Kooyu-0.2.1-arm64.dmg) · [ZIP](https://github.com/sh2001sh/Kooyu/releases/download/preview-0.2.1-10/Kooyu-0.2.1-arm64-mac.zip) |
-| **macOS** | Intel x64 (`.dmg` / `.zip`) | [Kooyu-0.2.1.dmg](https://github.com/sh2001sh/Kooyu/releases/download/preview-0.2.1-10/Kooyu-0.2.1.dmg) · [ZIP](https://github.com/sh2001sh/Kooyu/releases/download/preview-0.2.1-10/Kooyu-0.2.1-mac.zip) |
-| **Linux** | x64 (`.AppImage` / `.deb`) | [Kooyu-0.2.1.AppImage](https://github.com/sh2001sh/Kooyu/releases/download/preview-0.2.1-10/Kooyu-0.2.1.AppImage) · [kooyu_0.2.1_amd64.deb](https://github.com/sh2001sh/Kooyu/releases/download/preview-0.2.1-10/kooyu_0.2.1_amd64.deb) |
-| **Android** | Universal APK (`.apk`) | [Kooyu-0.2.1-android-debug.apk](https://github.com/sh2001sh/Kooyu/releases/download/preview-0.2.1-10/Kooyu-0.2.1-android-debug.apk) |
-| **iOS** | Apple Silicon Simulator (`.zip`) | [Kooyu-0.2.1-ios-simulator.zip](https://github.com/sh2001sh/Kooyu/releases/download/preview-0.2.1-10/Kooyu-0.2.1-ios-simulator.zip) |
-| **Checksums** | SHA-256 Manifest | [SHA256SUMS.txt](https://github.com/sh2001sh/Kooyu/releases/download/preview-0.2.1-10/SHA256SUMS.txt) |
+| **Windows** | x64 Installer (`.exe`) | [Latest Releases](https://github.com/sh2001sh/Kooyu/releases) |
+| **macOS** | Apple Silicon M1–M4 & Intel x64 (`.dmg` / `.zip`) | [Latest Releases](https://github.com/sh2001sh/Kooyu/releases) |
+| **Linux** | x64 (`.AppImage` / `.deb`) | [Latest Releases](https://github.com/sh2001sh/Kooyu/releases) |
+| **Android** | Universal APK (`.apk`) | [Latest Releases](https://github.com/sh2001sh/Kooyu/releases) |
+| **iOS** | Apple Silicon Simulator (`.zip`) / Source Build | [Latest Releases](https://github.com/sh2001sh/Kooyu/releases) |
+| **Web / CLI** | Local Host + Browser Workbench | `npx kooyu@latest` |
 
-> Check the [Releases page](https://github.com/sh2001sh/Kooyu/releases) for newer releases as they ship.
+> Use in-app updates (**Settings → General → Software Update**) to switch between **Stable** and **Preview** channels with automatic SHA-256 verification.
 
 ---
 
@@ -134,41 +152,34 @@ Pre-built installers for all platforms are published automatically to [**GitHub 
 
 ### Windows
 
-1. Download **`Kooyu-Setup-0.2.1.exe`** and run the installer.
-2. Because desktop builds are currently unsigned, Windows SmartScreen may display *"Windows protected your PC"* — click **More info → Run anyway** to continue (see [docs/windows-installation.md](docs/windows-installation.md)).
-3. Launch **Kooyu** from the Start Menu. The installer preserves your local data across upgrades.
+1. Download **`Kooyu-Setup-<version>.exe`** from [GitHub Releases](https://github.com/sh2001sh/Kooyu/releases) and run the installer.
+2. Because desktop builds are currently unsigned, Windows SmartScreen may display *"Windows protected your PC"* — click **More info → Run anyway** (see [docs/windows-installation.md](docs/windows-installation.md)).
+3. Press **`Alt + Space`** anywhere after launch to summon the Kooyu Quick-Capture HUD. Upgrading automatically preserves your local data and settings.
 
 ### macOS
 
-1. Download **`Kooyu-0.2.1-arm64.dmg`** (Apple Silicon) or **`Kooyu-0.2.1.dmg`** (Intel), open it, and drag **Kooyu.app** into **Applications**.
-2. Because macOS builds are not yet Apple-notarized, clear the quarantine flag once before first launch:
+1. Download the Apple Silicon (`arm64.dmg`) or Intel (`.dmg`) build and drag **Kooyu.app** into **Applications**.
+2. Because macOS builds are not yet Apple-notarized, clear quarantine once before first launch:
    ```bash
    xattr -cr /Applications/Kooyu.app
    ```
-3. Launch **Kooyu** from Applications.
+3. Press **`Cmd + Shift + K`** anywhere after launch to summon the Quick-Capture HUD.
 
 ### Linux
 
-- **AppImage**:
-  ```bash
-  chmod +x Kooyu-0.2.1.AppImage
-  ./Kooyu-0.2.1.AppImage
-  ```
-- **Debian / Ubuntu (`.deb`)**:
-  ```bash
-  sudo apt install ./kooyu_0.2.1_amd64.deb
-  ```
+```bash
+# AppImage
+chmod +x Kooyu-*.AppImage
+./Kooyu-*.AppImage
 
-### Android
+# Debian / Ubuntu (.deb)
+sudo apt install ./kooyu_*_amd64.deb
+```
 
-1. Download **`Kooyu-0.2.1-android-debug.apk`** on your phone and allow **"Install unknown apps"** when prompted.
-2. All official CI builds preserve the same upgrade signing certificate, so future APKs install cleanly over existing versions without losing paired device credentials.
-3. Open **Kooyu** and scan the QR code from your desktop app (**Settings → Devices**).
+### Android & iOS
 
-### iOS
-
-- The release `Kooyu-0.2.1-ios-simulator.zip` runs on Apple Silicon Mac iOS Simulators (`xcrun simctl install booted Kooyu.app`).
-- To install on a physical iPhone or iPad, build with your own Apple Developer signing team via Xcode — see [apps/ios/README.md](apps/ios/README.md).
+- **Android**: Install `Kooyu-*-android-debug.apk` (consistent upgrade signing key preserves paired hosts across updates). Sign in with your Kooyu account or scan the QR code from Desktop (**Settings → Devices**).
+- **iOS**: Run `Kooyu-*-ios-simulator.zip` on Apple Silicon Simulators (`xcrun simctl install booted Kooyu.app`), or build for physical devices via Xcode — see [apps/ios/README.md](apps/ios/README.md).
 
 ### Verify Downloads (SHA-256)
 
@@ -182,24 +193,16 @@ shasum -a 256 -c SHA256SUMS.txt --ignore-missing
 Get-FileHash .\Kooyu-Setup-0.2.1.exe -Algorithm SHA256
 ```
 
-### In-App Updates
-
-Open **Settings → General → Software Update** (or **Check for Updates…** in the desktop tray/app menu):
-- Choose **Stable** (`v*` releases) or **Preview** (`preview-*` builds from `main`).
-- Kooyu fetches GitHub Releases, verifies the downloaded installer against `SHA256SUMS.txt`, and launches the native upgrade flow on Desktop and Android.
-
 ---
 
-## 📱 Mobile Pairing
+## 📱 Cross-Device & E2EE Sync
 
-Kooyu mobile apps (Android, iOS, and Web/PWA) connect to your Desktop Host securely over HTTPS/WSS — no port forwarding, VPN, or manual tunnel setup required:
+Stay in command from another Desktop, [Web Workbench](https://kooyu.app/account), Android, iOS, or IM — with zero port forwarding or VPN:
 
-1. On your computer, open **Settings → Devices → Generate Pairing Code**.
-2. Kooyu connects automatically to `relay.kooyu.app` (or your own self-hosted Relay from `deploy/kodo-relay/`).
-3. Scan the QR code inside the Android/iOS Kooyu app (or with your phone camera for Web/PWA).
-4. Pairing invites are single-use (2-minute expiry); device tokens are stored hashed with 30-day expiry and can be revoked anytime from Desktop.
-
-> Want full self-hosting? See [docs/mobile-relay.md](docs/mobile-relay.md) and [docs/self-hosted-operations.md](docs/self-hosted-operations.md).
+1. **Account Discovery (Desktop & Web)**: Sign in to your Kooyu account on your host computer, then sign in from any browser or secondary computer to discover and request authorized access.
+2. **Instant QR Pairing (iOS & Android)**: Open **Settings → Devices → Generate Pairing Code** and scan with the native app. Invites expire after 2 minutes and are single-use.
+3. **Zero-Knowledge E2EE**: All prompts, diffs, and approvals are encrypted end-to-end between your devices. Every new device must be explicitly approved on the host computer and can be revoked anytime.
+4. **Full Self-Hosting**: Run both the Host and Relay on your own server with templates in `deploy/` — see [docs/mobile-relay.md](docs/mobile-relay.md) and [docs/self-hosted-operations.md](docs/self-hosted-operations.md).
 
 ---
 
@@ -207,48 +210,47 @@ Kooyu mobile apps (Android, iOS, and Web/PWA) connect to your Desktop Host secur
 
 ```mermaid
 flowchart LR
-  subgraph Clients["Multi-Platform Clients"]
-    Desktop["Desktop App\n(Electron + React)"]
-    Web["Web / PWA\n(Vite + React)"]
-    Android["Android App\n(Kotlin + Compose)"]
-    iOS["iOS App\n(SwiftUI)"]
+  subgraph Clients["Multi-Platform Clients & Channels"]
+    Desktop["Desktop App + Quick-Capture HUD\n(Windows · macOS · Linux)"]
+    Mobile["Mobile & Web Workbench\n(Android · iOS · PWA)"]
+    IM["IM Channels\n(WeChat · WeCom · Feishu · Telegram)"]
   end
 
-  Relay["Kooyu Relay\n(HTTPS / WSS · Optional Self-Hosted)"]
+  Bridge["Zero-Knowledge E2EE Relay\n(Account Discovery or Self-Hosted)"]
 
-  subgraph Host["Independent Local Session Host (Node + SQLite)"]
-    API["HTTP / SSE API\n127.0.0.1:4310"]
-    Vault["OS Credential Vault\n(Keychain / DPAPI / Secret Service)"]
-    DB[("SQLite Store\nFTS5 + Usage + Memory")]
-    Supervisor["Kooyu Supervisor\n(pi SDK)"]
-    Adapters["10 Native Harness Adapters\n(Claude · Codex · DeepSeek · ZCode\nOpenCode · Gemini · Cursor · Kimi · Grok · pi)"]
+  subgraph Host["Independent Local Session Host"]
+    API["Workspace API & Live Stream"]
+    Supervisor["Kooyu Personal Assistant\n(Workspace Docs · Memory · Skills · Watch Radar)"]
+    Router["Smart Router · 429 Handoff · Arena"]
+    Adapters["10+ Native Coding Harnesses"]
+    Tools["Worktrees · Git Checkpoints · Preview\nPTY Terminal · Shared-Login Browser · Local KB"]
+    Storage[("Local SQLite · Markdown Docs · OS Vault")]
   end
 
   Desktop --> API
-  Web --> API
-  Android --> Relay --> API
-  iOS --> Relay
-  API --> DB
-  API --> Vault
+  Mobile --> Bridge --> API
+  IM --> API
   API --> Supervisor
-  API --> Adapters
+  Supervisor --> Router --> Adapters
+  API --> Tools
+  API --> Storage
 ```
 
 ### Repository Layout
 
 | Path | Description |
 | :--- | :--- |
-| `apps/desktop` | Electron desktop shell, tray lifecycle, native updater & mic permissions |
-| `apps/web` | React + TypeScript workbench UI, Theme Studio, Voice Input, Playwright UI tests |
-| `apps/android` | Native Android app (Kotlin / Jetpack Compose / Material 3 / APK self-updater) |
-| `apps/ios` | Native iOS app (Swift 6 / SwiftUI / XcodeGen) |
-| `packages/host` | Independent Node Session Host, SQLite store, Harness adapters, Provider gateway, Updater & Voice API |
-| `packages/protocol` | Shared Zod schemas & TypeScript protocol types across clients and Host |
-| `packages/platform` | Cross-platform paths, host discovery, and OS utilities |
-| `services/relay` | Lightweight HTTPS/WSS mobile pairing relay server |
-| `deploy/` | Dockerfiles, Compose stacks, Caddy & systemd templates for self-hosting |
-| `brand/` | Production Kooyu SVG logos, icons, and design tokens |
-| `docs/` | Architecture, harness catalog, provider routing, mobile relay & release docs |
+| `apps/desktop` | Electron shell, tray daemon lifecycle, Global Quick-Capture HUD, remote pairing & updater |
+| `apps/web` | Cross-platform workbench UI, Git/PR delivery, decision cards, live preview, terminal & Playwright tests |
+| `apps/android` | Native Android app (Kotlin / Jetpack Compose / Material 3 / APK updater) |
+| `apps/ios` | Native iOS app (Swift / SwiftUI / XcodeGen) |
+| `packages/host` | Local Session Host, memory & agent docs, skill sedimentation, local KB, routing/arena, Git checkpoints, managed browser, IM & provider hub |
+| `packages/protocol` | Shared protocol schemas and TypeScript contracts across all clients and Host |
+| `packages/platform` | Cross-platform data directories (`Kooyu/host` with legacy `Kodo/host` fallback), host discovery & OS utilities |
+| `services/relay` | Lightweight self-hostable HTTPS/WSS E2EE pairing & offline mailbox relay |
+| `deploy/` | Docker, Compose, Caddy, and systemd templates for self-hosting |
+| `brand/` | Kooyu SVG logos, app icons, and design tokens |
+| `docs/` | Architecture, harness catalog, provider setup, self-hosting & release guides |
 
 ---
 
@@ -257,7 +259,7 @@ flowchart LR
 ### Prerequisites
 
 - **Node.js `>= 24.13.0`** and **npm `11+`**
-- At least one supported coding harness CLI / desktop app installed locally (or configure an API Provider inside Kooyu)
+- At least one supported coding agent installed locally (or configure an API provider inside Kooyu)
 
 ### Run Locally
 
@@ -299,29 +301,30 @@ xcodebuild -project Kooyu.xcodeproj -scheme Kooyu -destination 'generic/platform
 npm run lint
 npm run format:check
 npm run typecheck
-npm test              # Host unit & integration suite (500+ tests)
-npm run test:relay    # Relay security tests
+npm test              # Host unit & integration suite
+npm run test:relay    # Relay security & mailbox tests
 npm run test:platform # Host discovery & launcher tests
-npm run test:ui       # Full Playwright UI regression suite (160+ tests)
+npm run test:ui       # Playwright UI regression suite
 ```
 
 ### Data Directories & Environment Variables
 
 | OS | Default Host Data Directory |
 | :--- | :--- |
-| **Windows** | `%LOCALAPPDATA%\Kodo\host` |
-| **macOS** | `~/Library/Application Support/Kodo/host` |
-| **Linux** | `${XDG_DATA_HOME:-~/.local/share}/Kodo/host` |
+| **Windows** | `%LOCALAPPDATA%\Kooyu\host` |
+| **macOS** | `~/Library/Application Support/Kooyu/host` |
+| **Linux** | `${XDG_DATA_HOME:-~/.local/share}/Kooyu/host` |
 
-> Internal storage paths, package names, and `KODO_*` environment variables (`KODO_DATA_DIR`, `KODO_HOST_PORT`, `KODO_HOST_URL`) preserve backwards compatibility with existing installations.
+> Primary environment variables use the `KOOYU_*` prefix (`KOOYU_DATA_DIR`, `KOOYU_HOST_PORT`, `KOOYU_HOST_URL`, `KOOYU_RELAY_ORIGIN`, `KOOYU_QUICK_CAPTURE_SHORTCUT`). Existing legacy `Kodo/host` directories, OS Keychain `"Kodo"` entries, and `KODO_*` environment variables remain transparently supported for zero-breakage upgrades.
 
 ---
 
 ## 🔒 Security & Privacy
 
-- **Local-First by Default** — Conversation history, usage logs, and project settings stay on your machine in SQLite. The Host listens on `127.0.0.1` only.
-- **OS Secret Storage** — API keys and OAuth tokens are stored in your operating system credential store (Windows Credential Manager, macOS Keychain, Linux Secret Service), never written into plain-text project repositories.
-- **No Global Config Clobbering** — Provider bindings are injected per isolated session without overwriting `~/.claude`, `~/.codex`, or other native CLI configs.
+- **Local-First by Default** — Your codebase, conversation history, persistent memory, mounted knowledge roots, and usage records stay on your own machine. The Host listens on loopback (`127.0.0.1`) only.
+- **OS Secret Storage & Clean Subprocess Env** — API keys and OAuth tokens are stored in your OS credential vault (`Kooyu` service in Windows Credential Manager, macOS Keychain, or Linux Secret Service). Preflight scripts and Arena check commands run with ambient host secrets stripped.
+- **Non-Destructive Engine Integration** — Custom model providers and role mappings are isolated per session without overwriting `~/.claude`, `~/.codex`, or your other CLI configurations.
+- **Explicit Remote Permissions** — Sensitive actions like local MCP servers, IM credentials, interactive terminals, and remote Git push are strictly gated behind local-only or explicit device delegation controls.
 
 ---
 
@@ -329,7 +332,7 @@ npm run test:ui       # Full Playwright UI regression suite (160+ tests)
 
 Released under the [**MIT License**](LICENSE).
 
-- Upstream `pi` runtime & SDK notices: [docs/upstream.md](docs/upstream.md)
-- Runtime dependencies & SDK terms: [third-party/runtime-dependencies.md](third-party/runtime-dependencies.md)
-- `models.dev` catalog notice: [third-party/models.dev/NOTICE.md](third-party/models.dev/NOTICE.md)
-- Craft Agents token extraction boundary: [third-party/craft-agents/EXTRACTION.md](third-party/craft-agents/EXTRACTION.md)
+- Official Website & Docs: [https://kooyu.app](https://kooyu.app)
+- Runtime dependencies & third-party licenses: [third-party/runtime-dependencies.md](third-party/runtime-dependencies.md)
+- Model catalog attribution: [third-party/models.dev/NOTICE.md](third-party/models.dev/NOTICE.md)
+- Design token attribution: [third-party/craft-agents/EXTRACTION.md](third-party/craft-agents/EXTRACTION.md)

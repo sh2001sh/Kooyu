@@ -27,6 +27,7 @@ playwright-report/
 .env.*
 !.env.example
 .local/
+/distribution.json
 /image.txt
 .tmp-build/
 release-assets/

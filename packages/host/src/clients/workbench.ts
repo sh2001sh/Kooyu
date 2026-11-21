@@ -76,7 +76,7 @@ export function workbenchOverview(
     workspaces: snapshot.workspaces.filter(
       (workspace) => !projectId || workspace.projectId === projectId,
     ),
-    inbox: snapshot.inbox.filter((item) => !item.resolved && ids.has(item.sessionId)),
+    inbox: snapshot.inbox.filter((item) => !item.resolved && !item.read && ids.has(item.sessionId)),
     harnesses: snapshot.harnesses,
     actions: Object.fromEntries(
       ["automations.write", "automations.run", "memory.write"].map((key) => [

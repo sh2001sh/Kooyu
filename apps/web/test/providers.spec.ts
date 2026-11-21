@@ -80,6 +80,7 @@ for (const mobile of [false, true])
       .locator(".sx-section")
       .filter({ has: page.locator(".sx-provider-name").filter({ hasText: name }) });
     await expect(record.getByText("2 个模型", { exact: true })).toBeVisible();
+    await record.locator(".sx-provider-models__toggle").click();
     const table = record.getByRole("table", { name: "模型列表", exact: true });
     const row = table.locator("tbody tr").filter({ hasText: "ui-synthetic-model" });
     await expect(row).toHaveCount(1);

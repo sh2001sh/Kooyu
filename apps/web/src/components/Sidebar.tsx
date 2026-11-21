@@ -10,7 +10,7 @@ import {
   Sun,
 } from "lucide-react";
 import type { HarnessId } from "@kodo/protocol";
-import { KodoMark } from "./KodoBrand";
+import { KooyuBrandMark } from "./KooyuBrand";
 import { KooyuWordmark } from "./KooyuWordmark";
 import { Modal } from "./Motion";
 import { useT } from "../lib/i18n";
@@ -129,7 +129,7 @@ export function Sidebar({
         ) : (
           <div className="brand">
             <span className="brand-mark" aria-hidden="true">
-              <KodoMark size={18} />
+              <KooyuBrandMark size={18} />
             </span>
             {!collapsed && <KooyuWordmark className="brand-title brand-wordmark" />}
             <div className="brand-actions">

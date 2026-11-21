@@ -42,15 +42,18 @@ class ConnectionVault(context: Context) {
         return ConnectionBook.parse(JSONObject(String(cipher.doFinal(Base64.decode(data, Base64.NO_WRAP)), Charsets.UTF_8)))
     }
     fun clear() { check(prefs.edit().clear().commit()) { "无法清除本机凭据。" } }
-    fun saveDraft(host: String, session: String, text: String) {
-        val label = "draft:$host:$session"
+    fun saveDraft(host: String, session: String, text: String) = saveEncrypted("draft:$host:$session", text)
+    fun saveRenewal(id: String, value: String) = saveEncrypted("renewal:$id", value)
+    fun renewal(id: String) = readEncrypted("renewal:$id")
+    private fun saveEncrypted(label:String,text:String) {
         if (text.isEmpty()) { prefs.edit().remove(label).apply(); return }
         val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, key()) }
         val encrypted = cipher.doFinal(text.take(200000).toByteArray(Charsets.UTF_8))
         prefs.edit().putString(label, JSONObject().put("iv", Base64.encodeToString(cipher.iv, Base64.NO_WRAP)).put("data", Base64.encodeToString(encrypted, Base64.NO_WRAP)).toString()).apply()
     }
-    fun draft(host: String, session: String): String {
-        val value = prefs.getString("draft:$host:$session", null) ?: return ""
+    fun draft(host: String, session: String) = readEncrypted("draft:$host:$session")
+    private fun readEncrypted(label:String): String {
+        val value = prefs.getString(label, null) ?: return ""
         val blob = JSONObject(value)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, Base64.decode(blob.getString("iv"), Base64.NO_WRAP))) }
         return String(cipher.doFinal(Base64.decode(blob.getString("data"), Base64.NO_WRAP)), Charsets.UTF_8)

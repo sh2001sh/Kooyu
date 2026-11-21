@@ -1,48 +1,59 @@
-# Kooyu Relay deployment
+# Kooyu Relay Self-Hosted Deployment
 
-Server: `ssh codego-new-db`; runtime: `/opt/kooyu-relay`.
-Public origin: `https://relay.kooyu.app`.
-Edge: existing `/opt/kodo-edge` Caddy deployment, with automatic certificate renewal.
+This directory contains a generic Docker Compose and Caddy configuration for self-hosting Kooyu Relay (`services/relay`) behind HTTPS termination (for example [`../kodo-edge/`](../kodo-edge/)).
 
-Verified release on 2026-11-13: `kooyu-relay:20261113-2`, source directory
-`/opt/kooyu-relay/releases/20261113-2`. Previous image `kooyu-relay:20261113-1`
-is retained. Public health and live Host reconnect with the same paired device
-were verified after replacement.
+## Build and Deploy
 
-On 2026-11-19 the Caddy site gained gzip for JSON responses only. SSE remains
-uncompressed; public authenticated JSON decoding and SSE heartbeat were verified.
-Keep this match restriction when editing the proxy. Performance findings and
-the pre-change backup path are recorded in `docs/mobile-connection-performance-2026-11-19.md`.
-
-## Build a release
-
-1. From the repository root, run `npm ci`, `npm run build`, `npm test`, and `npm run test:relay`.
-2. Create a fresh staging directory containing the Relay `Dockerfile`, `package.json`, `package-lock.json`, `src/` from `services/relay`, and the contents of `apps/web/dist/` under `web/`. Never copy local credentials, `.local/`, or desktop data.
-3. Upload the staged directory to `/opt/kooyu-relay/releases/<release>`.
-4. On the server: `docker build -t kooyu-relay:<release> /opt/kooyu-relay/releases/<release>`.
-5. Put this directory's `compose.yaml` in `/opt/kooyu-relay`, and set `RELAY_IMAGE=kooyu-relay:<release>` in its server-local `.env`.
-6. Run `docker compose config --quiet` and `docker compose up -d --wait` from `/opt/kooyu-relay`.
-
-Use immutable release tags and retain the previous image. Runtime dependencies are locked in `package-lock.json`. The Docker base is Node 24.13.0 Alpine; reviewed base updates should be rebuilt and tested explicitly.
-
-For the first installation, copy `relay.caddy` to `/opt/kodo-edge/sites/relay.caddy`, validate Caddy, then reload it. Do not recreate the Caddy data volume: it holds certificates and ACME state. Do not change unrelated database/VPN firewall rules. Relay publishes only `127.0.0.1:4321`; leave that port closed to the Internet. TLS terminates at Caddy, whose upstream is on the same server. Only this trusted loopback proxy supplies forwarded client addresses.
+1. From the repository root, run verification and build the Web bundle:
+   ```sh
+   npm ci
+   npm run build
+   npm test
+   npm run test:relay
+   ```
+2. Create a fresh staging directory containing `services/relay/Dockerfile`, `services/relay/package.json`, `services/relay/package-lock.json`, `services/relay/src/`, and the built `apps/web/dist/` directory copied under `web/`. Never copy local credentials, `.local/`, or desktop data.
+3. Build a versioned image on your server:
+   ```sh
+   docker build -t kooyu-relay:<release> /path/to/staged-release
+   ```
+4. Copy `compose.yaml` to your deployment directory and create a server-local `.env` file:
+   ```dotenv
+   RELAY_IMAGE=kooyu-relay:<release>
+   RELAY_ORIGIN=https://relay.example.com
+   ACCOUNT_ORIGIN=https://accounts.example.com
+   # Local private control plane on the same Linux host
+   ACCOUNT_CONTROL_ORIGIN=http://127.0.0.1:4381
+   # Set the same independently generated secret in the account service
+   RELAY_CONTROL_SECRET=<at-least-32-random-characters>
+   # Optional: wildcard domain for isolated remote previews
+   # RELAY_PREVIEW_DOMAIN=preview.example.com
+   ```
+5. Validate and start the service:
+   ```sh
+   docker compose config --quiet
+   docker compose up -d --wait
+   ```
+6. Configure your HTTPS reverse proxy using `relay.caddy` (replacing `relay.example.com` with your hostname). Keep gzip restricted to `application/json*` so SSE streams remain uncompressed, and keep `127.0.0.1:4321` bound to loopback only.
 
 ## Verify
 
-Run `docker compose ps`, `curl --fail https://relay.kooyu.app/healthz`, and `docker compose logs --tail 30 relay` from `/opt/kooyu-relay`.
+```sh
+docker compose ps
+curl --fail https://relay.example.com/healthz
+docker compose logs --tail 30 relay
+```
 
-Expected health response: `{"service":"kooyu-relay","status":"ok","version":1}`. This checks the Relay process, not an individual desktop's reachability. Use an isolated Host to test public pairing, bearer/cookie authentication, SSE heartbeat and revocation; see `docs/mobile-relay.md`.
+Expected health response: `{"service":"kooyu-relay","status":"ok","version":1}`. Always verify TLS certificates normally; never use `curl -k` to ignore certificate errors.
 
-The development machine may use fake-IP DNS. For an origin-only connectivity check retaining certificate verification: `curl --noproxy '*' --resolve relay.kooyu.app:443:159.195.115.151 https://relay.kooyu.app/healthz`. Also test the normal DNS/client route. Never use `-k` to hide a certificate problem.
+## Update and Rollback
 
-## Update and rollback
+- Replacing the container briefly interrupts connected Hosts. Hosts reconnect automatically; clients reload state and never auto-replay writes.
+- Use immutable image tags and keep the previous image so rollback is simply restoring the previous `RELAY_IMAGE` in `.env` and running `docker compose up -d --wait`.
+- Preserve the `relay-data` volume across updates and rollbacks. It persists `/var/lib/kooyu-relay/mailbox.sqlite` (device verification keys, short-lived encrypted mailbox envelopes, Web Push subscriptions, and the Relay VAPID keypair). Treat this volume as sensitive data.
 
-Replacing this single container briefly interrupts connected Hosts. They automatically reconnect; clients reload state and never automatically replay writes. Publish compatible Host, web and protocol changes together. Keep the previous server release directory and image.
+## Protocol & Security Boundaries
 
-Rollback by setting `.env` back to the previous `RELAY_IMAGE`, then running `docker compose up -d --wait` and checking health. Rolling back the Relay does not roll back the desktop binary. No cloud database migration is needed for this stateless service.
-
-## Operations and boundaries
-
-The Relay has no persistent message store and no request-body/access logging. Rotated container logs remain potentially sensitive; do not add token, pairing-code, header or payload logging. Keep the host patched, limit SSH access and preserve existing firewall isolation. Caddy maintains certificate state separately.
-
-This is TLS transport, **not end-to-end encryption**: the Relay operator can read forwarded plaintext and credentials. It is a single-node deployment with bounded buffers and rate limits, not an HA service. A later website can share this server using a separate Caddy site and separate process/container; reserve resources so the website cannot exhaust the Relay.
+- V1 and V2 Hosts can connect concurrently. Point self-hosted desktop Hosts to your server via `KODO_RELAY_ORIGIN=https://relay.example.com` and `KOOYU_RELAY_PROTOCOL=2`.
+- The encrypted offline mailbox enforces Ed25519 device verification keys and accepts up to 32 envelopes per Host (max 32 KiB each, 12-hour TTL). Hosts revalidate paired devices before executing queued envelopes.
+- Native Android, iOS, and Desktop v2 pairings pin the Host signing identity from the invitation URL and encrypt API traffic end-to-end. For Web/PWA clients loaded through the Relay, transport is encrypted by TLS and mailbox envelopes are encrypted, though the Relay serves the PWA static assets and should be operated as trusted infrastructure.
+- For isolated remote previews, configure wildcard DNS and TLS for a dedicated domain separate from `RELAY_ORIGIN`, preserve the `Host` header when proxying to the Relay, and set `RELAY_PREVIEW_DOMAIN` in `.env`.

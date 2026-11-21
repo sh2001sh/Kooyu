@@ -13,7 +13,7 @@ import { GoalPanel } from "./GoalPanel";
 import { SessionOverview } from "./SessionInsights";
 import { api } from "../lib/host-client";
 import { formatWorkspaceLabel } from "../lib/harnesses";
-import { HarnessBadge } from "./KodoBrand";
+import { HarnessBadge } from "./KooyuBrand";
 import { NativeRecovery } from "./NativeRecovery";
 import { WorkspacePanel } from "./WorkspacePanel";
 import { SessionRunPanel } from "./SessionRunPanel";
@@ -35,6 +35,7 @@ interface SessionDetailProps {
   requestedPath?: string;
   requestKey?: number;
   onOpenFile: (path: string) => void;
+  onSendToAgent?: (text: string) => void;
 }
 export function SessionDetail({
   detail,
@@ -49,6 +50,7 @@ export function SessionDetail({
   requestedPath,
   requestKey,
   onOpenFile,
+  onSendToAgent,
   goals = [],
   reloadGoals = async () => {},
 }: SessionDetailProps) {
@@ -186,6 +188,7 @@ export function SessionDetail({
             requestedPath={requestedPath}
             requestKey={requestKey}
             onOpenFile={onOpenFile}
+            onSendToAgent={onSendToAgent}
           />
         ) : !native ? (
           <>

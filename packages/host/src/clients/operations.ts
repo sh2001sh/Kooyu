@@ -193,6 +193,26 @@ export class ClientOperations {
         run: () => s.memory.saveSettings({ ...body, requestId: input.requestId }),
       };
     }
+    const agentDoc =
+      /^\/api\/memory\/docs\/(SOUL\.md|USER\.md|MEMORY\.md|RULES\.md|HEARTBEAT\.md|AGENTS\.md|ROUTING\.md)(?:\/(reset))?$/.exec(
+        path,
+      );
+    if (agentDoc) {
+      requireOperation(s, identity, "memory.write");
+      const docName = agentDoc[1]!;
+      const subAction = agentDoc[2];
+      if (!s.memory.docs) throw new KodoError("UNAVAILABLE", "本地人格与记忆文档目录不可用。");
+      if (method === "PATCH" && !subAction)
+        return {
+          atomic: true,
+          run: () => s.memory.docs!.save(docName, { ...body, requestId: input.requestId }),
+        };
+      if (method === "POST" && subAction === "reset")
+        return {
+          atomic: true,
+          run: () => s.memory.docs!.reset(docName, input.requestId, s.memory.list(null, false)),
+        };
+    }
     const memory = /^\/api\/memory(?:\/([0-9a-f-]+))?$/.exec(path);
     if (memory && ((method === "POST" && !memory[1]) || (method === "PATCH" && memory[1]))) {
       requireOperation(s, identity, "memory.write");

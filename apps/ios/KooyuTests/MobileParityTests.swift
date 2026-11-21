@@ -79,7 +79,7 @@ final class MobileParityTests: XCTestCase {
         XCTAssertEqual(nativeModelID("kodo", try json(#"{"id":"sonnet","provider":"kodo-profile"}"#)), "sonnet")
     }
     func testFormatWorkspaceLabelSanitizesPathsAcrossPlatforms() {
-        XCTAssertEqual(formatWorkspaceLabel(#"C:\Users\admin\Projects\agent-harness"#), "Projects/agent-harness")
+        XCTAssertEqual(formatWorkspaceLabel(#"C:\Users\dev\Projects\agent-harness"#), "Projects/agent-harness")
         XCTAssertEqual(formatWorkspaceLabel("/Users/alice/work/kooyu-app/"), "work/kooyu-app")
         XCTAssertEqual(formatWorkspaceLabel("/home/runner/repo"), "repo")
         XCTAssertEqual(formatWorkspaceLabel("/var/log"), "var/log")

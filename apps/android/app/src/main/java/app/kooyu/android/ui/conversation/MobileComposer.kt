@@ -329,13 +329,13 @@ data class ComposerOption(
                     )
                     Row(
                         Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.Bottom,
+                        verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         if (onPlus != null) {
                             Box(
                                 Modifier
-                                    .size(44.dp)
+                                    .size(40.dp)
                                     .clip(CircleShape)
                                     .kooyuPressable(onClickLabel = "更多选项与附件") { onPlus() }
                                     .semantics { contentDescription = "添加附件与对话设置" },
@@ -349,20 +349,21 @@ data class ComposerOption(
                                     }
                                 ) {
                                     Box(
-                                        Modifier.size(36.dp).clip(CircleShape).background(c.sunken).border(0.5.dp, c.borderSubtle, CircleShape),
+                                        Modifier.size(34.dp).clip(CircleShape).background(c.sunken).border(0.5.dp, c.borderSubtle, CircleShape),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Icon(Icons.Outlined.Add, null, tint = c.text, modifier = Modifier.size(19.dp))
+                                        Icon(Icons.Outlined.Add, null, tint = c.text, modifier = Modifier.size(18.dp))
                                     }
                                 }
                             }
                         }
-                        FlowRow(
+                        Row(
                             Modifier
                                 .weight(1f)
-                                .padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(5.dp),
-                            verticalArrangement = Arrangement.spacedBy(5.dp)
+                                .horizontalScroll(rememberScrollState())
+                                .padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             if (onHarnessClick != null && harnessSummary != null) {
                                 ComposerPill(

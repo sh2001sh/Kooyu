@@ -50,6 +50,7 @@ export const zcodeAdapter: HarnessAdapter = {
       "resume",
       "historyRead",
       "observeLive",
+      "settled",
       "steer",
       "cancel",
       "interaction",

@@ -91,19 +91,6 @@ export function GeneralSettings({
       <SettingsPage title={t("nav.general")}>
         {loadError && <p className="sx-note is-error">{loadError}</p>}
 
-        <SettingsSection title={t("general.setupSection")}>
-          <SettingsRow label={t("general.setupRow")}>
-            <button
-              type="button"
-              onClick={() => window.dispatchEvent(new Event("kooyu:open-setup"))}
-            >
-              {t("general.openSetup")}
-            </button>
-          </SettingsRow>
-        </SettingsSection>
-
-        <UpdateSection />
-
         <SettingsSection title={t("general.section.language")}>
           <SettingsRow
             label={t("general.language")}
@@ -119,6 +106,19 @@ export function GeneralSettings({
             />
           </SettingsRow>
         </SettingsSection>
+
+        <SettingsSection title={t("general.setupSection")}>
+          <SettingsRow label={t("general.setupRow")}>
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new Event("kooyu:open-setup"))}
+            >
+              {t("general.openSetup")}
+            </button>
+          </SettingsRow>
+        </SettingsSection>
+
+        <UpdateSection />
 
         <SettingsSection title={t("voice.section")}>
           <SettingsRow label={t("voice.engine")} htmlFor="pref-voice-engine">

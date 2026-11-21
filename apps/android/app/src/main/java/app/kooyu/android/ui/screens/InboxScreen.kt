@@ -181,6 +181,37 @@ import org.json.JSONObject
                             }
                         }
                     } else {
+                        item("pending-bulk-actions") {
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    "共 ${state.inbox.size} 项待处理",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = c.textSecondary
+                                )
+                                Surface(
+                                    shape = RoundedCornerShape(999.dp),
+                                    color = c.raised,
+                                    border = BorderStroke(0.5.dp, c.borderSubtle),
+                                    modifier = Modifier.clickable(enabled = state.online) {
+                                        scope.launch { model.markAllInboxRead() }
+                                    }
+                                ) {
+                                    Row(
+                                        Modifier.padding(horizontal = 11.dp, vertical = 5.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(Icons.Outlined.DoneAll, null, tint = c.textSecondary, modifier = Modifier.size(14.dp))
+                                        Text("全部已读", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = c.text)
+                                    }
+                                }
+                            }
+                        }
                         items(state.inbox, key = { "pending:" + it.id }) { item ->
                             val session = state.sessions.firstOrNull { it.id == item.sessionId }
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -200,7 +231,17 @@ import org.json.JSONObject
                                         Text("进入对话 →", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = c.brandCoral)
                                     }
                                 }
-                                InteractionCard(item, state.canWrite) { action -> scope.launch { model.answer(item, action) } }
+                                InteractionCard(
+                                    item = item,
+                                    enabled = state.canWrite,
+                                    onMarkRead = { scope.launch { model.markInboxRead(item.id) } },
+                                    onDelete = { scope.launch { model.deleteInboxItem(item.id) } },
+                                    onApproveIntake = { eventId ->
+                                        scope.launch {
+                                            model.execute("/intake/$eventId/approve", "POST", JSONObject())
+                                        }
+                                    },
+                                ) { action -> scope.launch { model.answer(item, action) } }
                             }
                         }
                     }

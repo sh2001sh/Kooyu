@@ -23,7 +23,7 @@ import {
   type RadiusChoiceId,
 } from "../../lib/appearance";
 import { useAppPreferences } from "../../lib/preferences";
-import { HarnessBadge } from "../KodoBrand";
+import { HarnessBadge } from "../KooyuBrand";
 import { Toggle } from "./SettingsKit";
 
 function ColorTileEditor({

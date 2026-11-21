@@ -1,5 +1,5 @@
 import { useRef, useSyncExternalStore } from "react";
-import { FileText, Image as ImageIcon, Loader2, Paperclip, Plus, X } from "lucide-react";
+import { FileText, Image as ImageIcon, Loader2, Paperclip, Pencil, Plus, X } from "lucide-react";
 import type { ManagedFile, MessageAttachment, UploadSession } from "@kodo/protocol";
 import { api, apiPath, HostError } from "../lib/host-client";
 
@@ -17,6 +17,7 @@ export interface DraftAttachment {
   progress: number;
   fileId?: string;
   error?: string;
+  previewUrl?: string;
 }
 
 export const MAX_ATTACHMENTS = 10;
@@ -115,7 +116,7 @@ export function useAttachments(scope: string, sessionId: string | null) {
     },
     () => errors.get(scope) ?? "",
   );
-  const add = async (selected: FileList | null) => {
+  const add = async (selected: FileList | File[] | null) => {
     if (!selected?.length) return;
     setError(scope, "");
     const files = Array.from(selected);
@@ -126,13 +127,16 @@ export function useAttachments(scope: string, sessionId: string | null) {
     await Promise.all(
       files.map(async (file) => {
         const key = crypto.randomUUID();
+        const mediaType = guessType(file);
+        const previewUrl = mediaType.startsWith("image/") ? URL.createObjectURL(file) : undefined;
         const base: DraftAttachment = {
           key,
           name: file.name,
           size: file.size,
-          mediaType: guessType(file),
+          mediaType,
           state: "uploading",
           progress: 0,
+          previewUrl,
         };
         if (file.size > MAX_FILE_BYTES) {
           update(scope, (list) => [
@@ -166,10 +170,15 @@ export function useAttachments(scope: string, sessionId: string | null) {
     readyIds: items.filter((item) => item.state === "ready").map((item) => item.fileId!),
     add,
     remove: (key: string) => {
+      const removed = (drafts.get(scope) ?? []).find((item) => item.key === key);
+      if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
       update(scope, (list) => list.filter((item) => item.key !== key));
       if (!(drafts.get(scope) ?? []).some((item) => item.state === "error")) setError(scope, "");
     },
     clear: () => {
+      for (const item of drafts.get(scope) ?? []) {
+        if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      }
       drafts.delete(scope);
       setError(scope, "");
     },
@@ -233,11 +242,13 @@ export function AttachmentList({
   error,
   disabled,
   onRemove,
+  onAnnotate,
 }: {
   attachments: DraftAttachment[];
   error: string;
   disabled?: boolean;
   onRemove: (key: string) => void;
+  onAnnotate?: (file: DraftAttachment) => void;
 }) {
   if (!attachments.length && !error) return null;
   return (
@@ -259,6 +270,21 @@ export function AttachmentList({
             {file.state === "uploading" && (
               <small aria-label={`${file.name} 上传进度`}>{Math.round(file.progress * 100)}%</small>
             )}
+            {onAnnotate &&
+              file.state === "ready" &&
+              file.mediaType.startsWith("image/") &&
+              file.previewUrl && (
+                <button
+                  type="button"
+                  className="nx-attach-annotate-btn"
+                  aria-label={`批注图片 ${file.name}`}
+                  title="截图批注（画笔 / 箭头 / 框选）"
+                  disabled={disabled}
+                  onClick={() => onAnnotate(file)}
+                >
+                  <Pencil size={12} />
+                </button>
+              )}
             <button
               type="button"
               aria-label={`移除附件 ${file.name}`}

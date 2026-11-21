@@ -55,7 +55,7 @@ function fingerprint(root) {
   return hash.digest("hex");
 }
 // Some Windows hosts fail before application code when the runtime image lives
-// on a particular volume. Copy exactly the installed distribution into Kodo's
+// on a particular volume. Copy exactly the installed distribution into Kooyu's
 // own cache and verify it; do not change system settings or Electron's sandbox.
 export async function resolveElectronRuntime() {
   const source = electronPath,
@@ -67,8 +67,9 @@ export async function resolveElectronRuntime() {
   const sourceRoot = dirname(source),
     digest = fingerprint(sourceRoot);
   const cacheRoot = resolve(
-    process.env.KODO_ELECTRON_CACHE ??
-      join(process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"), "Kodo", "electron"),
+    process.env.KOOYU_ELECTRON_CACHE ??
+      process.env.KODO_ELECTRON_CACHE ??
+      join(process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"), "Kooyu", "electron"),
   );
   mkdirSync(cacheRoot, { recursive: true });
   const destination = join(cacheRoot, digest);

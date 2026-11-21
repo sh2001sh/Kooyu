@@ -39,12 +39,13 @@ async function load(root: string): Promise<NativeConfiguration> {
     const account = `native:${createHash("sha256").update(root).digest("hex")}:${provider}`;
     const sourceHash = createHash("sha256").update(JSON.stringify(credential)).digest("hex");
     hashes.set(provider, sourceHash);
-    const cached = await secretVault().get("Kodo", account);
+    const cached =
+      (await secretVault().get("Kooyu", account)) ?? (await secretVault().get("Kodo", account));
     const saved = cached
       ? (JSON.parse(cached) as { sourceHash: string; credential: Credential })
       : undefined;
     const current = saved?.sourceHash === sourceHash ? saved.credential : credential;
-    await secretVault().set("Kodo", account, JSON.stringify({ sourceHash, credential: current }));
+    await secretVault().set("Kooyu", account, JSON.stringify({ sourceHash, credential: current }));
     await memory.modify(provider, async () => current);
   }
   const credentials: CredentialStore = {
@@ -57,7 +58,7 @@ async function load(root: string): Promise<NativeConfiguration> {
           const next = await fn(current);
           if (next)
             await secretVault().set(
-              "Kodo",
+              "Kooyu",
               `native:${createHash("sha256").update(root).digest("hex")}:${id}`,
               JSON.stringify({ sourceHash: hashes.get(id), credential: next }),
             );
@@ -68,10 +69,9 @@ async function load(root: string): Promise<NativeConfiguration> {
     },
     async delete(id, options) {
       await memory.delete(id, options);
-      await secretVault().delete(
-        "Kodo",
-        `native:${createHash("sha256").update(root).digest("hex")}:${id}`,
-      );
+      const accountKey = `native:${createHash("sha256").update(root).digest("hex")}:${id}`;
+      await secretVault().delete("Kooyu", accountKey);
+      await secretVault().delete("Kodo", accountKey);
     },
   };
   return {

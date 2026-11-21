@@ -6,7 +6,7 @@
       "id": "kodo",
       "result": "Kodo 主 agent：原生 SDK 对话、恢复与六工具委派闭环通过",
       "version": "Kodo / pi SDK 1.5.2",
-      "route": "已有 codegoai / deepseek-v4-flash；默认 openai 路由连接超时",
+      "route": "自定义 OpenAI 兼容路由（默认公开路由未配置时超时）",
       "verified": [
         "create",
         "text",
@@ -38,7 +38,7 @@
         "native-context-after-model-switch",
         "model-settings-receipt-and-persistence"
       ],
-      "remaining": "运行中取消通过；其他目标 harness 的管理闭环待验收。内核使用已有 codegoai/deepseek-v4-flash；默认 openai 路由超时。",
+      "remaining": "运行中取消通过；其他目标 harness 的管理闭环待验收。内核使用自定义 OpenAI 兼容路由；默认公开路由未配置时超时。",
       "implementation": "implemented",
       "messagingVerification": {
         "result": "passed",
@@ -63,7 +63,7 @@
       "id": "pi",
       "result": "独立 pi harness：对话、历史读取/列表、原 ID 恢复通过",
       "version": "SDK 1.5.2",
-      "route": "已有 codegoai / deepseek-v4-flash；默认 openai 路由连接超时",
+      "route": "自定义 OpenAI 兼容路由（默认公开路由未配置时超时）",
       "verified": [
         "create",
         "text",
@@ -358,7 +358,13 @@
     {
       "id": "gemini",
       "result": "Gemini CLI 0.67.0 经本地 Google→Chat 网关双轮真实回复及原生 Read 工具通过",
-      "verified": ["native-configuration-read", "native-acp-session-created", "gateway-text-two-turns", "native-read-tool", "native-identity-preserved"],
+      "verified": [
+        "native-configuration-read",
+        "native-acp-session-created",
+        "gateway-text-two-turns",
+        "native-read-tool",
+        "native-identity-preserved"
+      ],
       "remaining": "Google 直连缺可用凭据未验证；网关图片、签名思考、搜索、精确 countTokens 不支持；load/list/usage 按握手；无独立 read API，historyRead unsupported；自动继续尚未开放。",
       "implementation": "partial",
       "modelVerification": {
@@ -404,7 +410,11 @@
     {
       "id": "kimi-code",
       "result": "Kimi Code 2.5.2 隔离新 Provider 绑定双轮真实回复，同一原生 ID",
-      "verified": ["bound-provider-reply", "bound-provider-two-turn-context", "bound-provider-native-id-preserved"],
+      "verified": [
+        "bound-provider-reply",
+        "bound-provider-two-turn-context",
+        "bound-provider-native-id-preserved"
+      ],
       "remaining": "用户日常安装与登录未验收；其他协议、恢复及计量待协商；无独立 read API，historyRead unsupported；自动继续尚未开放。",
       "implementation": "partial",
       "modelVerification": {
@@ -427,7 +437,11 @@
     {
       "id": "grok-build",
       "result": "Grok Build 1.0.80 隔离新 Provider 绑定双轮真实回复，同一原生 ID",
-      "verified": ["bound-provider-reply", "bound-provider-two-turn-context", "bound-provider-native-id-preserved"],
+      "verified": [
+        "bound-provider-reply",
+        "bound-provider-two-turn-context",
+        "bound-provider-native-id-preserved"
+      ],
       "remaining": "用户日常安装与登录未验收；其他协议、恢复及计量待协商；无独立 read API，historyRead unsupported；自动继续尚未开放。",
       "implementation": "partial",
       "modelVerification": {
@@ -541,9 +555,7 @@
       "kimi-code",
       "grok-build"
     ],
-    "remainingMappings": [
-      "cursor"
-    ],
+    "remainingMappings": ["cursor"],
     "nativeDoubleTurns": "Kodo plus nine native harness bound conversations; Gemini and Claude Chat bridges include native Read tool; Cursor custom Provider unsupported"
   }
 }

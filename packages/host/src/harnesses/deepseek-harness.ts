@@ -37,7 +37,7 @@ const info = descriptor(
   "deepseek-harness",
   "DeepSeek Harness",
   "app-server",
-  ["directChat", "historyRead", "resume", "observeLive", "interaction", "cancel"],
+  ["directChat", "historyRead", "resume", "observeLive", "settled", "interaction", "cancel"],
   "Native SDK JSON-RPC; session/wait confirms root and descendant idle; cancel restarts the runtime and resumes the session",
   "implemented",
 );

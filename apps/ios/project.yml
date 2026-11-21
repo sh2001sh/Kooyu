@@ -1,4 +1,8 @@
 name: Kooyu
+packages:
+  JOSESwift:
+    url: https://github.com/airsidemobile/JOSESwift.git
+    exactVersion: 3.0.0
 options:
   bundleIdPrefix: app.kooyu
   deploymentTarget:
@@ -12,9 +16,16 @@ settings:
     CURRENT_PROJECT_VERSION: 4
 targets:
   Kooyu:
+    dependencies:
+      - package: JOSESwift
     type: application
     platform: iOS
-    sources: [Kooyu]
+    sources:
+      - path: Kooyu
+        excludes: [TerminalAssets]
+      - path: Kooyu/TerminalAssets
+        type: folder
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.kooyu.ios

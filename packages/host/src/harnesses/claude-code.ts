@@ -108,6 +108,34 @@ export function nativeClaudeExecutable(command = "claude"): string | null {
   }
   return realpathSync(path);
 }
+
+// Read-only reviews exclude project settings, plugins and hooks. Preserve the
+// user's native provider route without loading executable settings into the SDK.
+function readOnlyEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const dir = env.CLAUDE_CONFIG_DIR ?? join(env.USERPROFILE ?? env.HOME ?? homedir(), ".claude");
+  const file = join(dir, "settings.json");
+  const result = { ...env };
+  if (
+    !env.ANTHROPIC_BASE_URL &&
+    !env.ANTHROPIC_API_KEY &&
+    !env.ANTHROPIC_AUTH_TOKEN &&
+    existsSync(file)
+  ) {
+    const settings = JSON.parse(readFileSync(file, "utf8"));
+    for (const [key, value] of Object.entries(settings.env ?? {})) {
+      if (
+        /^ANTHROPIC_(?:AUTH_TOKEN|API_KEY|BASE_URL|MODEL|DEFAULT_(?:SONNET|OPUS|HAIKU)_MODEL)$/.test(
+          key,
+        ) &&
+        result[key] === undefined &&
+        typeof value === "string"
+      )
+        result[key] = value;
+    }
+  }
+  delete result.CLAUDE_CODE_DANGEROUSLY_SKIP_PERMISSIONS;
+  return result;
+}
 export async function discoverClaudeModels(ctx: AdapterContext, runQuery: typeof query = query) {
   const cwd = ctx.cwd ?? process.cwd();
 
@@ -286,9 +314,18 @@ export function claudeAdapterWithQuery(runQuery: typeof query = query): HarnessA
           ctx.assertSendAllowed?.(commandId);
           const options: Parameters<typeof query>[0]["options"] = {
             cwd,
-            env: ctx.env,
+            env: ctx.permissionMode?.() === "read-only" ? readOnlyEnvironment(ctx.env) : ctx.env,
             includePartialMessages: true,
             forwardSubagentText: true,
+            ...(ctx.permissionMode?.() === "read-only"
+              ? {
+                  tools: ["Read", "Grep", "Glob"],
+                  allowedTools: ["Read", "Grep", "Glob"],
+                  strictMcpConfig: true,
+                  mcpServers: {},
+                  settingSources: [],
+                }
+              : {}),
             persistSession: true,
             ...(started ? { resume: nativeId } : { sessionId: nativeId }),
             ...(targetModel ? { model: targetModel } : {}),
@@ -307,6 +344,11 @@ export function claudeAdapterWithQuery(runQuery: typeof query = query): HarnessA
               ? { allowDangerouslySkipPermissions: true }
               : {}),
             canUseTool: async (toolName, input, options) => {
+              if (
+                ctx.permissionMode?.() === "read-only" &&
+                !["Read", "Grep", "Glob"].includes(toolName)
+              )
+                return { behavior: "deny", message: "此会话仅允许只读审查。" };
               const result = (await ctx.interact(options.toolUseID, {
                 protocol: "claude",
                 toolName,

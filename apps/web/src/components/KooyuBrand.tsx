@@ -3,8 +3,8 @@ import type { HarnessId } from "@kodo/protocol";
 import { KooyuMark } from "./KooyuMark";
 import { HARNESS_NAMES, HARNESS_VISUALS } from "../lib/harnesses";
 
-/** Use the approved ribbon asset at its original proportions. */
-export function KodoMark({ size = 22, className }: { size?: number; className?: string }) {
+/** Use the approved Kooyu Möbius ribbon mark at its original proportions. */
+export function KooyuBrandMark({ size = 22, className }: { size?: number; className?: string }) {
   return (
     <KooyuMark
       width={size}
@@ -19,7 +19,7 @@ export function KodoMark({ size = 22, className }: { size?: number; className?: 
 export function HarnessGlyph({ harnessId, size = 16 }: { harnessId: HarnessId; size?: number }) {
   switch (harnessId) {
     case "kodo":
-      return <KodoMark size={size} />;
+      return <KooyuBrandMark size={size} />;
 
     case "pi":
       return (

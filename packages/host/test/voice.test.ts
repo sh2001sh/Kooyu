@@ -31,8 +31,8 @@ test("voice helpers normalize OpenAI-compatible URLs, languages and audio mime t
     "https://api.openai.com/v1/audio/transcriptions",
   );
   assert.equal(
-    normalizeTranscriptionUrl("https://codegoai.com/v1/responses"),
-    "https://codegoai.com/v1/audio/transcriptions",
+    normalizeTranscriptionUrl("https://api.example.com/v1/responses"),
+    "https://api.example.com/v1/audio/transcriptions",
   );
   assert.equal(
     normalizeTranscriptionUrl("https://proxy.example.com/v1/chat/completions/"),
@@ -103,12 +103,12 @@ test("getVoiceStatus and transcribeVoice forward multipart audio to configured O
     );
 
     await providers.saveProvider({
-      name: "codego",
+      name: "custom-openai",
       endpoints: [
         {
           name: "OpenAI Responses",
           protocol: "openai-responses",
-          baseUrl: "https://codegoai.com/v1",
+          baseUrl: "https://api.example.com/v1",
           apiKey: "sk-voice-secret",
         },
       ],
@@ -117,7 +117,7 @@ test("getVoiceStatus and transcribeVoice forward multipart audio to configured O
     const readyStatus = getVoiceStatus(store, providers);
     assert.equal(readyStatus.providerAvailable, true);
     assert.equal(readyStatus.providers.length, 1);
-    assert.equal(readyStatus.providers[0]!.providerName, "codego");
+    assert.equal(readyStatus.providers[0]!.providerName, "custom-openai");
 
     const result = await transcribeVoice(store, providers, {
       audio: Buffer.from("webm-audio-bytes"),
@@ -127,10 +127,10 @@ test("getVoiceStatus and transcribeVoice forward multipart audio to configured O
     });
 
     assert.equal(result.text, "帮我重构一下侧边栏布局");
-    assert.equal(result.providerName, "codego");
+    assert.equal(result.providerName, "custom-openai");
     assert.equal(result.model, "gpt-4o-mini-transcribe");
     assert.equal(captured.length, 1);
-    assert.equal(captured[0]!.url, "https://codegoai.com/v1/audio/transcriptions");
+    assert.equal(captured[0]!.url, "https://api.example.com/v1/audio/transcriptions");
     assert.equal(captured[0]!.auth, "Bearer sk-voice-secret");
     assert.equal(captured[0]!.model, "gpt-4o-mini-transcribe");
     assert.equal(captured[0]!.lang, "zh");

@@ -31,7 +31,11 @@ try {
     kind: harness === "kodo" ? "supervisor" : "direct",
     projectId: project.id,
     workspaceId: workspace.id,
-    ...(["pi", "kodo"].includes(harness) ? { model: "codegoai/deepseek-v4-flash" } : {}),
+    ...(["pi", "kodo"].includes(harness)
+      ? {
+          model: `${process.env.KODO_VERIFY_PROVIDER ?? "openai"}/${process.env.KODO_VERIFY_MODEL ?? "gpt-4o-mini"}`,
+        }
+      : {}),
   });
   const requestId = crypto.randomUUID();
   service.acceptSend(session.id, {

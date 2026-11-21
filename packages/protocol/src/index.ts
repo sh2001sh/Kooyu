@@ -44,6 +44,7 @@ export const CAPABILITIES = [
   "directChat",
   "historyRead",
   "resume",
+  "settled",
   "observeLive",
   "observeExternal",
   "steer",
@@ -262,7 +263,13 @@ export interface Supervision {
   continuous?: boolean;
   trigger?: "turn-ended" | "settled";
   /** Numeric limits use 0 (or omission) for unlimited. */
-  limits?: { endAt?: string; maxContinuations?: number; maxFailures?: number; budgetUsd?: number };
+  limits?: {
+    endAt?: string;
+    maxContinuations?: number;
+    maxFailures?: number;
+    budgetUsd?: number;
+    maxTotalTokens?: number;
+  };
   continuations?: number;
   failures?: number;
 }
@@ -355,6 +362,7 @@ export interface Snapshot {
   sessions: Session[];
   harnesses: HarnessDescriptor[];
   supervisions: Supervision[];
+  delegationTickets?: import("./delegation.js").DelegationTicket[];
   bindings: HarnessBinding[];
   inbox: InboxItem[];
   devices: { id: string; name: string; createdAt: string; expiresAt?: string }[];
@@ -367,6 +375,9 @@ export interface ProjectGrant {
   mode: "create-only" | "create-and-control";
   goal: string;
   limits: Supervision["limits"];
+  revision?: number;
+  generation?: number;
+  revoked?: boolean;
 }
 
 export interface Command {
@@ -453,6 +464,7 @@ export const watchSchema = z
         maxContinuations: z.number().int().nonnegative().optional(),
         maxFailures: z.number().int().nonnegative().optional(),
         budgetUsd: z.number().nonnegative().optional(),
+        maxTotalTokens: z.number().int().nonnegative().optional(),
       })
       .default({}),
   })
@@ -641,3 +653,4 @@ export class KodoError extends Error {
 export * from "./self-hosted.js";
 export * from "./automation-schedule.js";
 export * from "./clients.js";
+export * from "./delegation.js";

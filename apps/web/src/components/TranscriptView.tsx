@@ -34,7 +34,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { FilePreviewContext } from "../lib/file-preview-context";
 import { workspaceLinkPath } from "../lib/workspace-files";
 import { HARNESS_NAMES } from "../lib/harnesses";
-import { HarnessBadge } from "./KodoBrand";
+import { HarnessBadge } from "./KooyuBrand";
 import { CopyButton } from "./Motion";
 import { failureText, messageText } from "./TurnCard";
 import { useAppPreferences } from "../lib/preferences";

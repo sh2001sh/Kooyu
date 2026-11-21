@@ -22,7 +22,7 @@ import {
   type ClaudeModelSlot,
 } from "../../lib/model-mapping";
 import { useAppPreferences } from "../../lib/preferences";
-import { HarnessBadge } from "../KodoBrand";
+import { HarnessBadge } from "../KooyuBrand";
 import { permissionModesFor } from "../PermissionControls";
 import { SettingsPage, SettingsRow, SettingsSection, StatusDot, SxSelect } from "./SettingsKit";
 

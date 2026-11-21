@@ -9,9 +9,13 @@ import {
   FolderOpen,
   FolderPlus,
   GitBranch,
+  GitPullRequest,
+  Globe,
+  Layers,
   Monitor,
   MoreHorizontal,
   Plus,
+  ShieldCheck,
 } from "lucide-react";
 import { NATIVE_HARNESS_IDS, bindingReasoningLevels } from "@kodo/protocol/client";
 import type {
@@ -23,6 +27,7 @@ import type {
   Snapshot,
 } from "@kodo/protocol";
 import { shouldSend, useAppPreferences } from "../lib/preferences";
+import { useT } from "../lib/i18n";
 import { api, send } from "../lib/host-client";
 import { appendVoiceTranscript, useVoiceInput } from "../lib/voice";
 import { VoiceInputButton, VoiceRecordingBar } from "./VoiceInputControls";
@@ -34,7 +39,7 @@ import {
   shortModelLabel,
   modelOptionValue,
 } from "../lib/harnesses";
-import { HarnessBadge } from "./KodoBrand";
+import { HarnessBadge } from "./KooyuBrand";
 import { CanvasAura } from "./CanvasAura";
 import { MobiusLoader } from "./MobiusLoader";
 import { IosPopover } from "./IosPopover";
@@ -97,6 +102,7 @@ export function DraftWorkspace({
   onFirstSendStarted,
   onFirstSendFailed,
 }: DraftWorkspaceProps) {
+  const t = useT();
   const { settings: preferences } = useAppPreferences();
   const [providerChoiceId, setProviderChoiceId] = useState<string | null | undefined>(undefined);
   const workspaces = snapshot?.workspaces ?? [];
@@ -1025,6 +1031,58 @@ export function DraftWorkspace({
                         ? "今天想推进什么？"
                         : `与 ${HARNESS_NAMES[harnessId]} 开启新对话`}
                   </h2>
+                  {kind === "supervisor" && !compose && (
+                    <div className="playbook-capsules" aria-label={t("playbook.group")}>
+                      <button
+                        type="button"
+                        className="playbook-capsule"
+                        onClick={() =>
+                          setCompose(
+                            "请用独立 Worktree 委派 Codex 实现以下需求，再交给 Claude Code 只读审查，最后运行测试并汇报结果。\n\n需求：",
+                          )
+                        }
+                      >
+                        <GitPullRequest size={13} />
+                        <span>{t("playbook.implReview")}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="playbook-capsule"
+                        onClick={() =>
+                          setCompose(
+                            "请将以下任务拆分给多个 Worker，在独立工作区并行执行，汇总各项变更与验证结果。\n\n任务：",
+                          )
+                        }
+                      >
+                        <Layers size={13} />
+                        <span>{t("playbook.parallel")}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="playbook-capsule"
+                        onClick={() =>
+                          setCompose(
+                            "请运行当前项目测试与 lint 检查，定位失败原因并在独立分支修复，确保全量通过后给出改动摘要。\n\n范围：",
+                          )
+                        }
+                      >
+                        <ShieldCheck size={13} />
+                        <span>{t("playbook.ciGuard")}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="playbook-capsule"
+                        onClick={() =>
+                          setCompose(
+                            "请围绕以下主题进行深度联网调研，对比关键方案并附上可核验的来源链接与结论建议。\n\n主题：",
+                          )
+                        }
+                      >
+                        <Globe size={13} />
+                        <span>{t("playbook.research")}</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               </>
             )}

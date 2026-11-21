@@ -9,20 +9,24 @@ import { hostDataDirectory, hostEnvironment } from "../packages/platform/dist/in
 import { ensureHost } from "../apps/desktop/dist/host-client.js";
 import { PROTOCOL_VERSION } from "../packages/protocol/dist/client.js";
 
-test("all launchers share platform directories and keep legacy data identity", () => {
+test("all launchers share platform directories and support Kooyu default plus legacy Kodo fallback", () => {
   assert.equal(
     hostDataDirectory("darwin", {}, "/home/user"),
-    join("/home/user", "Library", "Application Support", "Kodo", "host"),
+    join("/home/user", "Library", "Application Support", "Kooyu", "host"),
   );
   assert.equal(
     hostDataDirectory("linux", { XDG_DATA_HOME: "/data" }, "/home/user"),
-    join("/data", "Kodo", "host"),
+    join("/data", "Kooyu", "host"),
   );
   assert.equal(
     hostDataDirectory("win32", { LOCALAPPDATA: "C:/user/data" }, "C:/user"),
-    join("C:/user/data", "Kodo", "host"),
+    join("C:/user/data", "Kooyu", "host"),
   );
-  assert.equal(hostDataDirectory("darwin", { KODO_DATA_DIR: "override" }), resolve("override"));
+  assert.equal(hostDataDirectory("darwin", { KOOYU_DATA_DIR: "override" }), resolve("override"));
+  assert.equal(
+    hostDataDirectory("darwin", { KODO_DATA_DIR: "legacy-override" }),
+    resolve("legacy-override"),
+  );
   const env = hostEnvironment({ PATH: "/usr/bin", ELECTRON_RUN_AS_NODE: "1" }, "darwin");
   assert.equal(env.ELECTRON_RUN_AS_NODE, undefined);
   assert.ok(env.PATH.includes("/opt/homebrew/bin"));

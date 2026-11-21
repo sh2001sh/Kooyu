@@ -11,6 +11,18 @@ final class NoRedirect: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
 struct HostAPI: Sendable {
     static let protocolVersion = 2
     let connection: Connection
+    private func account() throws -> CloudDevice? {
+        let base = try Self.origin(connection.url)
+        try Self.requireAccountPairing(base, paired: connection.cloud != nil)
+        return try connection.cloud.map { try CloudDevice(base: base, stored: $0) }
+    }
+    static func requireAccountPairing(_ base: URL, paired: Bool,
+                                      relay: String? = Bundle.main.object(forInfoDictionaryKey: "KooyuRelayOrigin") as? String) throws {
+        guard !paired, let relay, let official = URL(string: relay),
+              official.scheme == base.scheme, official.host == base.host,
+              (official.port ?? 443) == (base.port ?? 443) else { return }
+        throw APIError(message: "请在已登录 Kooyu 的电脑上生成新二维码，重新授权这台手机。", status: 401)
+    }
     private static let session: URLSession = {
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 20
@@ -31,17 +43,45 @@ struct HostAPI: Sendable {
     static func pair(url text: String, code: String, name: String) async throws -> Connection {
         let url = try origin(text)
         // Check compatibility before consuming the single-use invitation.
-        let health: JSONValue = try await request(url: url.appendingPathComponent("api/health"))
+        let components=code.split(separator:"&",omittingEmptySubsequences:false)
+        var fields:[String:String]=[:]
+        for field in components.dropFirst(){let parts=field.split(separator:"=",maxSplits:1);guard parts.count==2,fields[String(parts[0])]==nil else {throw SecureTunnel.invalid};fields[String(parts[0])]=String(parts[1])}
+        try requireAccountPairing(url, paired: !fields.isEmpty)
+        let cloud:CloudDevice?
+        if fields.isEmpty {cloud=nil} else {cloud=try await CloudDevice.start(base:url,fields:fields)}
+        let health: JSONValue = try await request(url: url.appendingPathComponent("api/health"),account:cloud)
         guard case .number(let version) = health["protocolVersion"], Int(version) == protocolVersion else {
             throw APIError(message: "Host 版本不兼容，请升级桌面 Host。", status: 409)
         }
+        var pairingCode = String(components.first ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        var key: Data?
+        if pairingCode.uppercased().hasPrefix("V2-") {
+            let identity: JSONValue = try await request(url:url.appendingPathComponent("api/secure/key"),account:cloud)
+            key = try SecureTunnel.verify(identity,base:url)
+            pairingCode = String(pairingCode.dropFirst(3))
+        }
+        let signing = key.map { _ in Curve25519.Signing.PrivateKey() }
+        var values: [String:JSONValue] = ["code":.string(pairingCode),"name":.string(name)]
+        if let signing {
+            let prefix = Data([0x30,0x2a,0x30,0x05,0x06,0x03,0x2b,0x65,0x70,0x03,0x21,0])
+            values["mailboxVerifyPubKey"] = .string((prefix + signing.publicKey.rawRepresentation).base64EncodedString())
+        }
         let result: PairResult = try await request(url: url.appendingPathComponent("api/pair/native"), method: "POST",
-            body: .object(["code": .string(code.trimmingCharacters(in: .whitespacesAndNewlines)), "name": .string(name)]))
+            body: .object(values), tunnelKey:key,account:cloud)
         guard result.protocolVersion == protocolVersion, result.hostId == health["hostId"].string else {
             throw APIError(message: "Host 身份或版本变化，请重新配对。", status: 409)
         }
+        let saved=try await cloud?.finish()
         return Connection(url: url.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")),
-                          hostId: result.hostId, deviceId: result.device.id, token: result.token, expiresAt: result.device.expiresAt)
+                          hostId: result.hostId, deviceId: result.device.id, token: result.token, expiresAt: result.device.expiresAt, tunnelKey:key,cloud:saved,
+                          mailboxSeed:result.mailboxEncryptionKey != nil ? signing?.rawRepresentation : nil)
+    }
+    func postMail(_ envelope: JSONValue) async throws {
+        let base = try Self.origin(connection.url)
+        guard var parts = URLComponents(url:base,resolvingAgainstBaseURL:false) else { throw SecureTunnel.invalid }
+        parts.path = "/v2/mailbox/" + base.lastPathComponent
+        guard let url = parts.url else { throw SecureTunnel.invalid }
+        let _: JSONValue = try await Self.request(url:url,method:"POST",body:envelope,account:try account())
     }
     func get<T: Decodable & Sendable>(_ path: String) async throws -> T { try await perform(path) }
     func artifactFile(_ artifact: JSONValue) async throws -> URL {
@@ -50,12 +90,19 @@ struct HostAPI: Sendable {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(connection.token)", forHTTPHeaderField: "Authorization")
         request.setValue(String(Self.protocolVersion), forHTTPHeaderField: "X-Kooyu-Protocol")
-        let (stream, response) = try await Self.session.bytes(for: request)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw APIError(message: "文件不可用，请刷新成果列表。", status: 0) }
         var data = Data()
-        for try await byte in stream {
-            guard data.count < 32 * 1024 * 1024 else { throw APIError(message: "手机单个文件最多读取 32 MiB。", status: 0) }
-            data.append(byte)
+        if let key = connection.tunnelKey {
+            let (body, http) = try await SecureTunnel.send(request,hostKey:key,session:Self.session,account:try account())
+            guard http.statusCode == 200 else { throw APIError(message:"文件不可用。",status:http.statusCode) }
+            data = body
+        } else {
+            if let device=try account(){request=try await device.authorize(request)}
+            let (stream, response) = try await Self.session.bytes(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw APIError(message: "文件不可用，请刷新成果列表。", status: 0) }
+            for try await byte in stream {
+                guard data.count < 32 * 1024 * 1024 else { throw APIError(message: "手机单个文件最多读取 32 MiB。", status: 0) }
+                data.append(byte)
+            }
         }
         guard SHA256.hash(data: data).map({ String(format: "%02x", $0) }).joined() == artifact["sha256"].string else { throw APIError(message: "文件校验失败，请重新读取。", status: 0) }
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("kooyu-artifacts/\(UUID().uuidString)", isDirectory: true)
@@ -78,7 +125,7 @@ struct HostAPI: Sendable {
         while offset < data.count {
             let end = min(offset + 512 * 1024, data.count)
             let url = try Self.apiURL(Self.origin(connection.url), path: "/files/uploads/\(id)/chunks?offset=\(offset)")
-            let result: JSONValue = try await Self.request(url: url, token: connection.token, method: "PUT", binary: data.subdata(in: offset..<end))
+            let result: JSONValue = try await Self.request(url: url, token: connection.token, method: "PUT", binary: data.subdata(in: offset..<end), tunnelKey:connection.tunnelKey,account:try account())
             guard case .number(let next) = result["received"], Int(next) == end else { throw APIError(message: "附件上传进度无效，请重新添加。", status: 0) }
             offset = end
         }
@@ -101,9 +148,9 @@ struct HostAPI: Sendable {
     func perform<T: Decodable & Sendable>(_ path: String, method: String = "GET", body: JSONValue? = nil, timeout: TimeInterval = 20) async throws -> T {
         let base = try Self.origin(connection.url)
         let url = try Self.apiURL(base, path: path)
-        return try await Self.request(url: url, token: connection.token, method: method, body: body, timeout: timeout)
+        return try await Self.request(url: url, token: connection.token, method: method, body: body, timeout: timeout, tunnelKey:connection.tunnelKey,account:try account())
     }
-    private static func request<T: Decodable & Sendable>(url: URL, token: String? = nil, method: String = "GET", body: JSONValue? = nil, timeout: TimeInterval = 20, binary: Data? = nil) async throws -> T {
+    private static func request<T: Decodable & Sendable>(url: URL, token: String? = nil, method: String = "GET", body: JSONValue? = nil, timeout: TimeInterval = 20, binary: Data? = nil, tunnelKey: Data? = nil, account:CloudDevice?=nil) async throws -> T {
         var req = URLRequest(url: url); req.httpMethod = method; req.timeoutInterval = timeout
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.setValue(String(protocolVersion), forHTTPHeaderField: "X-Kooyu-Protocol")
@@ -115,7 +162,11 @@ struct HostAPI: Sendable {
         if let binary { req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type"); req.httpBody = binary }
         let data: Data
         let response: URLResponse
-        do { (data, response) = try await readRecoveringConnection(req) }
+        do {
+            if let key = tunnelKey { (data,response) = try await SecureTunnel.send(req,hostKey:key,session:session,account:account) }
+            else if let account {req=try await account.authorize(req);(data,response)=try await session.data(for:req)}
+            else { (data, response) = try await readRecoveringConnection(req) }
+        }
         catch {
             if Task.isCancelled { throw CancellationError() }
             throw APIError(message: "无法连接此设备，请检查设备是否在线以及网络是否可用。", status: 0)
@@ -142,3 +193,4 @@ struct HostAPI: Sendable {
         }
     }
 }
+

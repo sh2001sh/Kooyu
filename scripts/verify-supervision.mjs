@@ -19,7 +19,7 @@ try {
     title: "Native Kooyu supervision verification",
     harnessId: "kodo",
     kind: "supervisor",
-    model: `${process.env.KODO_VERIFY_PI_PROVIDER ?? "codegoai"}/${process.env.KODO_VERIFY_PI_MODEL ?? "deepseek-v4-flash"}`,
+    model: `${process.env.KODO_VERIFY_PI_PROVIDER ?? "openai"}/${process.env.KODO_VERIFY_PI_MODEL ?? "gpt-4o-mini"}`,
   });
   service.grantProject(controller.id, project.id, {
     mode: "create-and-control",

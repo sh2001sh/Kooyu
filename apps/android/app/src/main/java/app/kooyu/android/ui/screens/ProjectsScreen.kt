@@ -360,78 +360,68 @@ import org.json.JSONObject
     }
     }
 
-    if (adding || editing != null || addWorkspace != null) {
-        AlertDialog(
-            onDismissRequest = { adding = false; editing = null; addWorkspace = null },
-            containerColor = c.raised,
-            title = {
-                Text(
-                    if (addWorkspace != null) "添加工作目录" else if (editing != null) "重命名项目" else "新建项目",
-                    fontWeight = FontWeight.Bold,
-                    color = c.text
+    if (adding) {
+        CreateProjectDialog(
+            state = state,
+            model = model,
+            onDismiss = { adding = false },
+            onCreated = { _, _ -> adding = false }
+        )
+    }
+
+    if (addWorkspace != null) {
+        val targetProjectId = addWorkspace!!
+        DirectoryPicker(model, initial = root, close = { addWorkspace = null }) { pickedPath ->
+            scope.launch {
+                val res = model.execute(
+                    "/workspaces",
+                    body = JSONObject()
+                        .put("projectId", targetProjectId.ifEmpty { null } ?: JSONObject.NULL)
+                        .put("rootPath", pickedPath.trim())
                 )
-            },
+                if (res != null) addWorkspace = null
+            }
+        }
+    }
+
+    if (editing != null) {
+        AlertDialog(
+            onDismissRequest = { editing = null },
+            containerColor = c.raised,
+            title = { Text("重命名项目", fontWeight = FontWeight.Bold, color = c.text) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (addWorkspace == null) {
-                        Box(
-                            Modifier.fillMaxWidth().heightIn(min = 44.dp).clip(RoundedCornerShape(12.dp)).background(c.sunken)
-                                .border(0.5.dp, c.borderSubtle, RoundedCornerShape(12.dp)).padding(horizontal = 14.dp, vertical = 12.dp),
-                            contentAlignment = Alignment.CenterStart
-                        ) {
-                            BasicTextField(
-                                value = name,
-                                onValueChange = { name = it.take(100) },
-                                singleLine = true,
-                                textStyle = KooyuType.body.copy(color = c.text),
-                                cursorBrush = SolidColor(c.brandCoral),
-                                modifier = Modifier.fillMaxWidth(),
-                                decorationBox = { inner ->
-                                    if (name.isEmpty()) Text("项目名称（如 agent-harness）", style = KooyuType.body, color = c.textTertiary)
-                                    inner()
-                                }
-                            )
+                Box(
+                    Modifier.fillMaxWidth().heightIn(min = 44.dp).clip(RoundedCornerShape(12.dp)).background(c.sunken)
+                        .border(0.5.dp, c.borderSubtle, RoundedCornerShape(12.dp)).padding(horizontal = 14.dp, vertical = 12.dp),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    BasicTextField(
+                        value = name,
+                        onValueChange = { name = it.take(100) },
+                        singleLine = true,
+                        textStyle = KooyuType.body.copy(color = c.text),
+                        cursorBrush = SolidColor(c.brandCoral),
+                        modifier = Modifier.fillMaxWidth(),
+                        decorationBox = { inner ->
+                            if (name.isEmpty()) Text("项目名称（如 agent-harness）", style = KooyuType.body, color = c.textTertiary)
+                            inner()
                         }
-                    }
-                    if (editing == null) {
-                        Box(
-                            Modifier.fillMaxWidth().heightIn(min = 44.dp).clip(RoundedCornerShape(12.dp)).background(c.sunken)
-                                .border(0.5.dp, c.borderSubtle, RoundedCornerShape(12.dp)).padding(horizontal = 14.dp, vertical = 12.dp),
-                            contentAlignment = Alignment.CenterStart
-                        ) {
-                            BasicTextField(
-                                value = root,
-                                onValueChange = { root = it },
-                                singleLine = true,
-                                textStyle = KooyuType.body.copy(color = c.text, fontFamily = FontFamily.Monospace, fontSize = 13.sp),
-                                cursorBrush = SolidColor(c.brandCoral),
-                                modifier = Modifier.fillMaxWidth(),
-                                decorationBox = { inner ->
-                                    if (root.isEmpty()) Text(if (addWorkspace == null) "设备代码路径（选填）" else "设备代码绝对路径", style = KooyuType.body, fontSize = 13.sp, color = c.textTertiary)
-                                    inner()
-                                }
-                            )
-                        }
-                    }
+                    )
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
                         scope.launch {
-                            val result = when {
-                                addWorkspace != null -> model.execute("/workspaces", body = JSONObject().put("projectId", addWorkspace?.ifEmpty { null } ?: JSONObject.NULL).put("rootPath", root.trim()))
-                                editing != null -> model.execute("/projects/" + editing!!.first, "PATCH", JSONObject().put("name", name.trim()))
-                                else -> model.execute("/projects", body = JSONObject().put("name", name.trim()).apply { if (root.isNotBlank()) put("rootPath", root.trim()) })
-                            }
-                            if (result != null) { adding = false; editing = null; addWorkspace = null }
+                            val result = model.execute("/projects/" + editing!!.first, "PATCH", JSONObject().put("name", name.trim()))
+                            if (result != null) editing = null
                         }
                     },
-                    enabled = state.canWrite && if (addWorkspace != null) root.isNotBlank() else name.isNotBlank(),
+                    enabled = state.canWrite && name.isNotBlank(),
                     colors = ButtonDefaults.buttonColors(containerColor = c.accent, contentColor = c.onAccent)
                 ) { Text("保存") }
             },
-            dismissButton = { TextButton(onClick = { adding = false; editing = null; addWorkspace = null }) { Text("取消", color = c.textSecondary) } }
+            dismissButton = { TextButton(onClick = { editing = null }) { Text("取消", color = c.textSecondary) } }
         )
     }
 
@@ -452,6 +442,183 @@ import org.json.JSONObject
     }
 }
 
+/**
+ * Interactive Create-Project dialog backed by Host DirectoryPicker so users select
+ * folders directly on the paired computer instead of manually typing error-prone paths.
+ */
+@Composable internal fun CreateProjectDialog(
+    state: WorkbenchState,
+    model: Workbench,
+    onDismiss: () -> Unit,
+    onCreated: (projectId: String, workspaceId: String?) -> Unit
+) {
+    val c = Kooyu.colors
+    val scope = rememberCoroutineScope()
+    var name by remember { mutableStateOf("") }
+    var root by remember { mutableStateOf("") }
+    var pickingDirectory by remember { mutableStateOf(false) }
+    var manualEntry by remember { mutableStateOf(false) }
+    var submitting by remember { mutableStateOf(false) }
+
+    if (pickingDirectory) {
+        DirectoryPicker(model, initial = root, close = { pickingDirectory = false }) { picked ->
+            root = picked
+            if (name.isBlank()) {
+                val inferred = picked.trimEnd('/', '\\').substringAfterLast('/').substringAfterLast('\\')
+                if (inferred.isNotBlank()) name = inferred.take(100)
+            }
+            pickingDirectory = false
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = { if (!submitting) onDismiss() },
+        containerColor = c.raised,
+        shape = RoundedCornerShape(20.dp),
+        title = { Text("新建项目", fontWeight = FontWeight.Bold, color = c.text) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                // Step 1: Pick folder interactively on the connected computer
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("设备工作目录", style = KooyuType.caption, fontWeight = FontWeight.SemiBold, color = c.textSecondary)
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = c.sunken,
+                        border = BorderStroke(0.5.dp, if (root.isNotBlank()) c.accent.copy(alpha = 0.4f) else c.borderSubtle),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable(enabled = !submitting) { pickingDirectory = true }
+                    ) {
+                        Row(
+                            Modifier.padding(horizontal = 13.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                Icons.Outlined.FolderOpen,
+                                null,
+                                tint = if (root.isNotBlank()) c.brandCoral else c.textSecondary,
+                                modifier = Modifier.size(19.dp)
+                            )
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(
+                                    if (root.isBlank()) "点击选择电脑上的目录…" else formatWorkspaceLabel(root).ifBlank { root },
+                                    fontSize = 13.5.sp,
+                                    fontWeight = if (root.isNotBlank()) FontWeight.SemiBold else FontWeight.Medium,
+                                    color = if (root.isNotBlank()) c.text else c.textSecondary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                if (root.isNotBlank()) {
+                                    Text(
+                                        root,
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 11.sp,
+                                        color = c.textTertiary,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                            Text(
+                                if (root.isBlank()) "浏览" else "更换",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = c.brandCoral
+                            )
+                        }
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        if (root.isNotBlank()) {
+                            TextButton(onClick = { root = "" }, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)) {
+                                Text("清除目录", fontSize = 11.5.sp, color = c.textSecondary)
+                            }
+                        } else {
+                            Spacer(Modifier.width(1.dp))
+                        }
+                        TextButton(onClick = { manualEntry = !manualEntry }, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)) {
+                            Text(if (manualEntry) "收起手动输入" else "手动输入路径", fontSize = 11.5.sp, color = c.textTertiary)
+                        }
+                    }
+                    if (manualEntry) {
+                        Box(
+                            Modifier.fillMaxWidth().heightIn(min = 42.dp).clip(RoundedCornerShape(10.dp)).background(c.sunken)
+                                .border(0.5.dp, c.borderSubtle, RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            BasicTextField(
+                                value = root,
+                                onValueChange = { root = it },
+                                singleLine = true,
+                                textStyle = KooyuType.body.copy(color = c.text, fontFamily = FontFamily.Monospace, fontSize = 12.5.sp),
+                                cursorBrush = SolidColor(c.brandCoral),
+                                modifier = Modifier.fillMaxWidth(),
+                                decorationBox = { inner ->
+                                    if (root.isEmpty()) Text("例如 E:\\Projects\\my-app", style = KooyuType.body, fontSize = 12.5.sp, color = c.textTertiary)
+                                    inner()
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // Step 2: Project name (auto-filled from chosen folder, freely editable)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("项目名称", style = KooyuType.caption, fontWeight = FontWeight.SemiBold, color = c.textSecondary)
+                    Box(
+                        Modifier.fillMaxWidth().heightIn(min = 44.dp).clip(RoundedCornerShape(12.dp)).background(c.sunken)
+                            .border(0.5.dp, c.borderSubtle, RoundedCornerShape(12.dp)).padding(horizontal = 14.dp, vertical = 12.dp),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
+                        BasicTextField(
+                            value = name,
+                            onValueChange = { name = it.take(100) },
+                            singleLine = true,
+                            textStyle = KooyuType.body.copy(color = c.text),
+                            cursorBrush = SolidColor(c.brandCoral),
+                            modifier = Modifier.fillMaxWidth(),
+                            decorationBox = { inner ->
+                                if (name.isEmpty()) Text("选择目录后自动填充，或手动命名", style = KooyuType.body, fontSize = 13.5.sp, color = c.textTertiary)
+                                inner()
+                            }
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    scope.launch {
+                        submitting = true
+                        try {
+                            val result = model.execute(
+                                "/projects",
+                                body = JSONObject().put("name", name.trim()).apply {
+                                    if (root.isNotBlank()) put("rootPath", root.trim())
+                                }
+                            )
+                            if (result != null) {
+                                val createdId = result.optString("id")
+                                val createdWs = model.state.value.workspaces.firstOrNull { it.projectId == createdId }?.id
+                                onCreated(createdId, createdWs)
+                            }
+                        } finally {
+                            submitting = false
+                        }
+                    }
+                },
+                enabled = state.canWrite && !submitting && name.isNotBlank(),
+                colors = ButtonDefaults.buttonColors(containerColor = c.accent, contentColor = c.onAccent)
+            ) { Text(if (submitting) "创建中…" else "创建") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !submitting) { Text("取消", color = c.textSecondary) }
+        }
+    )
+}
+
 @Composable fun WorkspaceBrowser(workspace: HostWorkspace, state: WorkbenchState, model: Workbench) {
     val c = Kooyu.colors
     var path by remember { mutableStateOf("") }
@@ -461,7 +628,39 @@ import org.json.JSONObject
     var requestedFile by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
 
-    LaunchedEffect(state.connection?.hostId, workspace.id, path, changes, requestedFile) {
+    val scope = rememberCoroutineScope()
+    var gitMessage by remember(workspace.id) { mutableStateOf("") }
+    var gitRevision by remember { mutableIntStateOf(0) }
+    var gitResult by remember { mutableStateOf("") }
+    var hunks by remember(workspace.id, requestedFile, gitRevision) { mutableStateOf(emptyList<JSONObject>()) }
+    var branches by remember(workspace.id) { mutableStateOf(emptyList<JSONObject>()) }
+    var discard by remember(workspace.id, requestedFile) { mutableStateOf<JSONObject?>(null) }
+    LaunchedEffect(workspace.id, changes, requestedFile, gitRevision, state.canWrite) {
+        if (changes && state.canWrite) {
+            val gitBase = "/workspaces/" + workspace.id + "/git/"
+            if (requestedFile == null) branches = model.readArray(gitBase + "branches")
+            else hunks = model.readArray(gitBase + "hunks?path=" + encoded(requestedFile!!))
+        }
+    }
+    fun git(action: String, body: JSONObject) {
+        scope.launch {
+            val result = model.execute("/workspaces/" + workspace.id + "/git/" + action, body = body)
+            gitResult = result?.optString("url")?.ifBlank { "操作已完成" } ?: "操作失败，请检查连接或权限。"
+            gitRevision++
+        }
+    }
+
+    discard?.let { selected ->
+        AlertDialog(onDismissRequest = { discard = null }, title = { Text("丢弃此差异块？") },
+            text = { Text("此操作会修改工作区文件。") }, confirmButton = {
+                TextButton(onClick = {
+                    discard = null
+                    git("discard-hunk", JSONObject().put("path", requestedFile).put("id", selected.getString("id")).put("confirmed", true))
+                }) { Text("丢弃") }
+            }, dismissButton = { TextButton(onClick = { discard = null }) { Text("取消") } })
+    }
+
+    LaunchedEffect(state.connection?.hostId, workspace.id, path, changes, requestedFile, gitRevision) {
         loading = true
         data = null
         preview = null
@@ -477,6 +676,7 @@ import org.json.JSONObject
     Column(Modifier.fillMaxSize().background(c.navigator)) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(workspace.path, fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = c.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (state.canWrite) state.connection?.let { WorkspaceTerminal(it, workspace.id) }
             KooyuSegmentedControl(
                 options = listOf(SegmentOption(false, "文件列表"), SegmentOption(true, "Git 变更")),
                 selected = changes,
@@ -509,6 +709,39 @@ import org.json.JSONObject
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            if (changes) item("git-delivery") {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (requestedFile != null) Row {
+                        TextButton(enabled = state.canWrite && !state.busy, onClick = { git("stage", JSONObject().put("path", requestedFile)) }) { Text("暂存文件") }
+                        TextButton(enabled = state.canWrite && !state.busy, onClick = { git("unstage", JSONObject().put("path", requestedFile)) }) { Text("取消暂存") }
+                    }
+                    OutlinedTextField(value = gitMessage, onValueChange = { gitMessage = it }, label = { Text("提交说明或 PR 标题") })
+                    if (requestedFile == null) branches.forEach { branch ->
+                        Text(branch.getString("branchName"), style = KooyuType.caption)
+                        Row {
+                            listOf("ff" to "快进合入", "squash" to "压缩到暂存区").forEach { (mode, label) ->
+                                TextButton(enabled = state.canWrite && !state.busy, onClick = {
+                                    git("merge", JSONObject().put("worktreeId", branch.getString("workspaceId")).put("mode", mode))
+                                }) { Text(label) }
+                            }
+                        }
+                    }
+                    if (requestedFile != null) hunks.forEach { hunk ->
+                        Text(hunk.getString("text"), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+                        Row {
+                            TextButton(enabled = state.canWrite && !state.busy, onClick = {
+                                git("stage-hunk", JSONObject().put("path", requestedFile).put("id", hunk.getString("id")))
+                            }) { Text("暂存此块") }
+                            TextButton(enabled = state.canWrite && !state.busy, onClick = { discard = hunk }) { Text("丢弃此块") }
+                        }
+                    }
+                    Row {
+                        TextButton(enabled = state.canWrite && !state.busy && gitMessage.isNotBlank(), onClick = { git("commit", JSONObject().put("message", gitMessage)) }) { Text("提交暂存改动") }
+                        TextButton(enabled = state.canWrite && !state.busy && gitMessage.isNotBlank(), onClick = { git("pr", JSONObject().put("title", gitMessage).put("body", "")) }) { Text("推送并创建 PR") }
+                    }
+                    if (gitResult.isNotBlank()) Text(gitResult, style = KooyuType.caption)
+                }
+            }
             preview?.let { value ->
                 item {
                     Surface(

@@ -10,6 +10,7 @@ import app.kooyu.android.R
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -44,6 +45,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.border
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -204,6 +207,9 @@ import java.util.Locale
     removing?.let { c ->
         AlertDialog(
             onDismissRequest = { removing = null },
+            containerColor = k.raised,
+            titleContentColor = k.text,
+            textContentColor = k.textSecondary,
             title = { Text("移除「${c.name}」？") },
             text = {
                 Text(if (c.pending != null) "这台设备还有结果待核对的操作。移除后将失去本机核对标记，运行中的任务不会停止。" else "从手机中清除此设备连接，设备上的任务不会停止。")
@@ -211,15 +217,16 @@ import java.util.Locale
             confirmButton = {
                 Button(
                     onClick = { model.removeDevice(c.hostId); removing = null },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    colors = ButtonDefaults.buttonColors(containerColor = k.destructive, contentColor = Color.White)
                 ) { Text("移除") }
             },
-            dismissButton = { TextButton(onClick = { removing = null }) { Text("取消") } }
+            dismissButton = { TextButton(onClick = { removing = null }) { Text("取消", color = k.textSecondary) } }
         )
     }
 }
 
 @Composable private fun BackgroundReminderSettings(connection: Connection) {
+    val k = Kooyu.colors
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val statuses by BackgroundReminders.status.collectAsStateWithLifecycle()
@@ -230,18 +237,18 @@ import java.util.Locale
         if (granted) { BackgroundReminders.enable(context, connection); enabled = BackgroundReminders.isEnabled(context, connection) }
         else BackgroundReminders.message(BackgroundReminders.key(connection), "通知权限未获允许，请在系统设置中开启。")
     }
-    HorizontalDivider()
-    Text("后台事项提醒", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+    HorizontalDivider(color = k.borderSubtle)
+    Text("后台事项提醒", style = KooyuType.rowTitle, color = k.text)
     if (status != null) {
-        Text(status!!, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(status!!, style = KooyuType.caption, color = k.textSecondary)
     }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         TextButton(onClick = {
             if (android.os.Build.VERSION.SDK_INT >= 33 && androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) permission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
             else { BackgroundReminders.enable(context, connection); enabled = BackgroundReminders.isEnabled(context, connection) }
-        }, enabled = !working) { Text(if (enabled) "重新连接" else "开启后台提醒") }
-        if (enabled) TextButton(onClick = { working = true; scope.launch { try { BackgroundReminders.disable(context, connection); enabled = false } finally { working = false } } }, enabled = !working) { Text("关闭提醒") }
-        if (working) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+        }, enabled = !working) { Text(if (enabled) "重新连接" else "开启后台提醒", color = k.text) }
+        if (enabled) TextButton(onClick = { working = true; scope.launch { try { BackgroundReminders.disable(context, connection); enabled = false } finally { working = false } } }, enabled = !working) { Text("关闭提醒", color = k.textSecondary) }
+        if (working) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = k.brandCoral)
     }
 }
 
@@ -265,6 +272,7 @@ private fun TagChip(text: String) {
 private fun SettingsRow(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
+    subtitle: String? = null,
     detail: String? = null,
     iconTint: Color? = null,
     iconBg: Color? = null,
@@ -293,23 +301,43 @@ private fun SettingsRow(
             )
         }
         Spacer(modifier = Modifier.width(13.dp))
-        Text(
-            text = title,
-            style = MaterialTheme.typography.bodyLarge,
-            fontSize = 15.sp,
-            color = c.text,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.weight(1f)
-        )
-        if (detail != null) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontSize = 15.sp,
+                color = c.text,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (!subtitle.isNullOrBlank()) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    color = c.textSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+        if (!detail.isNullOrBlank()) {
+            Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = detail,
                 style = MaterialTheme.typography.bodyMedium,
                 fontSize = 13.sp,
-                color = c.textSecondary
+                color = c.textSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
-            Spacer(modifier = Modifier.width(6.dp))
         }
+        Spacer(modifier = Modifier.width(6.dp))
         Icon(
             imageVector = Icons.Outlined.ChevronRight,
             contentDescription = null,
@@ -415,7 +443,7 @@ private fun SettingsRow(
                             modifier = Modifier
                                 .size(7.dp)
                                 .clip(CircleShape)
-                                .background(if (state.online) Kooyu.colors.success else Color(0xFF9CA3AF))
+                                .background(if (state.online) Kooyu.colors.success else Kooyu.colors.textTertiary)
                         )
                         Text(
                             text = if (state.online) "在线 · 实时同步" else "离线",
@@ -461,7 +489,7 @@ private fun SettingsRow(
                 SettingsRow(
                     icon = Icons.Outlined.Layers,
                     title = kooyuT("settings.workhub"),
-                    detail = kooyuT("settings.workhub.detail"),
+                    subtitle = kooyuT("settings.workhub.detail"),
                     onClick = { detail = "workhub" }
                 )
                 HorizontalDivider(modifier = Modifier.padding(start = 60.dp, end = 16.dp), thickness = 0.5.dp, color = Kooyu.colors.borderSubtle)
@@ -482,7 +510,7 @@ private fun SettingsRow(
                 SettingsRow(
                     icon = Icons.Outlined.Download,
                     title = kooyuT("settings.import"),
-                    detail = kooyuT("settings.import.detail"),
+                    subtitle = kooyuT("settings.import.detail"),
                     onClick = { detail = "import" }
                 )
                 HorizontalDivider(modifier = Modifier.padding(start = 60.dp, end = 16.dp), thickness = 0.5.dp, color = Kooyu.colors.borderSubtle)
@@ -490,19 +518,6 @@ private fun SettingsRow(
                     icon = Icons.Outlined.BookmarkBorder,
                     title = kooyuT("settings.memory"),
                     onClick = { detail = "memory" }
-                )
-                HorizontalDivider(modifier = Modifier.padding(start = 60.dp, end = 16.dp), thickness = 0.5.dp, color = Kooyu.colors.borderSubtle)
-                SettingsRow(
-                    icon = Icons.Outlined.BarChart,
-                    title = kooyuT("settings.usage"),
-                    onClick = { detail = "usage" }
-                )
-                HorizontalDivider(modifier = Modifier.padding(start = 60.dp, end = 16.dp), thickness = 0.5.dp, color = Kooyu.colors.borderSubtle)
-                SettingsRow(
-                    icon = Icons.Outlined.FolderOpen,
-                    title = kooyuT("settings.projects"),
-                    detail = "${state.projects.size}",
-                    onClick = { detail = "projects" }
                 )
             }
         }
@@ -536,7 +551,7 @@ private fun SettingsRow(
                 SettingsRow(
                     icon = Icons.Outlined.Palette,
                     title = kooyuT("settings.general"),
-                    detail = "${kooyuLanguageLabel(KooyuLanguageStore.setting)} · ${kooyuT("settings.general.detail")}",
+                    subtitle = "${kooyuLanguageLabel(KooyuLanguageStore.setting)} · ${kooyuT("settings.general.detail")}",
                     onClick = { detail = "general" }
                 )
                 HorizontalDivider(
@@ -696,18 +711,6 @@ private fun SettingsRow(
 
     if (detail == "memory") {
         GlobalMemorySettingsScreen(state, model) { detail = null }
-    }
-
-    if (detail == "usage") {
-        FullScreenPage("用量与预算", { detail = null }) { padding ->
-            Box(Modifier.padding(padding)) { UsageScreen(state, model) }
-        }
-    }
-
-    if (detail == "projects") {
-        FullScreenPage("项目与目录", { detail = null }) { padding ->
-            Box(Modifier.padding(padding)) { ProjectsScreen(state, model) }
-        }
     }
 
     if (detail == "host") {
@@ -884,18 +887,28 @@ private fun SettingsRow(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Spacer(Modifier.height(16.dp))
+                val isDark = Kooyu.colors.dark
+                val iconPlateColor = if (isDark) Color(0xFF141518) else Color(0xFFFFFFFF)
+                val iconBorderColor = if (isDark) Color(0x24FFFFFF) else Color(0x18141518)
                 Box(
                     modifier = Modifier
-                        .size(80.dp)
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(Kooyu.colors.brandCoral),
+                        .size(84.dp)
+                        .shadow(
+                            elevation = if (isDark) 0.dp else 10.dp,
+                            shape = RoundedCornerShape(22.dp),
+                            ambientColor = Color.Black.copy(alpha = 0.14f),
+                            spotColor = Color.Black.copy(alpha = 0.14f)
+                        )
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(iconPlateColor)
+                        .border(0.75.dp, iconBorderColor, RoundedCornerShape(22.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        painter = painterResource(R.drawable.kooyu_mark_white),
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(50.dp)
+                    Image(
+                        painter = painterResource(R.drawable.ic_launcher_foreground),
+                        contentDescription = "Kooyu",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.size(92.dp)
                     )
                 }
                 Text("Kooyu", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Kooyu.colors.text)

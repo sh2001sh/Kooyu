@@ -14,20 +14,23 @@
   <img src="brand/logos/kooyu-wordmark.svg" height="44" alt="Kooyu" />
 </picture>
 
-<h3>10 種類以上の AI コーディングエージェントを統合するローカルファースト・マルチプラットフォームワークベンチ</h3>
+<h3>すべてのコーディングエンジンを操る、ローカルファーストのパーソナル AI アシスタント</h3>
 
 <p>
-  ネイティブのコーディングハーネス、マルチプロトコル対応のモデルプロバイダー、ロール別モデルマッピング、使用量・レイテンシ台帳を 1 つの独立ローカル Session Host で一元管理し、Desktop・Android・iOS・Web からシームレスに連携できます。
+  <strong>Claude Code</strong>、<strong>Codex</strong>、<strong>DeepSeek</strong>、<strong>Gemini CLI</strong>、<strong>OpenCode</strong>、<strong>Cursor</strong>、<strong>ZCode</strong>、<strong>Kimi Code</strong> などの開発エンジンをひとつのパーソナル AI アシスタントに統合。スマートルーティング・制限時自動リレー、隔離 Worktree 競技場、ローカル永続記憶、ゼロトークン見守りを備え、デスクトップ・Web・iOS・Android・IM からいつでも制御できます。
 </p>
 
 <p>
+  <a href="https://kooyu.app">
+    <img src="https://img.shields.io/badge/Website-kooyu.app-141518?style=flat-square" alt="公式サイト" />
+  </a>
   <a href="https://github.com/sh2001sh/Kooyu/releases">
     <img src="https://img.shields.io/github/v/release/sh2001sh/Kooyu?include_prereleases&style=flat-square&label=Release&color=F17561" alt="最新リリース" />
   </a>
   <a href="https://github.com/sh2001sh/Kooyu/actions/workflows/native-apps.yml">
     <img src="https://img.shields.io/github/actions/workflow/status/sh2001sh/Kooyu/native-apps.yml?branch=main&style=flat-square&label=CI%20%26%20Build" alt="CI ステータス" />
   </a>
-  <img src="https://img.shields.io/badge/Platforms-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android%20%7C%20iOS-141518?style=flat-square" alt="対応プラットフォーム" />
+  <img src="https://img.shields.io/badge/Platforms-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android%20%7C%20iOS%20%7C%20Web-141518?style=flat-square" alt="対応プラットフォーム" />
   <a href="LICENSE">
     <img src="https://img.shields.io/github/license/sh2001sh/Kooyu?style=flat-square&color=10A37F" alt="MIT ライセンス" />
   </a>
@@ -40,11 +43,11 @@
 </p>
 
 <p>
-  <a href="#-ダウンロード">ダウンロード</a> ·
   <a href="#-主な特徴">主な特徴</a> ·
   <a href="#-対応エンジン">対応エンジン</a> ·
+  <a href="#-クイックスタートとダウンロード">ダウンロード</a> ·
   <a href="#-インストール手順">インストール</a> ·
-  <a href="#-モバイルペアリング">モバイル連携</a> ·
+  <a href="#-マルチデバイスe2ee-連携">リモート連携</a> ·
   <a href="#-ソースからビルド">ソースビルド</a>
 </p>
 
@@ -62,19 +65,29 @@
 
 ## ✨ 主な特徴
 
-- **10 種類以上のネイティブエンジンを 1 つの画面で統合** — **Claude Code**、**Codex**、**DeepSeek Harness**、**ZCode**、**OpenCode**、**Gemini CLI**、**Cursor**、**Kimi Code**、**Grok Build**、**pi** と直接対話できるほか、内蔵の **Kooyu スーパーバイザー**によるプロジェクト横断の自動化・継続実行にも対応。
-- **独立・永続ローカル Session Host** — Node + SQLite の独立 Host（`127.0.0.1:4310`）上で稼働。ウィンドウを閉じてもシステムトレイに常駐し、UI を終了しても実行中のエージェントや承認待ちタスクは中断されません。
-- **プロバイダー統合・プロトコル切替・ロールマッピング** — OpenAI 互換（`Chat Completions` / `Responses`）や `Anthropic Messages` エンドポイントを一度登録するだけで `models.dev` からモデル仕様を自動同期。**Claude Code の 5 スロット・ロール別モデルマッピング**（デフォルト / Haiku / Sonnet / Opus / サブエージェント）を含め、グローバル CLI 設定を汚さずセッション単位で安全に適用できます。
-- **Apple HIG 準拠のネイティブ・マルチプラットフォーム体験** — デスクトップは **Electron + React/TypeScript**、Android は **Kotlin / Jetpack Compose**、iOS は **SwiftUI**、さらに Web/PWA も提供。5 種類のテーマパレット、ライト/ダーク対応、行番号付きコードカード、Unified Diff ハイライト、`Ctrl/⌘+K` コマンドパレット、スプリット型ファイルインスペクターを搭載。
-- **プロジェクト別チャット選択インポート & 多言語 UI** — ローカルの各エンジン履歴をスキャンし、プロジェクト単位で必要な会話だけを選択してインポート可能。**日本語 / English / 简体中文** の即時切替とデバイス間同期に対応。
-- **マルチプラットフォーム音声入力** — デスクトップ/Web では Web Speech API と Host 側の Whisper / OpenAI 互換文字起こしのデュアルエンジン、Android では `SpeechRecognizer`、iOS では `SFSpeechRecognizer` をネイティブサポート。
-- **使用量分析 & レイテンシ台帳** — プロジェクト・エンジン・モデルごとのトークン数、キャッシュヒット、推定コスト、予算管理に加え、ターンごとの **初回応答時間（TTFT）** と **合計所要時間** を可視化。
-- **アプリ内ソフトウェアアップデート** — **設定 → 一般 → ソフトウェアアップデート** から安定版（Stable）またはプレビュー版（Preview）を確認し、`SHA256SUMS.txt` を自動検証した上でデスクトップ／Android のインストーラーを起動できます。
+### マルチ Harness 指揮とエンジニアリング基盤
+- **1 つの主控で 10+ コーディングエンジンを統括** — **Claude Code**、**Codex**、**DeepSeek Harness**、**Gemini CLI**、**OpenCode**、**ZCode**、**Cursor**、**Kimi Code**、**Grok Build**、**pi** と直接対話でき、複雑な要件は内蔵の **Kooyu スーパーバイザー**へ委譲可能。実装＋別エンジンレビュー、並列分割、CI ガード、深掘り調査などのプレイブックを搭載。
+- **スマートルーティング & 429 レート制限自動リレー（`ROUTING.md`）** — タスク種別に応じて最適なエンジンを自動選択。`429` やクォータ上限に達した場合、進捗と差分をまとめて次の予備エンジンへシームレスに引き継ぎます。
+- **マルチエンジン競技場（Multi-Harness Arena）** — 2〜3 種類のエンジンへ隔離 Git Worktree 上で同一課題を並列出題。実 `git diff` とテストコマンド（`checkCommand`）によるスコアカードを比較し、勝者ブランチをワンクリック採用できます。
+- **無痕 Git チェックポイント & ワンクリック PR 交付** — 隠し参照（`refs/kooyu/checkpoints/*`）へ追跡・未追跡ファイルのスナップショットを保存し、`git log` や stash を汚さず即座に復元可能（復元前の保護スナップショット自動作成）。Hunk 単位の差分確認からマージ・PR 作成まで完結します。
+
+### 使うほどあなたに馴染むパーソナル AI アシスタント
+- **ローカルワークスペース文書と永続記憶** — `SOUL.md`、`USER.md`、`MEMORY.md`、`RULES.md`、`HEARTBEAT.md`、`AGENTS.md`、`ROUTING.md` をターンごとにホットリロード。Desktop / Web / Android / iOS の設定画面から直接編集できます。
+- **全端末対応の確認カードとルール学習** — 重要な判断時は構造化カードで確認。「今後も自動適用」を選ぶと `RULES.md` へ即座に保存され、次回から反映されます。
+- **ベクトル DB 不要のローカル知識ベース & 日次記憶蒸留** — 手元の Obsidian Vault や `docs/` を読み取り専用マウントし、`relativePath:line` 単位で正確に検索。日次ログからの経験抽出も決定論的に実行し、承認後に長期記憶へ統合します。
+- **クロスエンジン・スキル蓄積（5世代復元）& オフラインレポート** — 成功ワークフローをバージョン付きスキルとして保存し、`~/.agents/skills/` 経由で他エンジンとも共有可能。厳格なオフライン CSP 付きの構造化レポート（`show_page`）も生成できます。
+- **ゼロトークン事前チェック & 稼働レーダー** — 自動化タスクはローカル事前スクリプト（`checkScript`）を先に実行し、異常がない間は **0 トークン**でスキップ。スタック検知や `NO_REPLY` による静音ターン制御も搭載。
+
+### 快適なデスクトップ体験と全端末 E2EE 連携
+- **グローバル起動カプセル（`Alt+Space` / `Cmd+Shift+K`）** — どのアプリ作業中でもショートカット一つでフローティング入力を呼び出し、クリップボード内容をそのまま Kooyu へ送信可能。
+- **ライブプレビュー・内蔵 PTY 端末・ログイン共有管理ブラウザ** — プレビューのコンソールエラーを即座にエージェントへ連携。管理 Chromium でログインした Cookie は安全にローカル保存（`0600`）され、後続タスク間で自動共有されます。
+- **ゼロ知識 E2EE 同期 & IM 承認** — Kooyu アカウント（[kooyu.app](https://kooyu.app)）による PC 自動検出、iOS / Android の QR・ログイン両対応、音声通話・スクショ注釈、**WeChat・WeCom・Feishu・Telegram** からの承認に対応。
+- **統合モデルハブ & 透明なコスト台帳** — 既存 CLI 設定を汚さずに 5 ロールモデル割り当て（Claude Code 対応）を一元管理し、トークン量・概算コスト・初回応答時間（TTFT）を可視化。
 
 <div align="center">
-  <img src="docs/assets/features-overview.png" width="100%" alt="プロバイダー適用モーダルと使用量・レイテンシ台帳" />
+  <img src="docs/assets/features-overview.png" width="100%" alt="モデルプロバイダー設定と使用量・応答速度分析" />
   <br />
-  <sub>左：プロバイダー適用モーダル（プロトコル切替と Claude Code ロール別マッピング） · 右：使用量分析と TTFT・所要時間台帳</sub>
+  <sub>左：統合モデルハブとエンジン別ロール割り当て · 右：プロジェクト・エンジン・モデル別の使用量・コスト・TTFT 台帳</sub>
 </div>
 
 <details>
@@ -90,107 +103,65 @@
 
 ## 🤖 対応エンジン
 
-`PATH` 上の CLI とインストール済みデスクトップアプリを自動検出し、ネイティブのセッション ID・権限・認証境界を保ったまま連携します。
+インストール済みの CLI ツールやデスクトップアプリを自動検出し、各エンジンのネイティブ履歴・権限・ログイン状態を保ったまま連携します。
 
-| エンジン | 役割 | プロトコル / ランタイム | 独立プロバイダー紐付け | 自動検出 |
-| :--- | :--- | :--- | :---: | :---: |
-| **Kooyu** | 内蔵スーパーバイザー | 組込 `pi` SDK | ✅ | 内蔵 |
-| **Claude Code** | ネイティブハーネス | Native CLI / Agent SDK | ✅（5 スロット Role Mapping + Anthropic / Chat ゲートウェイ） | ✅ |
-| **Codex** | ネイティブハーネス | `codex app-server` | ✅（OpenAI Responses） | ✅ |
-| **DeepSeek Harness** | ネイティブハーネス | ネイティブ RPC / CLI | ✅ | ✅ |
-| **ZCode** | ネイティブハーネス | ネイティブ CLI / 同梱ランタイム | ✅ | ✅ |
-| **OpenCode** | ネイティブハーネス | Headless HTTP + SSE Server | ✅ | ✅ |
-| **Gemini CLI** | ネイティブハーネス | ACP | ✅（ローカル Google → Chat ゲートウェイ内蔵） | ✅ |
-| **Cursor** | ネイティブハーネス | ACP（`agent`） | ネイティブ認証のみ | ✅ |
-| **Kimi Code** | ネイティブハーネス | ネイティブ Server API / ACP | ✅ | ✅ |
-| **Grok Build** | ネイティブハーネス | ACP / ネイティブ CLI | ✅ | ✅ |
-| **pi** | スタンドアロンハーネス | `pi` SDK / CLI | ✅ | 内蔵 |
+| エンジン | 役割 | カスタムプロバイダー対応 | 自動検出 |
+| :--- | :--- | :---: | :---: |
+| **Kooyu** | 内蔵パーソナル AI アシスタント & スーパーバイザー | ✅ | 内蔵 |
+| **Claude Code** | ネイティブエージェント | ✅（5 スロットロール割当） | ✅ |
+| **Codex** | ネイティブエージェント | ✅ | ✅ |
+| **DeepSeek Harness** | ネイティブエージェント | ✅ | ✅ |
+| **Gemini CLI** | ネイティブエージェント | ✅ | ✅ |
+| **OpenCode** | ネイティブエージェント | ✅ | ✅ |
+| **ZCode** | ネイティブエージェント | ✅ | ✅ |
+| **Cursor** | ネイティブエージェント | ネイティブ認証 | ✅ |
+| **Kimi Code** | ネイティブエージェント | ✅ | ✅ |
+| **Grok Build** | ネイティブエージェント | ✅ | ✅ |
+| **pi** | スタンドアロンエージェント | ✅ | 内蔵 |
 
 > 詳細は [docs/harness-catalog.md](docs/harness-catalog.md) および [docs/provider-configuration.md](docs/provider-configuration.md) を参照してください。
 
 ---
 
-## 📦 ダウンロード
+## 📦 クイックスタートとダウンロード
 
-全プラットフォーム向けのビルド済みインストーラーは [**GitHub Releases**](https://github.com/sh2001sh/Kooyu/releases) に自動公開されます。
+### CLI で今すぐ起動
 
-### 最新ビルド — `v0.2.1`（[`preview-0.2.1-10`](https://github.com/sh2001sh/Kooyu/releases/tag/preview-0.2.1-10)）
+```bash
+npx kooyu@latest
+```
+
+### ネイティブインストーラー
+
+全プラットフォーム向けインストーラーは [**GitHub Releases**](https://github.com/sh2001sh/Kooyu/releases) および [**kooyu.app/download**](https://kooyu.app/download) から取得できます。
 
 | プラットフォーム | アーキテクチャ / 形式 | ダウンロード |
 | :--- | :--- | :--- |
-| **Windows** | x64 インストーラー（`.exe`） | [Kooyu-Setup-0.2.1.exe](https://github.com/sh2001sh/Kooyu/releases/download/preview-0.2.1-10/Kooyu-Setup-0.2.1.exe) |
-| **macOS** | Apple Silicon M1–M4（`.dmg` / `.zip`） | [Kooyu-0.2.1-arm64.dmg](https://github.com/sh2001sh/Kooyu/releases/download/preview-0.2.1-10/Kooyu-0.2.1-arm64.dmg) · [ZIP](https://github.com/sh2001sh/Kooyu/releases/download/preview-0.2.1-10/Kooyu-0.2.1-arm64-mac.zip) |
-| **macOS** | Intel x64（`.dmg` / `.zip`） | [Kooyu-0.2.1.dmg](https://github.com/sh2001sh/Kooyu/releases/download/preview-0.2.1-10/Kooyu-0.2.1.dmg) · [ZIP](https://github.com/sh2001sh/Kooyu/releases/download/preview-0.2.1-10/Kooyu-0.2.1-mac.zip) |
-| **Linux** | x64（`.AppImage` / `.deb`） | [Kooyu-0.2.1.AppImage](https://github.com/sh2001sh/Kooyu/releases/download/preview-0.2.1-10/Kooyu-0.2.1.AppImage) · [kooyu_0.2.1_amd64.deb](https://github.com/sh2001sh/Kooyu/releases/download/preview-0.2.1-10/kooyu_0.2.1_amd64.deb) |
-| **Android** | ユニバーサル APK（`.apk`） | [Kooyu-0.2.1-android-debug.apk](https://github.com/sh2001sh/Kooyu/releases/download/preview-0.2.1-10/Kooyu-0.2.1-android-debug.apk) |
-| **iOS** | Apple Silicon シミュレーター（`.zip`） | [Kooyu-0.2.1-ios-simulator.zip](https://github.com/sh2001sh/Kooyu/releases/download/preview-0.2.1-10/Kooyu-0.2.1-ios-simulator.zip) |
-| **チェックサム** | SHA-256 マニフェスト | [SHA256SUMS.txt](https://github.com/sh2001sh/Kooyu/releases/download/preview-0.2.1-10/SHA256SUMS.txt) |
+| **Windows** | x64 インストーラー（`.exe`） | [GitHub Releases](https://github.com/sh2001sh/Kooyu/releases) |
+| **macOS** | Apple Silicon M1–M4 / Intel x64（`.dmg` / `.zip`） | [GitHub Releases](https://github.com/sh2001sh/Kooyu/releases) |
+| **Linux** | x64（`.AppImage` / `.deb`） | [GitHub Releases](https://github.com/sh2001sh/Kooyu/releases) |
+| **Android** | ユニバーサル APK（`.apk`） | [GitHub Releases](https://github.com/sh2001sh/Kooyu/releases) |
+| **iOS** | Apple Silicon シミュレーター（`.zip`） / Xcode ビルド | [GitHub Releases](https://github.com/sh2001sh/Kooyu/releases) |
+| **Web / CLI** | ローカル Host + ブラウザワークベンチ | `npx kooyu@latest` |
 
 ---
 
 ## 🚀 インストール手順
 
-### Windows
-
-1. **`Kooyu-Setup-0.2.1.exe`** をダウンロードして実行します。
-2. デスクトップ版は未署名のため、Windows SmartScreen の警告が表示された場合は **「詳細情報 → 実行」** を選択してください（詳細は [docs/windows-installation.md](docs/windows-installation.md)）。
-
-### macOS
-
-1. Apple Silicon は **`Kooyu-0.2.1-arm64.dmg`**、Intel Mac は **`Kooyu-0.2.1.dmg`** を開き、**Kooyu.app** を **Applications** へドラッグします。
-2. Apple 公証前のビルドのため、初回起動前にターミナルで隔離属性を解除してください：
-   ```bash
-   xattr -cr /Applications/Kooyu.app
-   ```
-
-### Linux
-
-- **AppImage**：
-  ```bash
-  chmod +x Kooyu-0.2.1.AppImage
-  ./Kooyu-0.2.1.AppImage
-  ```
-- **Debian / Ubuntu（`.deb`）**：
-  ```bash
-  sudo apt install ./kooyu_0.2.1_amd64.deb
-  ```
-
-### Android
-
-1. **`Kooyu-0.2.1-android-debug.apk`** をダウンロードし、「提供元不明のアプリのインストール」を許可してインストールします。
-2. CI ビルドは同一の署名鍵を維持するため、新バージョンをそのまま上書きアップデートできます。
-
-### iOS
-
-- リリース同梱の `Kooyu-0.2.1-ios-simulator.zip` は Apple Silicon Mac の iOS シミュレーター向けです（`xcrun simctl install booted Kooyu.app`）。
-- 実機 iPhone / iPad へのインストールは Xcode でご自身の署名チームを設定してビルドしてください（[apps/ios/README.md](apps/ios/README.md)）。
-
-### チェックサム検証（SHA-256）
-
-```bash
-# macOS / Linux
-shasum -a 256 -c SHA256SUMS.txt --ignore-missing
-```
-
-```powershell
-# Windows PowerShell
-Get-FileHash .\Kooyu-Setup-0.2.1.exe -Algorithm SHA256
-```
-
-### アプリ内アップデート
-
-**設定 → 一般 → ソフトウェアアップデート** から **安定版（Stable）** または **プレビュー版（Preview）** を選択し、`SHA256SUMS.txt` 検証付きで最新ビルドへ更新できます。
+- **Windows**：`Kooyu-Setup-<version>.exe` を実行（SmartScreen が表示された場合は「詳細情報 → 実行」、詳細は [docs/windows-installation.md](docs/windows-installation.md)）。起動後は **`Alt + Space`** でクイックカプセルを呼び出せます。
+- **macOS**：`.dmg` を開いて `Kooyu.app` を Applications へ配置し、初回起動前に `xattr -cr /Applications/Kooyu.app` を実行。起動後は **`Cmd + Shift + K`** でクイックカプセルを呼び出せます。
+- **Linux**：`chmod +x Kooyu-*.AppImage && ./Kooyu-*.AppImage` または `sudo apt install ./kooyu_*_amd64.deb`。
+- **Android / iOS**：Android は APK をインストールして QR またはアカウントで接続。iOS 実機ビルドは [apps/ios/README.md](apps/ios/README.md) を参照してください。
 
 ---
 
-## 📱 モバイルペアリング
+## 📱 マルチデバイス・E2EE 連携
 
-ポート開放や VPN 設定なしで、スマートフォンからデスクトップ Host へ安全に接続できます：
+ポート開放や VPN 設定なしで、別の PC、[Web ワークベンチ](https://kooyu.app/account)、Android・iOS、IM から安全に接続できます：
 
-1. デスクトップ側で **設定 → デバイス → ペアリングコードを生成** をクリック。
-2. `relay.kooyu.app`（または `deploy/kodo-relay/` でセルフホストした Relay）へ自動接続。
-3. Android / iOS アプリ内の QR スキャナー（または標準カメラから Web/PWA）で読み取るだけで接続完了。
-4. 招待コードは 2 分間・1 回限り有効。デバイストークンはハッシュ保存（30 日間有効）され、デスクトップからいつでも失効できます。
+1. ホスト PC を Kooyu アカウントに紐付けるか、**設定 → デバイス → ペアリングコードを生成** で QR コードを発行します。
+2. すべての通信はエンドツーエンド暗号化（E2EE）され、新規端末の接続はホスト PC での明示承認が必須です。
+3. セルフホスト構成は `deploy/` のテンプレートおよび [docs/mobile-relay.md](docs/mobile-relay.md)・[docs/self-hosted-operations.md](docs/self-hosted-operations.md) を参照してください。
 
 ---
 
@@ -198,43 +169,35 @@ Get-FileHash .\Kooyu-Setup-0.2.1.exe -Algorithm SHA256
 
 ```mermaid
 flowchart LR
-  subgraph Clients["マルチプラットフォームクライアント"]
-    Desktop["デスクトップ\n(Electron + React)"]
-    Web["Web / PWA\n(Vite + React)"]
-    Android["Android ネイティブ\n(Kotlin + Compose)"]
-    iOS["iOS ネイティブ\n(SwiftUI)"]
+  subgraph Clients["マルチプラットフォームクライアント & IM"]
+    Desktop["デスクトップ + クイックカプセル\n(Windows · macOS · Linux)"]
+    Mobile["モバイル & Web ワークベンチ\n(Android · iOS · PWA)"]
+    IM["IM チャネル\n(WeChat · WeCom · Feishu · Telegram)"]
   end
 
-  Relay["Kooyu Relay\n(HTTPS / WSS · セルフホスト可)"]
+  Bridge["ゼロ知識 E2EE 暗号化リレー\n(アカウント検出 / セルフホスト)"]
 
-  subgraph Host["独立ローカル Session Host (Node + SQLite)"]
-    API["HTTP / SSE API\n127.0.0.1:4310"]
-    Vault["OS 認証情報ストア\n(Keychain / DPAPI / Secret Service)"]
-    DB[("SQLite DB\nFTS5・使用量・長期記憶")]
-    Supervisor["Kooyu スーパーバイザー\n(pi SDK)"]
-    Adapters["10 種のネイティブアダプター\n(Claude・Codex・DeepSeek・ZCode\nOpenCode・Gemini・Cursor・Kimi・Grok・pi)"]
+  subgraph Host["独立ローカル Session Host"]
+    API["ワークスペース API & ライブストリーム"]
+    Supervisor["Kooyu パーソナル AI アシスタント\n(文書 · 永続記憶 · スキル · 見守りレーダー)"]
+    Router["スマートルーティング · 429 リレー · 競技場"]
+    Adapters["10+ ネイティブエージェント"]
+    Tools["Worktree · Git スナップショット · プレビュー\n内蔵端末 · 共有セッションブラウザ · ローカル KB"]
+    Storage[("ローカル SQLite · Markdown 文書 · OS 鍵ストア")]
   end
 
   Desktop --> API
-  Web --> API
-  Android --> Relay --> API
-  iOS --> Relay
-  API --> DB
-  API --> Vault
+  Mobile --> Bridge --> API
+  IM --> API
   API --> Supervisor
-  API --> Adapters
+  Supervisor --> Router --> Adapters
+  API --> Tools
+  API --> Storage
 ```
 
 ---
 
 ## 🛠️ ソースからビルド
-
-### 動作要件
-
-- **Node.js `>= 24.13.0`** / **npm `11+`**
-- 対応するいずれかのコーディングハーネス CLI（または Kooyu 内で API プロバイダーを設定）
-
-### 開発と起動
 
 ```bash
 git clone https://github.com/sh2001sh/Kooyu.git
@@ -249,30 +212,27 @@ npm run start:desktop
 npm run start:host
 ```
 
-### パッケージビルド
+### データディレクトリと環境変数
 
-```bash
-# デスクトップインストーラー生成 (release/desktop/)
-npm run package:desktop -- --publish never
+| OS | 既定の Host データディレクトリ |
+| :--- | :--- |
+| **Windows** | `%LOCALAPPDATA%\Kooyu\host` |
+| **macOS** | `~/Library/Application Support/Kooyu/host` |
+| **Linux** | `${XDG_DATA_HOME:-~/.local/share}/Kooyu/host` |
 
-# Android APK (JDK 17 + Android SDK 36)
-cd apps/android && ./gradlew testDebugUnitTest lintDebug assembleDebug
-
-# iOS シミュレーター (macOS + Xcode 16 + XcodeGen)
-cd apps/ios && xcodegen generate
-xcodebuild -project Kooyu.xcodeproj -scheme Kooyu -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
-```
+> 環境変数は `KOOYU_*`（`KOOYU_DATA_DIR`、`KOOYU_HOST_PORT`、`KOOYU_HOST_URL`、`KOOYU_RELAY_ORIGIN`、`KOOYU_QUICK_CAPTURE_SHORTCUT`）を既定とし、既存の `Kodo/host` ディレクトリや `KODO_*` 環境変数も自動互換で引き継ぎます。
 
 ---
 
 ## 🔒 セキュリティとプライバシー
 
-- **ローカルファースト設計** — 会話履歴・記憶・使用量データはすべてローカルの SQLite に保存され、Host は既定で `127.0.0.1` のみで待機します。
-- **OS ネイティブのシークレット保管** — API キーや OAuth トークンは OS 認証情報ストア（Keychain / Windows 資格情報マネージャー / Secret Service）に安全に保管されます。
-- **既存 CLI 設定を非破壊で保護** — プロバイダー紐付けやモデルマッピングはセッション単位で分離注入され、`~/.claude` や `~/.codex` などの既存設定を上書きしません。
+- **ローカルファースト設計** — コード、会話履歴、長期記憶、マウント知識ベース、使用量データはすべてローカル端末に保存され、Host は既定で `127.0.0.1` のみで待機します。
+- **OS ネイティブのシークレット保管** — API キーや OAuth トークンは OS 認証情報ストア（`Kooyu` サービス）に保管され、事前チェックやテスト実行時は機密環境変数を自動除外します。
+- **既存 CLI 設定を非破壊で保護** — プロバイダー設定やモデルマッピングはセッション単位で分離適用され、`~/.claude` や `~/.codex` などの既存設定を上書きしません。
+- **段階的なリモート権限管理** — ローカル MCP や IM 認証情報の管理はホスト本機のみに限定され、対話ターミナルやリモート Git Push は明示的に許可されたデバイスのみ利用できます。
 
 ---
 
 ## 📄 ライセンス
 
-[**MIT License**](LICENSE) のもとで公開されています。サードパーティのライセンス・帰属表記は [`third-party/`](third-party/runtime-dependencies.md) および [`docs/upstream.md`](docs/upstream.md) を参照してください。
+[**MIT License**](LICENSE) のもとで公開されています。公式サイト：[https://kooyu.app](https://kooyu.app) · サードパーティ表記：[`third-party/runtime-dependencies.md`](third-party/runtime-dependencies.md)

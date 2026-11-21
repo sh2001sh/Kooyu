@@ -5,6 +5,7 @@ import {
   ArrowUp,
   AlertTriangle,
   Clock,
+  Mail,
   Pencil,
   Plus,
   Shield,
@@ -17,23 +18,37 @@ import type {
   HarnessDescriptor,
   InboxItem,
   Session,
+  RuntimeEvent,
 } from "@kodo/protocol";
 import { answerInteraction, changePendingMessage, stopSession } from "../lib/host-client";
 import { HARNESS_NAMES } from "../lib/harnesses";
-import { AttachmentButton, AttachmentList, useAttachments } from "./Attachments";
+import { useT } from "../lib/i18n";
+import {
+  AttachmentButton,
+  AttachmentList,
+  useAttachments,
+  type DraftAttachment,
+} from "./Attachments";
+import { canPostMail, prepareMail, postMail } from "../lib/mailbox";
 import {
   ComposerDropOverlay,
   MobileComposerPlusSheet,
   SlashTemplateMenu,
   useFileDropZone,
 } from "./ComposerExtras";
-import { HarnessBadge } from "./KodoBrand";
+import { HarnessBadge } from "./KooyuBrand";
 import { ModelControls } from "./ModelControls";
 import { Modal } from "./Motion";
 import { PermissionControls } from "./PermissionControls";
 import { api } from "../lib/host-client";
 import { appendVoiceTranscript, useVoiceInput } from "../lib/voice";
 import { VoiceInputButton, VoiceRecordingBar } from "./VoiceInputControls";
+import {
+  VoiceConversationBar,
+  VoiceConversationButton,
+  useVoiceConversation,
+} from "./VoiceConversation";
+import { ScreenshotAnnotation } from "./ScreenshotAnnotation";
 import { NativeQuestions, nativeQuestions } from "./NativeQuestions";
 
 type Wire = Record<string, any>;
@@ -54,7 +69,8 @@ export function InteractionCard({ item, act }: { item: InboxItem; act: Action })
       method.includes("requestApproval") ||
       method === "approval/request" ||
       p.type === "permission.asked");
-  const management = p.protocol === "kodo";
+  const management = p.protocol === "kodo" && !questions;
+  const kodoQuestion = p.protocol === "kodo" && Boolean(questions);
   const request = p.params ?? {};
   const modeNames: Record<string, string> = {
     observe: "仅观察",
@@ -85,13 +101,22 @@ export function InteractionCard({ item, act }: { item: InboxItem; act: Action })
             <Shield size={14} />
           </span>
           <strong>
-            {p.protocol === "kodo" ? "Kooyu 管理操作 · 等待确认" : "原生请求 · 等待你处理"}
+            {kodoQuestion
+              ? request.title || "Kooyu 向你确认"
+              : p.protocol === "kodo"
+                ? "Kooyu 管理操作 · 等待确认"
+                : "原生请求 · 等待你处理"}
           </strong>
         </div>
         <div className="interaction__header-right">
           <span className="interaction__protocol-tag">{p.protocol}</span>
         </div>
       </div>
+      {kodoQuestion && request.detail && (
+        <p className="interaction__choice-desc" style={{ marginBottom: 8 }}>
+          {request.detail}
+        </p>
+      )}
       {management ? (
         <div className="detail-sub-stack interaction__management">
           <p>{request.action}</p>
@@ -245,6 +270,7 @@ export function InteractionCard({ item, act }: { item: InboxItem; act: Action })
 }
 
 interface ComposerProps {
+  events: RuntimeEvent[];
   session: Session;
   harnessDesc?: HarnessDescriptor;
   binding?: HarnessBinding;
@@ -268,6 +294,7 @@ interface ComposerProps {
 }
 
 export function Composer({
+  events,
   session,
   harnessDesc,
   binding,
@@ -289,10 +316,36 @@ export function Composer({
   onError,
   act,
 }: ComposerProps) {
+  const t = useT();
   const { settings: preferences } = useAppPreferences();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const attachments = useAttachments(session.id, session.id);
+  const [annotating, setAnnotating] = useState<DraftAttachment | null>(null);
+  const voiceCall = useVoiceConversation({
+    events,
+    send: (text) => onSubmit(text, []),
+  });
   const [stopping, setStopping] = useState(false);
+  const [mailAvailable, setMailAvailable] = useState(false);
+  const [mailNotice, setMailNotice] = useState("");
+  const [posting, setPosting] = useState(false);
+  const postingRef = useRef(false);
+  const mailRetry = useRef<
+    | { sessionId: string; text: string; envelope: Awaited<ReturnType<typeof prepareMail>> }
+    | undefined
+  >(undefined);
+  useEffect(() => {
+    let active = true;
+    setMailNotice("");
+    void canPostMail()
+      .then((value) => {
+        if (active) setMailAvailable(value);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [session.id]);
   const stoppingRef = useRef(false);
   const [stopNotice, setStopNotice] = useState("");
   const [stopSheetOpen, setStopSheetOpen] = useState(false);
@@ -474,8 +527,54 @@ export function Composer({
           error={attachments.error}
           disabled={busy || !canSend}
           onRemove={attachments.remove}
+          onAnnotate={(file) => setAnnotating(file)}
         />
         <VoiceRecordingBar voice={voice} />
+        <VoiceConversationBar call={voiceCall} />
+        {!connected && mailAvailable && (
+          <div className="nx-mailbox-bar">
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <Mail size={14} />
+              <span>{mailNotice || "Host 暂时离线，可加密投递至离线信箱等待自动送达。"}</span>
+            </span>
+            <button
+              type="button"
+              className="nx-btn nx-btn--sm nx-btn--primary"
+              disabled={posting || !compose.trim() || !!attachments.attachments.length}
+              onClick={async () => {
+                if (postingRef.current) return;
+                postingRef.current = true;
+                setPosting(true);
+                try {
+                  const previous = mailRetry.current;
+                  const envelope =
+                    previous?.text === compose &&
+                    previous.sessionId === session.id &&
+                    previous.envelope.expiresAt > Date.now()
+                      ? previous.envelope
+                      : await prepareMail(session.id, compose);
+                  mailRetry.current = { sessionId: session.id, text: compose, envelope };
+                  await postMail(envelope);
+                  setMailNotice(t("mailbox.sent"));
+                  onComposeChange("");
+                  mailRetry.current = undefined;
+                } catch (e) {
+                  onError(e instanceof Error ? e.message : String(e));
+                } finally {
+                  postingRef.current = false;
+                  setPosting(false);
+                }
+              }}
+            >
+              {t("mailbox.send")}
+            </button>
+          </div>
+        )}
+        {connected && mailNotice && (
+          <p className="nx-feedback nx-feedback--ok" role="status">
+            {mailNotice}
+          </p>
+        )}
         <textarea
           ref={textareaRef}
           rows={2}
@@ -550,6 +649,10 @@ export function Composer({
               </span>
             </div>
             <VoiceInputButton voice={voice} disabled={session.bindingUnavailable || busy} />
+            <VoiceConversationButton
+              call={voiceCall}
+              disabled={!canSend || busy || voice.state !== "idle"}
+            />
             {showStopButton ? (
               <button
                 type="button"
@@ -633,6 +736,21 @@ export function Composer({
               <span>取消</span>
             </button>
           </div>
+        </Modal>
+      )}
+
+      {annotating?.previewUrl && (
+        <Modal title={t("annotate.title")} onClose={() => setAnnotating(null)}>
+          <ScreenshotAnnotation
+            frame={annotating.previewUrl}
+            fileName={annotating.name}
+            close={() => setAnnotating(null)}
+            onAttach={async (annotatedFile) => {
+              const oldKey = annotating.key;
+              attachments.remove(oldKey);
+              await attachments.add([annotatedFile]);
+            }}
+          />
         </Modal>
       )}
 

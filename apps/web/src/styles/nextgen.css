@@ -1,0 +1,803 @@
+/* ==========================================================================
+   Kooyu Next-Gen Workbench Surfaces (Delegation, Git Delivery, Terminal,
+   Live Artifacts, Browser Screencast, Annotation, Voice Call, Mailbox, IM)
+   Strictly built on tokens.css (Apple Monochrome Daylight & Obsidian Carbon).
+   ========================================================================== */
+
+/* ── 1. Delegation Cards & Managed Worker Banner ── */
+.delegation-dock {
+  width: min(100%, 52rem);
+  margin: 12px auto 4px;
+  padding-inline: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.delegation-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-radius: var(--radius-card);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  box-shadow: var(--elev-card);
+}
+
+.delegation-banner__lead {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+.delegation-banner__lead strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.delegation-card {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--elev-card);
+  padding: 13px 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  overflow-wrap: anywhere;
+  transition:
+    border-color var(--dur-micro) ease,
+    box-shadow var(--dur-micro) ease;
+}
+
+.delegation-card:hover {
+  border-color: var(--border-strong);
+}
+
+.delegation-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.delegation-card__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.delegation-card__title strong {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+.delegation-card__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.delegation-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle);
+  font-size: 11.5px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+}
+
+.delegation-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: var(--radius-pill);
+  font-size: 11.5px;
+  font-weight: 600;
+  flex-shrink: 0;
+  background: var(--surface-sunken);
+  color: var(--text-secondary);
+}
+
+.delegation-badge--running {
+  background: var(--brand-coral-tint);
+  color: var(--brand-coral);
+}
+
+.delegation-badge--completed {
+  background: var(--success-tint);
+  color: var(--success-text);
+}
+
+.delegation-badge--blocked,
+.delegation-badge--awaiting-review {
+  background: var(--info-tint);
+  color: var(--info-text);
+}
+
+.delegation-badge--failed {
+  background: var(--destructive-tint);
+  color: var(--destructive-text);
+}
+
+.delegation-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.delegation-badge--running .delegation-dot {
+  animation: kooyu-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes kooyu-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.8);
+  }
+}
+
+.delegation-card__facts {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 7px 10px;
+  border-radius: var(--radius-row);
+  background: var(--surface-sunken);
+}
+
+.delegation-diff-add {
+  color: var(--success-text);
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.delegation-diff-del {
+  color: var(--destructive-text);
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.delegation-card__excerpt {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.delegation-card__error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--destructive-text);
+  background: var(--destructive-tint);
+  padding: 6px 10px;
+  border-radius: var(--radius-control);
+}
+
+.delegation-card__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.nx-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 11px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--dur-micro) ease,
+    border-color var(--dur-micro) ease,
+    color var(--dur-micro) ease;
+}
+
+.nx-btn:hover:not(:disabled) {
+  background: var(--fill-hover);
+  border-color: var(--border-strong);
+}
+
+.nx-btn:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.nx-btn--primary {
+  background: var(--control-solid);
+  border-color: var(--control-solid);
+  color: var(--on-control);
+}
+
+.nx-btn--primary:hover:not(:disabled) {
+  background: var(--control-solid-hover);
+  border-color: var(--control-solid-hover);
+}
+
+.nx-btn--coral {
+  background: var(--control-solid);
+  border-color: var(--control-solid);
+  color: var(--on-control);
+}
+
+.nx-btn--coral svg {
+  color: var(--brand-coral);
+}
+
+.nx-btn--coral:hover:not(:disabled) {
+  background: var(--control-solid-hover);
+  border-color: var(--control-solid-hover);
+}
+
+.nx-btn--danger {
+  color: var(--destructive-text);
+  border-color: color-mix(in srgb, var(--destructive-raw) 28%, var(--border));
+  background: var(--destructive-tint);
+}
+
+.nx-btn--danger:hover:not(:disabled) {
+  border-color: var(--destructive-raw);
+}
+
+.nx-btn--ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.nx-btn--ghost:hover:not(:disabled) {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+.nx-btn--sm {
+  height: 26px;
+  padding: 0 9px;
+  font-size: 11.5px;
+}
+
+/* ── 2. Playbook Capsules on DraftWorkspace ── */
+.playbook-capsules {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+  max-width: 620px;
+}
+
+.playbook-capsule {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 13px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: var(--elev-card);
+  transition:
+    border-color var(--dur-micro) ease,
+    color var(--dur-micro) ease,
+    background var(--dur-micro) ease,
+    transform var(--dur-micro) ease;
+}
+
+.playbook-capsule:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+  background: var(--surface-paper);
+  transform: translateY(-1px);
+}
+
+.playbook-capsule svg {
+  color: var(--brand-coral);
+  flex-shrink: 0;
+}
+
+/* ── 3. Collapsible Workbench Cards (Git Delivery, Terminal, Dev Preview) ── */
+.nx-card {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.nx-card__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--dur-micro) ease;
+}
+
+.nx-card__toggle:hover {
+  background: var(--fill-hover);
+}
+
+.nx-card__toggle-lead {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.nx-card__body {
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nx-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.nx-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.nx-code-pill {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--surface-sunken);
+  color: var(--text);
+  border: 1px solid var(--border-subtle);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nx-input {
+  width: 100%;
+  box-sizing: border-box;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border);
+  background: var(--surface-input);
+  color: var(--text);
+  font-size: 12.5px;
+  font-family: inherit;
+  outline: none;
+  transition:
+    border-color var(--dur-micro) ease,
+    box-shadow var(--dur-micro) ease;
+}
+
+.nx-input:focus {
+  border-color: var(--border-strong);
+  box-shadow: var(--focus-shadow);
+}
+
+.nx-select {
+  height: 30px;
+  padding: 0 8px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+}
+
+.nx-confirm-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  border-radius: var(--radius-row);
+  background: var(--destructive-tint);
+  border: 1px solid color-mix(in srgb, var(--destructive-raw) 24%, transparent);
+  font-size: 12px;
+  color: var(--destructive-text);
+}
+
+.nx-feedback {
+  margin: 0;
+  font-size: 12px;
+  padding: 7px 10px;
+  border-radius: var(--radius-control);
+  background: var(--surface-sunken);
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.nx-feedback--error {
+  background: var(--destructive-tint);
+  color: var(--destructive-text);
+}
+
+.nx-feedback--ok {
+  background: var(--success-tint);
+  color: var(--success-text);
+}
+
+.nx-hunk-card {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-row);
+  overflow: hidden;
+  background: var(--surface-sunken);
+}
+
+.nx-hunk-card .workspace-diff {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  max-height: 220px;
+}
+
+.nx-hunk-card__bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 6px 8px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface-raised);
+}
+
+/* ── 4. Workspace Terminal ── */
+.nx-terminal-host {
+  width: 100%;
+  min-height: 220px;
+  height: 250px;
+  border-radius: var(--radius-row);
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-sunken);
+  padding: 6px;
+  box-sizing: border-box;
+}
+
+.nx-terminal-host .xterm {
+  height: 100%;
+}
+
+.nx-terminal-shortcuts {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.nx-key-chip {
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.nx-key-chip:hover {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+/* ── 5. Interactive Artifact Live Preview ── */
+.nx-segmented {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  border-radius: var(--radius-control);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle);
+  gap: 2px;
+}
+
+.nx-segmented button {
+  height: 24px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.nx-segmented button[aria-pressed="true"] {
+  background: var(--surface-raised);
+  color: var(--text);
+  box-shadow: var(--elev-0);
+}
+
+.nx-live-frame {
+  width: 100%;
+  height: 360px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-row);
+  background: #ffffff;
+}
+
+.nx-console-tray {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: var(--radius-row);
+  background: var(--destructive-tint);
+  border: 1px solid color-mix(in srgb, var(--destructive-raw) 24%, transparent);
+  font-size: 11.5px;
+  color: var(--destructive-text);
+}
+
+.nx-console-tray pre {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  white-space: pre-wrap;
+  max-height: 90px;
+  overflow: auto;
+}
+
+/* ── 6. Browser Control & Screenshot Annotation ── */
+.nx-browser-panel {
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: var(--radius-card);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nx-browser-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.nx-browser-viewport {
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-row);
+  overflow: hidden;
+  background: var(--surface-sunken);
+  cursor: pointer;
+  width: 100%;
+  display: block;
+}
+
+.nx-browser-viewport:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-shadow);
+}
+
+.nx-browser-viewport img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.nx-annotate-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: var(--radius-card);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  box-shadow: var(--elev-1);
+}
+
+.nx-annotate-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.nx-annotate-canvas-wrap {
+  border-radius: var(--radius-row);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+}
+
+.nx-annotate-canvas-wrap canvas {
+  display: block;
+  max-width: 100%;
+  max-height: 58vh;
+  margin: 0 auto;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.nx-swatch-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.nx-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  padding: 0;
+  cursor: pointer;
+}
+
+.nx-swatch.is-active {
+  box-shadow:
+    0 0 0 2px var(--surface-raised),
+    0 0 0 3.5px var(--text);
+}
+
+/* ── 7. Voice Conversation Floating Pill & Offline Mailbox Bar ── */
+.nx-voice-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 12px;
+  margin-bottom: 6px;
+  border-radius: var(--radius-row);
+  background: var(--brand-coral-tint);
+  border: 1px solid color-mix(in srgb, var(--brand-coral) 28%, transparent);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.nx-voice-bar__lead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nx-voice-bar--error {
+  background: var(--destructive-tint);
+  border-color: color-mix(in srgb, var(--destructive-raw) 28%, transparent);
+  color: var(--destructive-text);
+}
+
+.nx-mailbox-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  margin-bottom: 6px;
+  border-radius: var(--radius-row);
+  background: var(--info-tint);
+  border: 1px solid color-mix(in srgb, var(--info-raw) 26%, transparent);
+  font-size: 12px;
+  color: var(--info-text);
+}
+
+/* ── 8. Device Permissions Switches & Attachment Annotate Chip ── */
+.nx-device-perms {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.nx-perm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 4px;
+}
+
+.nx-perm-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+.nx-attach-annotate-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.nx-attach-annotate-btn:hover {
+  background: var(--fill-hover);
+  color: var(--brand-coral);
+}
+
+/* ── 9. Responsive Mobile Refinements ── */
+@media (max-width: 760px) {
+  .delegation-dock {
+    padding-inline: 12px;
+  }
+  .nx-live-frame {
+    height: 280px;
+  }
+}

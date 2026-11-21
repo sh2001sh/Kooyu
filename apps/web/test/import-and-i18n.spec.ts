@@ -17,12 +17,14 @@ test.describe("Selective harness conversation import & multi-language switching"
     ).json();
 
     const importedRequests: Array<Record<string, any>> = [];
+    const scanRequests: string[] = [];
     let importedAlpha1 = false;
 
     try {
       await page.route("**/api/native-imports*", async (route) => {
         const req = route.request();
         if (req.method() === "GET") {
+          scanRequests.push(req.url());
           const url = new URL(req.url());
           const projectId = url.searchParams.get("projectId");
           const all = [
@@ -118,13 +120,20 @@ test.describe("Selective harness conversation import & multi-language switching"
         .click();
 
       await expect(page.getByRole("heading", { name: "导入对话" }).first()).toBeVisible();
-      await expect(page.getByText("排查鉴权 Token 刷新失败问题")).toBeVisible();
-      await expect(page.getByText("Beta 服务性能分析")).toBeVisible();
+      const scanButton = page.getByRole("button", { name: "扫描本地对话", exact: true });
+      await expect(scanButton).toBeDisabled();
+      await expect(page.getByText("选择项目后开始扫描", { exact: true })).toBeVisible();
+      expect(scanRequests).toHaveLength(0);
 
       // Filter to Alpha Repo only
       await page.getByLabel("所属项目", { exact: true }).selectOption(pA.id);
+      await expect(scanButton).toBeEnabled();
+      expect(scanRequests).toHaveLength(0);
+      await scanButton.click();
       await expect(page.getByText("排查鉴权 Token 刷新失败问题")).toBeVisible();
       await expect(page.getByText("Beta 服务性能分析")).toHaveCount(0);
+      expect(scanRequests).toHaveLength(1);
+      expect(new URL(scanRequests[0]!).searchParams.has("harnessId")).toBe(false);
 
       // Select ONLY the first conversation (leave the second unselected!)
       const row1 = page.locator(".sx-import-row__main", { hasText: "排查鉴权 Token 刷新失败问题" });
@@ -140,9 +149,17 @@ test.describe("Selective harness conversation import & multi-language switching"
       await importBtn.click();
       await expect(page.getByText("已成功导入 1 个对话")).toBeVisible();
       expect(importedRequests).toHaveLength(1);
+      expect(scanRequests).toHaveLength(1);
       expect(
         importedRequests[0]!.items.map((i: { nativeSessionId: string }) => i.nativeSessionId),
       ).toEqual(["alpha-c1"]);
+
+      await page.getByLabel("来源引擎", { exact: true }).selectOption("codex");
+      await expect(page.locator(".sx-import-row__main")).toHaveCount(0);
+      expect(scanRequests).toHaveLength(1);
+      await scanButton.click();
+      await expect(page.locator(".sx-import-row__main").first()).toBeVisible();
+      expect(new URL(scanRequests[1]!).searchParams.get("harnessId")).toBe("codex");
 
       // Verify zero horizontal overflow on mobile 390px
       await page.setViewportSize({ width: 390, height: 844 });

@@ -48,6 +48,7 @@ for (const width of [1440, 390])
         .getByRole("navigation", { name: width < 600 ? "配置页面" : "配置导航", exact: true })
         .getByRole("button", { name: "模型来源", exact: true })
         .click();
+      await section.getByRole("button", { name: /模型列表/ }).click();
     };
     const section = page
       .locator("section.sx-section")

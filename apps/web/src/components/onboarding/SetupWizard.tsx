@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, ShieldCheck, RefreshCw } from "lucide-react";
 import type { OnboardingState, Snapshot } from "@kodo/protocol";
 import { api } from "../../lib/host-client";
-import { KodoMark, HarnessBadge } from "../KodoBrand";
+import { KooyuBrandMark, HarnessBadge } from "../KooyuBrand";
 import { MobiusLoader } from "../MobiusLoader";
 import { SetupConnection } from "./SetupConnection";
 import { SetupEngines } from "./SetupEngines";
@@ -64,7 +64,7 @@ export function SetupWizard({
     <div className="setup-shell" ref={shell}>
       <header className="setup-topbar">
         <span className="setup-brand">
-          <KodoMark size={30} />
+          <KooyuBrandMark size={30} />
           <span>kooyu</span>
         </span>
         <button

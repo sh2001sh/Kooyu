@@ -9,7 +9,7 @@ if (
   throw new Error("Usage: host-admin.mjs METHOD /api/path [body.json|-]");
 const base =
   process.env.KOOYU_ADMIN_URL ??
-  `http://127.0.0.1:${process.env.KODO_ADMIN_PORT ?? process.env.KODO_HOST_PORT ?? 4310}`;
+  `http://127.0.0.1:${process.env.KOOYU_ADMIN_PORT ?? process.env.KODO_ADMIN_PORT ?? process.env.KOOYU_HOST_PORT ?? process.env.KODO_HOST_PORT ?? 4310}`;
 const url = new URL(path, base);
 if (
   url.protocol !== "http:" ||
@@ -18,7 +18,7 @@ if (
   url.password
 )
   throw new Error(
-    "Administration requires a loopback HTTP URL; use KODO_ADMIN_PORT for a TLS Host",
+    "Administration requires a loopback HTTP URL; use KOOYU_ADMIN_PORT for a TLS Host",
   );
 let body = ["POST", "PUT", "PATCH", "DELETE"].includes(method) ? "{}" : undefined;
 if (bodyFile) {

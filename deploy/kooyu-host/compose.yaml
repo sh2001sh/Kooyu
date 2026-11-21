@@ -7,12 +7,12 @@ services:
     init: true
     ports: ["4310:4310"]
     environment:
-      KODO_BIND: "0.0.0.0"
-      KODO_HOST_PORT: "4310"
-      KODO_ADMIN_PORT: "4311"
-      KODO_PUBLIC_ORIGIN: "${KODO_PUBLIC_ORIGIN:?Set the HTTPS Host origin}"
-      KODO_TLS_CERT: /run/tls/fullchain.pem
-      KODO_TLS_KEY: /run/tls/privkey.pem
+      KOOYU_BIND: "0.0.0.0"
+      KOOYU_HOST_PORT: "4310"
+      KOOYU_ADMIN_PORT: "4311"
+      KOOYU_PUBLIC_ORIGIN: "${KOOYU_PUBLIC_ORIGIN:?Set the HTTPS Host origin}"
+      KOOYU_TLS_CERT: /run/tls/fullchain.pem
+      KOOYU_TLS_KEY: /run/tls/privkey.pem
       KOOYU_CREDENTIAL_BACKEND: file
       KOOYU_VAULT_KEY_FILE: /run/secrets/vault_key
       KOOYU_MAX_EXECUTIONS: "4"

@@ -821,3 +821,165 @@ fun continuationFlags(blocks: List<TranscriptBlock>): List<Boolean> {
         }
     }
 }
+
+@Composable fun DelegationCard(ticket: org.json.JSONObject, currentId: String, model: Workbench, enabled: Boolean) {
+    val c = Kooyu.colors
+    val scope = rememberCoroutineScope()
+    val workerId = ticket.nullableString("workerSessionId")
+    val controllerId = ticket.getString("controllerSessionId")
+    val watchId = ticket.nullableString("watchId")
+    val harnessId = ticket.optString("harnessId", "codex")
+    val status = ticket.optString("status")
+    val branch = ticket.optJSONObject("mandate")?.nullableString("worktreeBranch") ?: "共享工作区"
+    val report = ticket.optJSONObject("report")
+    val diffStat = report?.optJSONObject("gitFacts")?.optJSONObject("diffStat")
+    val excerpt = report?.optJSONObject("workerClaim")?.optString("replyExcerpt").orEmpty()
+    val lastError = ticket.nullableString("lastError").orEmpty()
+    val stateLabel = when (status) {
+        "provisioning" -> "准备中"
+        "running" -> "托管中"
+        "blocked" -> "已暂停"
+        "awaiting-review" -> "待审查"
+        "completed" -> "已完成"
+        "cancelled" -> "已撤销"
+        else -> "失败"
+    }
+    val badgeBg = when (status) {
+        "running" -> c.brandCoral.copy(alpha = 0.14f)
+        "completed" -> c.successTint
+        "blocked", "awaiting-review" -> c.sunken
+        "failed" -> c.destructiveTint
+        else -> c.sunken
+    }
+    val badgeFg = when (status) {
+        "running" -> c.brandCoral
+        "completed" -> c.doneText
+        "failed" -> c.destructive
+        else -> c.textSecondary
+    }
+    InsetGroupCard {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                EngineBadge(harnessId, 24.dp, circle = false)
+                Text(
+                    ticket.optString("title"),
+                    style = KooyuType.label,
+                    fontWeight = FontWeight.SemiBold,
+                    color = c.text,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Surface(shape = RoundedCornerShape(999.dp), color = badgeBg) {
+                    Text(
+                        stateLabel,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = badgeFg,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
+                }
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(harnessVisual(harnessId).name, style = KooyuType.caption, color = c.textSecondary)
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = c.sunken,
+                    border = BorderStroke(0.5.dp, c.borderSubtle)
+                ) {
+                    Text(
+                        branch,
+                        style = KooyuType.mono,
+                        fontSize = 10.5.sp,
+                        color = c.textSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                    )
+                }
+            }
+            if (lastError.isNotBlank()) {
+                Text(lastError, fontSize = 12.sp, color = c.destructive)
+            }
+            if (diffStat != null) {
+                val files = diffStat.optInt("filesChanged")
+                val adds = diffStat.optInt("insertions")
+                val dels = diffStat.optInt("deletions")
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(9.dp))
+                        .background(c.sunken)
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("$files 文件", fontSize = 11.5.sp, color = c.textSecondary)
+                    Text("+$adds", style = KooyuType.mono, fontSize = 11.5.sp, color = c.doneText, fontWeight = FontWeight.SemiBold)
+                    Text("-$dels", style = KooyuType.mono, fontSize = 11.5.sp, color = c.destructive, fontWeight = FontWeight.SemiBold)
+                }
+            }
+            if (excerpt.isNotBlank()) {
+                Text(excerpt, fontSize = 12.sp, color = c.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                if (currentId == workerId) {
+                    OutlinedButton(
+                        onClick = { model.select(controllerId) },
+                        shape = RoundedCornerShape(9.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                    ) { Text("查看主对话", fontSize = 12.sp, color = c.text) }
+                    if (status == "blocked") {
+                        Button(
+                            enabled = enabled,
+                            onClick = { scope.launch { model.execute("/delegations/" + ticket.getString("id") + "/handback") } },
+                            shape = RoundedCornerShape(9.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = c.brandCoral, contentColor = Color.White),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                        ) { Text("交还主控", fontSize = 12.sp) }
+                    }
+                } else {
+                    if (workerId != null) {
+                        OutlinedButton(
+                            onClick = { model.select(workerId) },
+                            shape = RoundedCornerShape(9.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                        ) { Text("下钻直聊", fontSize = 12.sp, color = c.text) }
+                    }
+                    if (status == "running" && watchId != null) {
+                        OutlinedButton(
+                            enabled = enabled,
+                            onClick = {
+                                scope.launch {
+                                    model.execute("/watches/$watchId", "PATCH", org.json.JSONObject().put("state", "paused"))
+                                    if (workerId != null) model.select(workerId)
+                                }
+                            },
+                            shape = RoundedCornerShape(9.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                        ) { Text("接管暂停", fontSize = 12.sp, color = c.text) }
+                    }
+                    if (status == "blocked") {
+                        Button(
+                            enabled = enabled,
+                            onClick = { scope.launch { model.execute("/delegations/" + ticket.getString("id") + "/handback") } },
+                            shape = RoundedCornerShape(9.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = c.brandCoral, contentColor = Color.White),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                        ) { Text("交还主控", fontSize = 12.sp) }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -88,9 +88,15 @@ for (const width of [1440, 1024, 390]) {
       await expect(page.getByLabel("模型来源筛选", { exact: true })).toHaveCount(0);
 
       // Provider A (2 endpoints: Responses + Chat) renders its own models directly under Provider A
+      // Model list is collapsed by default and opens on click.
       const cardA = page.locator("section.sx-section").filter({
         has: page.locator(".sx-provider-name").filter({ hasText: /^Synthetic source A$/ }),
       });
+      const toggleA = cardA.locator(".sx-provider-models__toggle");
+      await expect(toggleA).toHaveAttribute("aria-expanded", "false");
+      await expect(cardA.getByRole("table", { name: "模型列表", exact: true })).toHaveCount(0);
+      await toggleA.click();
+      await expect(toggleA).toHaveAttribute("aria-expanded", "true");
       const tableA = cardA.getByRole("table", { name: "模型列表", exact: true });
       const rowA = tableA.locator("tbody tr").filter({
         has: page.locator(".sx-model-name").filter({ hasText: new RegExp(`^${modelName}$`) }),
@@ -111,6 +117,9 @@ for (const width of [1440, 1024, 390]) {
       const cardB = page.locator("section.sx-section").filter({
         has: page.locator(".sx-provider-name").filter({ hasText: /^Synthetic source B$/ }),
       });
+      const toggleB = cardB.locator(".sx-provider-models__toggle");
+      await expect(toggleB).toHaveAttribute("aria-expanded", "false");
+      await toggleB.click();
       const tableB = cardB.getByRole("table", { name: "模型列表", exact: true });
       const rowB = tableB.locator("tbody tr").filter({
         has: page.locator(".sx-model-name").filter({ hasText: new RegExp(`^${modelName}$`) }),
@@ -231,7 +240,7 @@ test("provider card '应用到' binds and unbinds compatible harnesses directly"
     const codexBtn = applyDialog.locator(".sx-apply-row__btn").filter({ hasText: /^Codex/ });
     await codexBtn.click();
     await expect(codexBtn).toHaveAttribute("aria-pressed", "true");
-    await expect(card.getByText("1 个引擎在用", { exact: true })).toBeVisible();
+    await expect(card.locator(".sx-tag--applied").filter({ hasText: /^Codex/ })).toBeVisible();
 
     const snapApplied = await (await page.request.get("/api/snapshot")).json();
     const codexBinding = snapApplied.bindings.find(

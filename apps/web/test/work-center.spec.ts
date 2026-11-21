@@ -338,7 +338,7 @@ test("OAuth provides an external authorization link without navigating the work 
     await page.request.post("/api/applications/connections", {
       data: {
         requestId: randomUUID(),
-        applicationId: "github",
+        applicationId: "slack",
         version: "1.0.0",
         name: "Browser OAuth",
         auth: "oauth",

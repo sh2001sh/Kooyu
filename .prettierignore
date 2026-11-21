@@ -6,3 +6,4 @@ output/
 third-party/
 package-lock.json
 .impeccable/
+apps/ios/Kooyu/TerminalAssets/xterm.*

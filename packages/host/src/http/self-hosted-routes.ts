@@ -1,8 +1,9 @@
 import { clientCapabilities, requireOperation } from "../clients/access.js";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
-import { KodoError } from "@kodo/protocol";
+import { KodoError, type HarnessId } from "@kodo/protocol";
 import type { SessionService } from "../session-service.js";
+import { recommendHarness } from "../delegation/routing.js";
 import type { RouteContext } from "./work-routes.js";
 export async function handleSelfHostedRoutes(
   service: SessionService,
@@ -18,6 +19,49 @@ export async function handleSelfHostedRoutes(
     if (!ctx.local) throw new KodoError("UNAUTHORIZED", "此管理操作仅允许 Host 本机管理员执行。");
   };
   const body = () => readBody(request);
+  if (path === "/api/im/weixin/qr" && method === "POST") {
+    local();
+    const input = z
+      .object({ controllerId: z.string().uuid() })
+      .strict()
+      .parse(await body());
+    if (service.store.session(input.controllerId).kind !== "supervisor")
+      throw new KodoError("INVALID_INPUT", "请选择主对话。");
+    json(response, 201, await service.im.weixin.start(input.controllerId));
+    return true;
+  }
+  if (path === "/api/im/weixin/status" && method === "POST") {
+    local();
+    const input = z
+      .object({ id: z.string().uuid(), code: z.string().max(32).optional() })
+      .strict()
+      .parse(await body());
+    json(response, 200, await service.im.finishWeixin(input.id, input.code));
+    return true;
+  }
+  if (path === "/api/intake/events" && method === "GET") {
+    json(response, 200, service.intake.list(Number(url.searchParams.get("limit") ?? 50)));
+    return true;
+  }
+  const intakeApprove = /^\/api\/intake\/([a-f0-9-]+)\/approve$/.exec(path);
+  if (intakeApprove && method === "POST") {
+    const p = request.headers["content-type"]?.startsWith("application/json") ? await body() : {};
+    const text = z.string().max(16000).optional().parse(p.text);
+    json(response, 200, service.intake.approve(intakeApprove[1]!, text));
+    return true;
+  }
+  if (path === "/api/im/bindings" && (method === "GET" || method === "POST")) {
+    local();
+    json(response, 200, method === "GET" ? service.im.bindings() : service.im.bind(await body()));
+    return true;
+  }
+  const binding = /^\/api\/im\/bindings\/([a-f0-9-]+)$/.exec(path);
+  if (binding && method === "DELETE") {
+    local();
+    service.im.unbind(binding[1]!);
+    json(response, 200, { removed: true });
+    return true;
+  }
   const revision = (p: Record<string, unknown>) =>
     z.number().int().positive().parse(p.expectedRevision);
   if (path === "/api/work/status" && method === "GET") {
@@ -169,6 +213,224 @@ export async function handleSelfHostedRoutes(
     else throw new KodoError("INVALID_INPUT", "不支持的全局记忆配置操作。");
     return true;
   }
+  if (path === "/api/memory/docs" && method === "GET") {
+    requireOperation(service, ctx, "memory.read");
+    json(response, 200, service.memory.docs?.list() ?? []);
+    return true;
+  }
+  m =
+    /^\/api\/memory\/docs\/(SOUL\.md|USER\.md|MEMORY\.md|RULES\.md|HEARTBEAT\.md|AGENTS\.md|ROUTING\.md)(?:\/(reset))?$/.exec(
+      path,
+    );
+  if (m) {
+    const docName = m[1]!;
+    const subAction = m[2];
+    if (!service.memory.docs) throw new KodoError("UNAVAILABLE", "本地人格与记忆文档目录不可用。");
+    if (method === "GET" && !subAction) {
+      requireOperation(service, ctx, "memory.read");
+      json(response, 200, service.memory.docs.get(docName));
+      return true;
+    }
+    if ((method === "PUT" || method === "PATCH") && !subAction) {
+      requireOperation(service, ctx, "memory.write");
+      json(response, 200, service.memory.docs.save(docName, await body()));
+      return true;
+    }
+    if (method === "POST" && subAction === "reset") {
+      requireOperation(service, ctx, "memory.write");
+      const p = await body();
+      json(
+        response,
+        200,
+        service.memory.docs.reset(
+          docName,
+          z.string().uuid().parse(p.requestId),
+          service.memory.list(null, false),
+        ),
+      );
+      return true;
+    }
+  }
+  if (path === "/api/heartbeat" && method === "GET") {
+    requireOperation(service, ctx, "memory.read");
+    json(response, 200, service.heartbeat.status());
+    return true;
+  }
+  if (path === "/api/heartbeat/run" && method === "POST") {
+    requireOperation(service, ctx, "memory.write");
+    json(response, 200, await service.heartbeat.scan());
+    return true;
+  }
+  if (path === "/api/memory/proposals" && method === "GET") {
+    requireOperation(service, ctx, "memory.read");
+    const status = url.searchParams.get("status") as "pending" | "approved" | "dismissed" | null;
+    json(response, 200, service.consolidation.list(status ?? undefined));
+    return true;
+  }
+  if (path === "/api/memory/proposals/generate" && method === "POST") {
+    requireOperation(service, ctx, "memory.write");
+    json(response, 200, service.consolidation.generateProposals());
+    return true;
+  }
+  m = /^\/api\/memory\/proposals\/([^/]+)\/(approve|dismiss)$/.exec(path);
+  if (m && method === "POST") {
+    requireOperation(service, ctx, "memory.write");
+    if (m[2] === "approve") {
+      const p = await body();
+      const reqId = typeof p.requestId === "string" ? p.requestId : undefined;
+      json(response, 200, service.consolidation.approve(m[1]!, reqId));
+    } else {
+      json(response, 200, service.consolidation.dismiss(m[1]!));
+    }
+    return true;
+  }
+  if (path === "/api/skills/curated") {
+    if (method === "GET") {
+      requireOperation(service, ctx, "memory.read");
+      json(response, 200, service.curatedSkills.list());
+      return true;
+    }
+    if (method === "POST") {
+      requireOperation(service, ctx, "memory.write");
+      json(response, 201, service.curatedSkills.sediment(await body()));
+      return true;
+    }
+  }
+  m = /^\/api\/skills\/curated\/([a-z0-9][a-z0-9-]{1,47})(?:\/(rollback))?$/.exec(path);
+  if (m) {
+    const skillName = m[1]!;
+    if (method === "GET" && !m[2]) {
+      requireOperation(service, ctx, "memory.read");
+      json(response, 200, service.curatedSkills.read(skillName));
+      return true;
+    }
+    if (method === "POST" && m[2] === "rollback") {
+      requireOperation(service, ctx, "memory.write");
+      const p = await body();
+      const targetVersion = typeof p.targetVersion === "number" ? p.targetVersion : undefined;
+      json(response, 200, service.curatedSkills.rollback(skillName, targetVersion));
+      return true;
+    }
+    if (method === "DELETE" && !m[2]) {
+      requireOperation(service, ctx, "memory.write");
+      json(response, 200, service.curatedSkills.archive(skillName));
+      return true;
+    }
+  }
+  if (path === "/api/knowledge/mounts") {
+    if (method === "GET") {
+      requireOperation(service, ctx, "memory.read");
+      json(response, 200, service.knowledge.listMounts());
+      return true;
+    }
+    if (method === "POST") {
+      local();
+      json(response, 201, service.knowledge.addMount(await body()));
+      return true;
+    }
+  }
+  m = /^\/api\/knowledge\/mounts\/([^/]+)$/.exec(path);
+  if (m && method === "DELETE") {
+    local();
+    json(response, 200, service.knowledge.removeMount(m[1]!));
+    return true;
+  }
+  if (path === "/api/knowledge/search" && method === "GET") {
+    requireOperation(service, ctx, "memory.read");
+    const q = url.searchParams.get("q") ?? "";
+    const mountId = url.searchParams.get("mountId") ?? undefined;
+    const limit = Number(url.searchParams.get("limit") ?? 15);
+    json(response, 200, service.knowledge.search(q, { mountId, limit }));
+    return true;
+  }
+  if (path === "/api/pages" && method === "GET") {
+    requireOperation(service, ctx, "memory.read");
+    json(response, 200, service.pages.list(url.searchParams.get("sessionId")));
+    return true;
+  }
+  m = /^\/api\/pages\/([^/]+)$/.exec(path);
+  if (m && method === "GET") {
+    const { html } = service.pages.readHtml(m[1]!);
+    response.writeHead(200, {
+      "content-type": "text/html; charset=utf-8",
+      "content-security-policy":
+        "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; frame-ancestors 'self';",
+      "x-content-type-options": "nosniff",
+      "cache-control": "no-store",
+    });
+    response.end(html);
+    return true;
+  }
+  if (path === "/api/checkpoints") {
+    if (method === "GET") {
+      requireOperation(service, ctx, "memory.read");
+      json(
+        response,
+        200,
+        service.checkpoints.list({
+          workspaceId: url.searchParams.get("workspaceId") ?? undefined,
+          sessionId: url.searchParams.get("sessionId") ?? undefined,
+        }),
+      );
+      return true;
+    }
+    if (method === "POST") {
+      local();
+      const p = z
+        .object({
+          workspaceRoot: z.string().min(1),
+          workspaceId: z.string().nullable().optional(),
+          sessionId: z.string().nullable().optional(),
+          label: z.string().min(1).max(160),
+        })
+        .strict()
+        .parse(await body());
+      json(response, 201, await service.checkpoints.capture(p));
+      return true;
+    }
+  }
+  m = /^\/api\/checkpoints\/([^/]+)\/restore$/.exec(path);
+  if (m && method === "POST") {
+    local();
+    json(response, 200, await service.checkpoints.restore(m[1]!));
+    return true;
+  }
+  if (path === "/api/arena" && method === "GET") {
+    requireOperation(service, ctx, "memory.read");
+    json(response, 200, service.arena.list(url.searchParams.get("sessionId") ?? undefined));
+    return true;
+  }
+  m = /^\/api\/arena\/([^/]+)\/(compare|accept)$/.exec(path);
+  if (m && method === "POST") {
+    requireOperation(service, ctx, "memory.write");
+    const p = await body();
+    if (m[2] === "compare") {
+      json(
+        response,
+        200,
+        await service.arena.compare(
+          m[1]!,
+          typeof p.checkCommand === "string" ? p.checkCommand : undefined,
+        ),
+      );
+    } else {
+      json(
+        response,
+        200,
+        service.arena.acceptWinner(m[1]!, z.string().min(1).parse(p.winnerTicketId)),
+      );
+    }
+    return true;
+  }
+  if (path === "/api/routing/recommend" && method === "GET") {
+    requireOperation(service, ctx, "memory.read");
+    const taskText = url.searchParams.get("task") ?? undefined;
+    const tags = url.searchParams.get("tags")?.split(",").filter(Boolean);
+    const exclude = url.searchParams.get("exclude")?.split(",").filter(Boolean) as
+      HarnessId[] | undefined;
+    json(response, 200, recommendHarness(service, { taskText, tags, exclude }));
+    return true;
+  }
   if (path === "/api/memory") {
     if (method === "GET") {
       json(response, 200, service.memory.list(url.searchParams.get("projectId"), true));
@@ -240,6 +502,31 @@ export async function handleSelfHostedRoutes(
       json(response, 200, await service.applications.tools(m[1]!));
       return true;
     }
+  }
+  if (path === "/api/oauth/github/configuration") {
+    local();
+    if (method === "GET") json(response, 200, service.oauth.github.configuration());
+    else if (method === "POST") json(response, 200, service.oauth.github.configure(await body()));
+    else throw new KodoError("INVALID_INPUT", "不支持的 GitHub 配置操作。");
+    return true;
+  }
+  if (path === "/api/oauth/github/start" && method === "POST") {
+    local();
+    json(response, 201, await service.oauth.github.start(await body(), ctx.deviceId));
+    return true;
+  }
+  const githubLogin = /^\/api\/oauth\/github\/([a-f0-9-]+)\/(poll|cancel)$/.exec(path);
+  if (githubLogin && method === "POST") {
+    local();
+    const id = z.string().uuid().parse(githubLogin[1]);
+    json(
+      response,
+      200,
+      githubLogin[2] === "poll"
+        ? await service.oauth.github.poll(id, ctx.deviceId)
+        : await service.oauth.github.cancel(id, ctx.deviceId),
+    );
+    return true;
   }
   if (path === "/api/oauth/configure" && method === "POST") {
     local();
@@ -355,7 +642,7 @@ export async function handleSelfHostedRoutes(
       const p = await body(),
         deviceId = ctx.local && p.deviceId ? z.string().parse(p.deviceId) : ctx.deviceId;
       delete p.deviceId;
-      json(response, 200, await service.delivery.configure(deviceId, p));
+      json(response, 200, await service.delivery.configure(deviceId, p, ctx.local));
       return true;
     }
   }
@@ -387,6 +674,85 @@ export async function handleSelfHostedRoutes(
     if (method === "POST") {
       local();
       json(response, 201, service.browser.create(await body()));
+      return true;
+    }
+  }
+  m = /^\/api\/browsers\/([^/]+)\/(frame|stream|input|record|select-tab|schedule-recording)$/.exec(
+    path,
+  );
+  if (m) {
+    local();
+    if (m[2] === "schedule-recording" && method === "POST") {
+      json(response, 201, service.browser.scheduleRecording(m[1]!, await body()));
+      return true;
+    }
+    const generation = z.coerce.number().int().min(1).parse(url.searchParams.get("generation"));
+    if (m[2] === "select-tab" && method === "POST") {
+      json(
+        response,
+        200,
+        await service.browser.selectTab(
+          m[1]!,
+          generation,
+          z
+            .string()
+            .uuid()
+            .parse((await body()).pageId),
+        ),
+      );
+      return true;
+    }
+    if (m[2] === "record" && method === "POST") {
+      const input = z
+        .object({ start: z.boolean() })
+        .strict()
+        .parse(await body());
+      json(response, 200, service.browser.record(m[1]!, generation, input.start));
+      return true;
+    }
+    if (method === "GET" && m[2] === "stream") {
+      let lastSeq = -1;
+      const sendFrame = () => {
+        if (response.destroyed || response.writableEnded) return;
+        try {
+          const data = service.browser.frame(m![1]!, generation, lastSeq);
+          if (data.sequence !== lastSeq || data.frame) {
+            lastSeq = data.sequence;
+            response.write(`data: ${JSON.stringify(data)}\n\n`);
+          }
+        } catch {
+          unsub();
+          clearInterval(ping);
+          if (!response.destroyed && !response.writableEnded) response.end();
+        }
+      };
+      const unsub = service.browser.subscribeFrame(m[1]!, generation, sendFrame);
+      response.writeHead(200, {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-store",
+        Connection: "keep-alive",
+      });
+      sendFrame();
+      const ping = setInterval(() => {
+        if (!response.destroyed && !response.writableEnded) response.write(": ping\n\n");
+      }, 15000);
+      ping.unref();
+      request.once("close", () => {
+        unsub();
+        clearInterval(ping);
+      });
+      return true;
+    }
+    if (method === "GET" && m[2] === "frame") {
+      json(
+        response,
+        200,
+        service.browser.frame(m[1]!, generation, Number(url.searchParams.get("after") ?? -1)),
+      );
+      return true;
+    }
+    if (method === "POST" && m[2] === "input") {
+      json(response, 200, await service.browser.userInput(m[1]!, generation, await body()));
       return true;
     }
   }

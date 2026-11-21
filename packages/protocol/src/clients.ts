@@ -36,7 +36,11 @@ export interface WorkbenchOverview {
 }
 
 /** Explicit local-admin delegation; never includes installation, secrets or device administration. */
-export const delegatedOperations = ["goals.check"] as const;
+export const delegatedOperations = [
+  "goals.check",
+  "terminal.access",
+  "workspaces.git.push",
+] as const;
 export type DelegatedOperation = (typeof delegatedOperations)[number];
 export interface DeviceAccess {
   deviceId: string;
