@@ -1522,6 +1522,14 @@ export function createHostHandler(service: SessionService, options: HostHttpOpti
     }
   };
 }
+export function configureHttpServerTimeouts<
+  T extends { keepAliveTimeout: number; headersTimeout: number },
+>(server: T): T {
+  // Exceed typical client keep-alive reuse windows (Node default 5s causes ECONNRESET / Failed-to-fetch races).
+  server.keepAliveTimeout = 65_000;
+  server.headersTimeout = 70_000;
+  return server;
+}
 export function createHostServer(service: SessionService, options: HostHttpOptions) {
-  return createServer(createHostHandler(service, options));
+  return configureHttpServerTimeouts(createServer(createHostHandler(service, options)));
 }

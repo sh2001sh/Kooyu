@@ -16,7 +16,7 @@ import {
 } from "node:fs";
 import { Store } from "./storage/store.js";
 import { SessionService } from "./session-service.js";
-import { createHostHandler, createHostServer } from "./http/server.js";
+import { configureHttpServerTimeouts, createHostHandler, createHostServer } from "./http/server.js";
 import { Pairing } from "./devices/pairing.js";
 import { DeviceMailbox } from "./devices/mailbox.js";
 import { RelayConnector, DEFAULT_RELAY_ORIGIN } from "./devices/relay.js";
@@ -244,16 +244,18 @@ const direct =
       )
     : undefined;
 const server = tls
-  ? createHttpsServer(
-      {
-        cert: readFileSync(tlsCert!),
-        key: readFileSync(tlsKey!),
-      },
-      (req, res) => {
-        if (direct && (req.url === "/v1/nonce" || req.url?.startsWith("/h/")))
-          void direct(req, res);
-        else void localHandler(req, res);
-      },
+  ? configureHttpServerTimeouts(
+      createHttpsServer(
+        {
+          cert: readFileSync(tlsCert!),
+          key: readFileSync(tlsKey!),
+        },
+        (req, res) => {
+          if (direct && (req.url === "/v1/nonce" || req.url?.startsWith("/h/")))
+            void direct(req, res);
+          else void localHandler(req, res);
+        },
+      ),
     )
   : createHostServer(service, options);
 fatalCleanup = () => {

@@ -284,7 +284,10 @@ export function DraftWorkspace({
   const nativeDiscoveredModels = cachedPayload?.models ?? harnessDesc?.models ?? [];
 
   useEffect(() => {
-    if (executorId !== "local" || modelsCache[harnessId]) return;
+    if (executorId !== "local" || modelsCache[harnessId]) {
+      setLoadingModelHarness((current) => (current === harnessId ? null : current));
+      return;
+    }
     let cancelled = false;
     setLoadingModelHarness(harnessId);
     setModelLoadError("");
@@ -296,10 +299,12 @@ export function DraftWorkspace({
         if (!cancelled) setModelLoadError(error instanceof Error ? error.message : "读取模型失败");
       })
       .finally(() => {
-        if (!cancelled) setLoadingModelHarness(null);
+        if (!cancelled)
+          setLoadingModelHarness((current) => (current === harnessId ? null : current));
       });
     return () => {
       cancelled = true;
+      setLoadingModelHarness((current) => (current === harnessId ? null : current));
     };
   }, [harnessId, modelsCache, executorId]);
 

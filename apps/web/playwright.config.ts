@@ -5,12 +5,14 @@ export default defineConfig({
   testDir: "test",
   globalSetup: "./test/workbench-setup.ts",
   workers: 1,
+  retries: process.env.CI ? 2 : 0,
   timeout: 30000,
   use: {
     locale: "zh-CN",
     baseURL: `http://127.0.0.1:${port}`,
     viewport: { width: 1440, height: 960 },
     headless: true,
+    screenshot: "only-on-failure",
   },
   webServer: {
     command: "node ../../packages/host/dist/main.js",

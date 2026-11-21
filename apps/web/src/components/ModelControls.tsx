@@ -93,11 +93,17 @@ export function ModelControls({
   }, [session.id, session.reasoning]);
 
   const loadedSessionRef = useRef<string | null>(null);
+  const loadRequestRef = useRef(0);
   useEffect(() => {
     const isSessionChange = loadedSessionRef.current !== session.id;
-    if (!isSessionChange && !modelOpen) return;
+    const missingOptions = options?.session.id !== session.id;
+    if (!isSessionChange && !modelOpen && !missingOptions) {
+      setLoading(false);
+      return;
+    }
     loadedSessionRef.current = session.id;
-    let current = true;
+    if (isSessionChange) setOptions(undefined);
+    const requestId = ++loadRequestRef.current;
     setLoading(true);
     setError("");
     const refresh =
@@ -107,20 +113,22 @@ export function ModelControls({
       `/sessions/${session.id}/settings${refresh ? "?refresh=1" : discover ? "?discover=1" : ""}`,
     )
       .then((result) => {
-        if (current) setOptions(result);
+        if (loadRequestRef.current === requestId) setOptions(result);
       })
       .catch((e) => {
-        if (current) setError(e instanceof Error ? e.message : "读取模型失败");
+        if (loadRequestRef.current === requestId)
+          setError(e instanceof Error ? e.message : "读取模型失败");
       })
       .finally(() => {
-        if (current) setLoading(false);
+        if (loadRequestRef.current === requestId) setLoading(false);
       });
     return () => {
-      current = false;
+      loadRequestRef.current += 1;
     };
   }, [session.id, modelOpen]);
 
   const refresh = async () => {
+    const requestId = ++loadRequestRef.current;
     setLoading(true);
     setError("");
     try {
@@ -128,11 +136,13 @@ export function ModelControls({
         session.phase === "native" && session.connectionState === "connected"
           ? "refresh=1"
           : "discover=1";
-      setOptions(await api<Options>(`/sessions/${session.id}/settings?${q}`));
+      const next = await api<Options>(`/sessions/${session.id}/settings?${q}`);
+      if (loadRequestRef.current === requestId) setOptions(next);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "读取原生模型失败");
+      if (loadRequestRef.current === requestId)
+        setError(e instanceof Error ? e.message : "读取原生模型失败");
     } finally {
-      setLoading(false);
+      if (loadRequestRef.current === requestId) setLoading(false);
     }
   };
 

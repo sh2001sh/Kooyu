@@ -9,7 +9,7 @@ import {
 } from "react";
 import { DEFAULT_UPDATE_SETTINGS, DEFAULT_VOICE_SETTINGS, type AppSettings } from "@kodo/protocol";
 import { installAppearanceSync } from "./appearance";
-import { api } from "./host-client";
+import { api, HostError } from "./host-client";
 
 const defaults: AppSettings = {
   revision: 0,
@@ -46,16 +46,29 @@ export function AppPreferencesProvider({ children }: { children: ReactNode }) {
     [loaded, setLoaded] = useState(false),
     [error, setError] = useState("");
   const settingsRef = useRef(defaults);
+  const loadedRef = useRef(false);
+  const initialLoadRef = useRef<Promise<void> | null>(null);
   const queueRef = useRef<Promise<void>>(Promise.resolve());
   useEffect(() => {
     installAppearanceSync();
-    void api<AppSettings>("/app-settings")
+    let active = true;
+    const load = api<AppSettings>("/app-settings")
       .then((next) => {
-        settingsRef.current = next;
-        setSettings(next);
+        if (!active) return;
+        if (!loadedRef.current || next.revision >= settingsRef.current.revision) {
+          settingsRef.current = next;
+          setSettings(next);
+        }
+        loadedRef.current = true;
         setLoaded(true);
       })
-      .catch((error: Error) => setError(error.message));
+      .catch((error: Error) => {
+        if (active) setError(error.message);
+      });
+    initialLoadRef.current = load;
+    return () => {
+      active = false;
+    };
   }, []);
   useEffect(() => {
     document.documentElement.style.setProperty(
@@ -78,11 +91,34 @@ export function AppPreferencesProvider({ children }: { children: ReactNode }) {
   const enqueue = useCallback(
     (nextOrUpdater: AppSettings | ((current: AppSettings) => AppSettings)) => {
       const task = queueRef.current.then(async () => {
-        const payload =
-          typeof nextOrUpdater === "function" ? nextOrUpdater(settingsRef.current) : nextOrUpdater;
-        const saved = await api<AppSettings>("/app-settings", "PATCH", payload);
+        if (!loadedRef.current && initialLoadRef.current) {
+          await initialLoadRef.current;
+        }
+        const apply = () => {
+          const payload =
+            typeof nextOrUpdater === "function"
+              ? nextOrUpdater(settingsRef.current)
+              : nextOrUpdater;
+          return api<AppSettings>("/app-settings", "PATCH", payload);
+        };
+        let saved: AppSettings;
+        try {
+          saved = await apply();
+        } catch (err) {
+          const isConflict = err instanceof HostError && err.code === "CONFLICT";
+          const isTransientNetwork = !(err instanceof HostError);
+          if (typeof nextOrUpdater === "function" && (isConflict || isTransientNetwork)) {
+            const fresh = await api<AppSettings>("/app-settings");
+            settingsRef.current = fresh;
+            saved = await apply();
+          } else {
+            throw err;
+          }
+        }
         settingsRef.current = saved;
+        loadedRef.current = true;
         setSettings(saved);
+        setLoaded(true);
         setError("");
       });
       queueRef.current = task.catch(() => {});

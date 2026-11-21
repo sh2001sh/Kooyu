@@ -478,3 +478,45 @@ test("settings HTTP receipts reconcile a lost acknowledgement and reject concurr
   expect(stale.status()).toBe(409);
   await request.delete(`/api/sessions/${session.id}`);
 });
+
+test("switching from model popover to reasoning popover during slow discovery does not lock the reasoning slider", async ({
+  page,
+}) => {
+  const session = await (
+    await page.request.post("/api/sessions", {
+      data: {
+        title: "慢发现切换思考强度",
+        harnessId: "pi",
+        kind: "direct",
+        bindingId: null,
+        model: "openai/gpt-5",
+      },
+    })
+  ).json();
+  let releaseDiscover!: () => void;
+  const discoverGate = new Promise<void>((resolve) => {
+    releaseDiscover = resolve;
+  });
+  let discoverSeen = false;
+  await page.route(`**/api/sessions/${session.id}/settings?discover=1`, async (route) => {
+    discoverSeen = true;
+    await discoverGate;
+    await route.continue();
+  });
+  try {
+    await page.goto("/");
+    await page.locator(".session-row").filter({ hasText: session.title }).click();
+    await page.getByRole("button", { name: "模型配置", exact: true }).click();
+    await expect.poll(() => discoverSeen).toBe(true);
+    // Switch directly to reasoning while ?discover=1 is still in flight.
+    await page.getByRole("button", { name: "思考强度", exact: true }).click();
+    releaseDiscover();
+    const slider = page
+      .locator(".ms-popover--reasoning")
+      .getByRole("slider", { name: "会话思考强度" });
+    await expect(slider).toBeEnabled();
+  } finally {
+    releaseDiscover();
+    await page.request.delete(`/api/sessions/${session.id}`);
+  }
+});
