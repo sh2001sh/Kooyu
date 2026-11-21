@@ -22,7 +22,10 @@
 
 <p>
   <a href="https://kooyu.app">
-    <img src="https://img.shields.io/badge/Website-kooyu.app-141518?style=flat-square" alt="公式サイト" />
+    <img src="https://img.shields.io/badge/Website-kooyu.app-E6533C?style=flat-square" alt="公式サイト" />
+  </a>
+  <a href="https://www.npmjs.com/package/kooyu">
+    <img src="https://img.shields.io/npm/v/kooyu?style=flat-square&label=npm&color=141518" alt="npm CLI" />
   </a>
   <a href="https://github.com/sh2001sh/Kooyu/releases">
     <img src="https://img.shields.io/github/v/release/sh2001sh/Kooyu?include_prereleases&style=flat-square&label=Release&color=F17561" alt="最新リリース" />
@@ -37,15 +40,22 @@
 </p>
 
 <p>
+  🌐 <strong>公式サイト</strong>：<a href="https://kooyu.app"><strong>https://kooyu.app</strong></a> ·
+  <a href="https://kooyu.app/download">ダウンロード</a> ·
+  <a href="https://kooyu.app/docs">ドキュメント</a> ·
+  <a href="https://kooyu.app/account">Web ワークベンチ</a>
+</p>
+
+<p>
   <a href="README.md">English</a> ·
   <a href="README.zh-CN.md">简体中文</a> ·
   <strong>日本語</strong>
 </p>
 
 <p>
+  <a href="#-クイックスタートとダウンロード">ターミナル導入・ダウンロード</a> ·
   <a href="#-主な特徴">主な特徴</a> ·
   <a href="#-対応エンジン">対応エンジン</a> ·
-  <a href="#-クイックスタートとダウンロード">ダウンロード</a> ·
   <a href="#-インストール手順">インストール</a> ·
   <a href="#-マルチデバイスe2ee-連携">リモート連携</a> ·
   <a href="#-ソースからビルド">ソースビルド</a>
@@ -125,13 +135,33 @@
 
 ## 📦 クイックスタートとダウンロード
 
-### CLI で今すぐ起動
+> 🌐 **公式サイト・ダウンロード**：**[https://kooyu.app](https://kooyu.app)** · **[kooyu.app/download](https://kooyu.app/download)** · **[kooyu.app/docs](https://kooyu.app/docs)**
+
+### ⚡ ターミナルからのインストールと起動（Node.js `>= 24.13.0`）
 
 ```bash
+# 1. インストール不要で即時起動（最新安定版）
 npx kooyu@latest
+
+# 2. グローバルインストールして kooyu コマンドとして利用
+npm install -g kooyu@latest
+kooyu
+
+# 3. プレビュー版を試す
+npx kooyu@next
 ```
 
-### ネイティブインストーラー
+主な CLI コマンド：
+
+```bash
+kooyu --port 4310                    # ポート指定（既定: 4310）
+kooyu --data-dir ./kooyu-data        # データディレクトリ指定
+kooyu account login                  # Kooyu アカウントへ紐付け（kooyu.app からリモート接続）
+kooyu account logout                 # アカウント紐付け解除
+kooyu --help                         # ヘルプ表示
+```
+
+### 💻 ネイティブインストーラー
 
 全プラットフォーム向けインストーラーは [**GitHub Releases**](https://github.com/sh2001sh/Kooyu/releases) および [**kooyu.app/download**](https://kooyu.app/download) から取得できます。
 

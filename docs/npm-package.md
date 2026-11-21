@@ -35,11 +35,13 @@ npx playwright@1.56.1 install chromium
 
 The default persistent data directory is shared with the existing Kooyu Host:
 
-| System  | Directory                                    |
-| ------- | -------------------------------------------- |
-| Windows | `%LOCALAPPDATA%/Kodo/host`                   |
-| macOS   | `~/Library/Application Support/Kodo/host`    |
-| Linux   | `${XDG_DATA_HOME:-~/.local/share}/Kodo/host` |
+| System  | Directory                                      |
+| ------- | ---------------------------------------------- |
+| Windows | `%LOCALAPPDATA%/Kooyu/host`                    |
+| macOS   | `~/Library/Application Support/Kooyu/host`     |
+| Linux   | `${XDG_DATA_HOME:-~/.local/share}/Kooyu/host`  |
+
+Existing legacy `Kodo/host` directories remain automatically supported for seamless upgrades.
 
 Only one Host can own a data directory at a time. Stop an existing desktop Host before starting
 the npm Host, or use a different `--data-dir` and `--port` for a separate instance.
@@ -49,8 +51,15 @@ Credentials use the operating system keyring by default. Headless Linux users sh
 the encrypted file vault as described in [self-hosted operations](https://github.com/sh2001sh/Kooyu/blob/main/docs/self-hosted-operations.md).
 There is no plaintext credential fallback.
 
-The listener defaults to the local computer. Remote HTTPS access requires `KODO_TLS_CERT`,
-`KODO_TLS_KEY`, `KODO_PUBLIC_ORIGIN` and `--host`; use the documented pairing and access controls.
+To bind a headless Host to your Kooyu account for remote discovery from [kooyu.app](https://kooyu.app/account):
+
+```sh
+kooyu account login
+```
+
+The listener defaults to the local computer. Remote HTTPS access requires `KOOYU_TLS_CERT`,
+`KOOYU_TLS_KEY`, `KOOYU_PUBLIC_ORIGIN` and `--host` (legacy `KODO_*` variables remain supported);
+use the documented pairing and access controls.
 
 ## Updating
 
@@ -64,4 +73,4 @@ kooyu
 For one-off runs, use `npx kooyu@latest`. A preview channel, when published, is available with
 `npx kooyu@next`. The npm edition does not install desktop EXE/DMG updates.
 
-[Source and issues](https://github.com/sh2001sh/Kooyu) · MIT license.
+[Website (kooyu.app)](https://kooyu.app) · [Source and issues](https://github.com/sh2001sh/Kooyu) · MIT license.

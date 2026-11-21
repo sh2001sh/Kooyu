@@ -22,7 +22,10 @@
 
 <p>
   <a href="https://kooyu.app">
-    <img src="https://img.shields.io/badge/Website-kooyu.app-141518?style=flat-square" alt="Official Website" />
+    <img src="https://img.shields.io/badge/Website-kooyu.app-E6533C?style=flat-square" alt="Official Website" />
+  </a>
+  <a href="https://www.npmjs.com/package/kooyu">
+    <img src="https://img.shields.io/npm/v/kooyu?style=flat-square&label=npm&color=141518" alt="npm CLI" />
   </a>
   <a href="https://github.com/sh2001sh/Kooyu/releases">
     <img src="https://img.shields.io/github/v/release/sh2001sh/Kooyu?include_prereleases&style=flat-square&label=Release&color=F17561" alt="Latest Release" />
@@ -37,15 +40,22 @@
 </p>
 
 <p>
+  🌐 <strong>Official Website</strong>: <a href="https://kooyu.app"><strong>https://kooyu.app</strong></a> ·
+  <a href="https://kooyu.app/download">Downloads</a> ·
+  <a href="https://kooyu.app/docs">Docs</a> ·
+  <a href="https://kooyu.app/account">Web Workbench</a>
+</p>
+
+<p>
   <strong>English</strong> ·
   <a href="README.zh-CN.md">简体中文</a> ·
   <a href="README.ja.md">日本語</a>
 </p>
 
 <p>
+  <a href="#-quick-start--downloads">Terminal &amp; Downloads</a> ·
   <a href="#-highlights">Highlights</a> ·
   <a href="#-supported-harnesses">Supported Harnesses</a> ·
-  <a href="#-quick-start--downloads">Downloads</a> ·
   <a href="#-installation--setup">Installation</a> ·
   <a href="#-cross-device--e2ee-sync">Cross-Device Sync</a> ·
   <a href="#-build-from-source">Build from Source</a>
@@ -125,13 +135,38 @@ Kooyu automatically discovers your installed CLI tools and desktop coding apps w
 
 ## 📦 Quick Start & Downloads
 
-### Instant CLI Launch (No Desktop Installer Required)
+> 🌐 **Official Website & Download Hub**: **[https://kooyu.app](https://kooyu.app)** · **[kooyu.app/download](https://kooyu.app/download)** · **[kooyu.app/docs](https://kooyu.app/docs)**
+
+### ⚡ Terminal / CLI Installation (Requires Node.js `>= 24.13.0`)
+
+Run Kooyu's local Host + Web Workbench directly from your terminal on Windows, macOS, or Linux — no desktop installer required:
 
 ```bash
+# 1. Instant one-off run (always uses latest release)
 npx kooyu@latest
+
+# 2. Or install globally as the `kooyu` command
+npm install -g kooyu@latest
+kooyu
+
+# 3. Try the latest preview channel
+npx kooyu@next
+# or: npm install -g kooyu@next
 ```
 
-### Native Installers (GitHub Releases)
+Common CLI commands & headless server setup:
+
+```bash
+kooyu --port 4310                    # Custom port (default: 4310)
+kooyu --data-dir ./kooyu-data        # Custom persistent data directory
+kooyu account login                  # Bind this machine to your kooyu.app account for remote access
+kooyu account logout                 # Unbind this machine from your account
+kooyu --help                         # View all flags & options
+```
+
+Open **`http://127.0.0.1:4310`** in your browser once started. See [docs/npm-package.md](docs/npm-package.md) for managed browser (`playwright install chromium`) and HTTPS binding options.
+
+### 💻 Native Desktop & Mobile Installers (GitHub Releases)
 
 Pre-built installers for all platforms are published automatically to [**GitHub Releases**](https://github.com/sh2001sh/Kooyu/releases) and available on [**kooyu.app/download**](https://kooyu.app/download).
 

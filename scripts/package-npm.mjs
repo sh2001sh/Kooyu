@@ -71,7 +71,7 @@ await writeFile(
       type: "module",
       license: pkg.license,
       repository: { type: "git", url: "git+https://github.com/sh2001sh/Kooyu.git" },
-      homepage: "https://github.com/sh2001sh/Kooyu#readme",
+      homepage: "https://kooyu.app",
       bugs: { url: "https://github.com/sh2001sh/Kooyu/issues" },
       engines: { node: ">=24.13.0" },
       bin: { kooyu: "bin/kooyu.mjs" },

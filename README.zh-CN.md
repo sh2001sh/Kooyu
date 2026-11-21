@@ -22,7 +22,10 @@
 
 <p>
   <a href="https://kooyu.app">
-    <img src="https://img.shields.io/badge/官方网站-kooyu.app-141518?style=flat-square" alt="官方网站" />
+    <img src="https://img.shields.io/badge/官方网站-kooyu.app-E6533C?style=flat-square" alt="官方网站" />
+  </a>
+  <a href="https://www.npmjs.com/package/kooyu">
+    <img src="https://img.shields.io/npm/v/kooyu?style=flat-square&label=npm&color=141518" alt="npm CLI" />
   </a>
   <a href="https://github.com/sh2001sh/Kooyu/releases">
     <img src="https://img.shields.io/github/v/release/sh2001sh/Kooyu?include_prereleases&style=flat-square&label=Release&color=F17561" alt="最新版本" />
@@ -37,15 +40,22 @@
 </p>
 
 <p>
+  🌐 <strong>官方网站</strong>：<a href="https://kooyu.app"><strong>https://kooyu.app</strong></a> ·
+  <a href="https://kooyu.app/download">下载中心</a> ·
+  <a href="https://kooyu.app/docs">在线文档</a> ·
+  <a href="https://kooyu.app/account">网页工作台</a>
+</p>
+
+<p>
   <a href="README.md">English</a> ·
   <strong>简体中文</strong> ·
   <a href="README.ja.md">日本語</a>
 </p>
 
 <p>
+  <a href="#-快速开始与下载">终端安装与下载</a> ·
   <a href="#-核心特性">核心特性</a> ·
   <a href="#-支持的编程引擎">支持引擎</a> ·
-  <a href="#-快速开始与下载">下载安装</a> ·
   <a href="#-各平台安装说明">安装指南</a> ·
   <a href="#-全端接力与-e2ee-连接">全端连接</a> ·
   <a href="#-从源码构建">源码构建</a>
@@ -125,13 +135,38 @@ Kooyu 自动发现本机已安装的 CLI 工具与桌面编程应用，完整保
 
 ## 📦 快速开始与下载
 
-### 一行命令秒速体验（无需安装桌面包）
+> 🌐 **官方网站与下载中心**：**[https://kooyu.app](https://kooyu.app)** · **[kooyu.app/download](https://kooyu.app/download)** · **[kooyu.app/docs](https://kooyu.app/docs)**
+
+### ⚡ 终端安装与一键启动（需要 Node.js `>= 24.13.0`）
+
+支持在 Windows、macOS 与 Linux 终端中直接启动 Kooyu 本地 Host 与 Web 工作台，无需下载桌面安装包，也适合无头服务器部署：
 
 ```bash
+# 1. 免安装一键启动（始终运行最新正式版）
 npx kooyu@latest
+
+# 2. 全局安装为本地 kooyu 命令
+npm install -g kooyu@latest
+kooyu
+
+# 3. 体验最新预览版通道（next）
+npx kooyu@next
+# 或全局安装预览版：npm install -g kooyu@next
 ```
 
-### 各平台原生安装包
+常用终端参数与远程账号绑定：
+
+```bash
+kooyu --port 4310                    # 指定本地端口（默认 4310）
+kooyu --data-dir ./kooyu-data        # 指定持久化数据目录
+kooyu account login                  # 绑定 Kooyu 账号，供 kooyu.app 网页工作台与手机远程发现连接
+kooyu account logout                 # 解绑当前主机账号
+kooyu --help                         # 查看全部命令与参数说明
+```
+
+启动后在浏览器打开终端输出的地址（默认 **`http://127.0.0.1:4310`**）即可使用。受管浏览器（`npx playwright@1.56.1 install chromium`）与远程 HTTPS 监听配置详见 [docs/npm-package.md](docs/npm-package.md)。
+
+### 💻 各平台原生安装包
 
 所有平台安装包均由 GitHub Actions 自动构建并发布至 [**GitHub Releases**](https://github.com/sh2001sh/Kooyu/releases)，也可直接前往官网 [**kooyu.app/download**](https://kooyu.app/download) 下载。
 
