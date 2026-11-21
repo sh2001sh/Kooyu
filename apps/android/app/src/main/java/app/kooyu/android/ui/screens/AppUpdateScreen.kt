@@ -91,7 +91,7 @@ fun AppUpdateScreen(
                                     checking -> kooyuT("update.checking")
                                     updateAvailable -> "${kooyuT("update.available")} V${release!!.version}"
                                     release != null -> kooyuT("update.upToDate")
-                                    else -> "github.com/sh2001sh/kodo"
+                                    else -> "github.com/sh2001sh/Kooyu"
                                 },
                                 fontSize = 13.sp,
                                 color = if (updateAvailable) c.brandCoral else c.textSecondary

@@ -36,7 +36,7 @@ export const updateSettingsSchema = z
       .string()
       .trim()
       .regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/)
-      .default("sh2001sh/kodo"),
+      .default("sh2001sh/Kooyu"),
   })
   .strict();
 export type UpdateSettings = z.infer<typeof updateSettingsSchema>;
@@ -44,7 +44,7 @@ export type UpdateSettings = z.infer<typeof updateSettingsSchema>;
 export const DEFAULT_UPDATE_SETTINGS: UpdateSettings = {
   channel: "stable",
   autoCheck: true,
-  repository: "sh2001sh/kodo",
+  repository: "sh2001sh/Kooyu",
 };
 
 export const appSettingsSchema = z

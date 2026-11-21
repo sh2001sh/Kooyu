@@ -93,37 +93,6 @@ store.recover();
 const service = new SessionService(store, {
   dataDir,
   onFatal,
-  onUpdateInstallLaunched: (platform) => {
-    if (platform === "win32") {
-      // Allow the HTTP response to flush and paused sessions to drain before exiting
-      // so the Windows NSIS installer can overwrite resources/runtime/node.exe cleanly.
-      let attempts = 0;
-      const checkExit = () => {
-        const h = service.health();
-        const drained =
-          !h.inFlight &&
-          !h.background &&
-          !h.sessions.length &&
-          !h.pendingCommands.length &&
-          !h.capacity.queued.length &&
-          !store.commands().some((c) => ["accepted", "dispatched", "unknown"].includes(c.status));
-        if (drained) {
-          void shutdown().catch(onFatal);
-          return;
-        }
-        if (++attempts < 15) {
-          setTimeout(checkExit, 400).unref();
-          return;
-        }
-        // If active work refused to drain in time, reopen dispatch instead of staying frozen.
-        if (h.frozen) {
-          service.lifecycle.resume(h.processIdentity, h.generation);
-          service.resumeWork();
-        }
-      };
-      setTimeout(checkExit, 800).unref();
-    }
-  },
 });
 const resumeTicket = process.env.KOOYU_UPGRADE_TICKET;
 delete process.env.KOOYU_UPGRADE_TICKET;

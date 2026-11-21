@@ -11,12 +11,21 @@ export class HostError extends Error {
   }
 }
 export async function api<T>(path: string, method = "GET", body?: unknown): Promise<T> {
-  const response = await fetch(apiPath(path), {
-    method,
-    headers: body === undefined ? {} : { "content-type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-    credentials: "same-origin",
-  });
+  let response: Response;
+  try {
+    response = await fetch(apiPath(path), {
+      method,
+      headers: body === undefined ? {} : { "content-type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      credentials: "same-origin",
+    });
+  } catch {
+    throw new Error(
+      remoteClient
+        ? "无法连接到远程 Host，请检查网络或确认电脑在线。"
+        : "无法连接到本地桌面 Host，请重启 Kooyu 后重试。",
+    );
+  }
   const value = await response.json();
   if (!response.ok)
     throw new HostError(

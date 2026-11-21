@@ -12,7 +12,15 @@ const roots = process.argv
   .map((arg) => resolve(arg));
 if (!roots.length) process.exit(0);
 const localAppData = process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local");
-const data = process.env.KODO_DATA_DIR ?? join(localAppData, "Kodo", "host");
+const dataCandidates = (() => {
+  const explicit = process.env.KOOYU_DATA_DIR || process.env.KODO_DATA_DIR;
+  if (explicit) return [resolve(explicit)];
+  return [join(localAppData, "Kooyu", "host"), join(localAppData, "Kodo", "host")];
+})();
+const data =
+  dataCandidates.find((dir) => existsSync(join(dir, "host.lock"))) ??
+  dataCandidates.find((dir) => existsSync(join(dir, "kodo.sqlite"))) ??
+  dataCandidates[0];
 let frozen;
 let url;
 const call = async (path, body) => {

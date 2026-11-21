@@ -1,11 +1,24 @@
 import { appSettingsSchema, KodoError, type AppSettings } from "@kodo/protocol";
 import type { Store } from "../storage/store.js";
 
+function normalizeRepository(repo: string): string {
+  return repo.trim().toLowerCase() === "sh2001sh/kodo" ? "sh2001sh/Kooyu" : repo;
+}
+
+function normalizeSettings(settings: AppSettings): AppSettings {
+  if (!settings.update) return settings;
+  const repo = normalizeRepository(settings.update.repository);
+  if (repo === settings.update.repository) return settings;
+  return { ...settings, update: { ...settings.update, repository: repo } };
+}
+
 export function appSettings(store: Store): AppSettings {
-  return appSettingsSchema.parse(store.record("app-settings", "global") ?? { revision: 0 });
+  return normalizeSettings(
+    appSettingsSchema.parse(store.record("app-settings", "global") ?? { revision: 0 }),
+  );
 }
 export function saveAppSettings(store: Store, value: unknown): AppSettings {
-  const input = appSettingsSchema.parse(value);
+  const input = normalizeSettings(appSettingsSchema.parse(value));
   return store.transaction(() => {
     const current = appSettings(store);
     if (current.revision !== input.revision)

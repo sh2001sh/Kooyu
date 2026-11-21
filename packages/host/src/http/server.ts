@@ -1035,6 +1035,11 @@ export function createHostHandler(service: SessionService, options: HostHttpOpti
         json(response, 200, await service.updater.install());
         return;
       }
+      if (request.method === "POST" && url.pathname === "/api/app-update/reveal") {
+        if (!local) throw new KodoError("UNAUTHORIZED", "请在运行 Host 的本机打开安装包目录。");
+        json(response, 200, await service.updater.revealDownloaded());
+        return;
+      }
       if (request.method === "POST" && url.pathname === "/api/voice/transcribe") {
         const contentType = request.headers["content-type"] ?? "";
         let audio: Buffer;

@@ -20,12 +20,12 @@ test.describe("In-app software update flow", () => {
       title: "Kooyu 0.3.0",
       notes: "- 支持应用内一键检查、SHA-256 校验与升级安装\n- 新增全端语音输入与多语言切换",
       publishedAt: "2026-11-19T12:00:00Z",
-      htmlUrl: "https://github.com/sh2001sh/kodo/releases/tag/v0.3.0",
+      htmlUrl: "https://github.com/sh2001sh/Kooyu/releases/tag/v0.3.0",
       assets: [
         {
           name: "Kooyu-Setup-0.3.0.exe",
           downloadUrl:
-            "https://github.com/sh2001sh/kodo/releases/download/v0.3.0/Kooyu-Setup-0.3.0.exe",
+            "https://github.com/sh2001sh/Kooyu/releases/download/v0.3.0/Kooyu-Setup-0.3.0.exe",
           size: 88_400_000,
           sha256: "a".repeat(64),
           platform: "windows",
@@ -33,7 +33,7 @@ test.describe("In-app software update flow", () => {
         {
           name: "Kooyu-0.3.0-android-debug.apk",
           downloadUrl:
-            "https://github.com/sh2001sh/kodo/releases/download/v0.3.0/Kooyu-0.3.0-android-debug.apk",
+            "https://github.com/sh2001sh/Kooyu/releases/download/v0.3.0/Kooyu-0.3.0-android-debug.apk",
           size: 24_100_000,
           sha256: "b".repeat(64),
           platform: "android",
@@ -42,7 +42,7 @@ test.describe("In-app software update flow", () => {
       recommendedAsset: {
         name: "Kooyu-Setup-0.3.0.exe",
         downloadUrl:
-          "https://github.com/sh2001sh/kodo/releases/download/v0.3.0/Kooyu-Setup-0.3.0.exe",
+          "https://github.com/sh2001sh/Kooyu/releases/download/v0.3.0/Kooyu-Setup-0.3.0.exe",
         size: 88_400_000,
         sha256: "a".repeat(64),
         platform: "windows",
@@ -50,7 +50,7 @@ test.describe("In-app software update flow", () => {
       androidAsset: {
         name: "Kooyu-0.3.0-android-debug.apk",
         downloadUrl:
-          "https://github.com/sh2001sh/kodo/releases/download/v0.3.0/Kooyu-0.3.0-android-debug.apk",
+          "https://github.com/sh2001sh/Kooyu/releases/download/v0.3.0/Kooyu-0.3.0-android-debug.apk",
         size: 24_100_000,
         sha256: "b".repeat(64),
         platform: "android",
@@ -63,7 +63,7 @@ test.describe("In-app software update flow", () => {
       arch: "x64",
       channel: "stable",
       autoCheck: true,
-      repository: "sh2001sh/kodo",
+      repository: "sh2001sh/Kooyu",
       state: phase === "idle" ? "up-to-date" : "available",
       checkedAt: "2026-11-19T12:30:00Z",
       updateAvailable: phase !== "idle",

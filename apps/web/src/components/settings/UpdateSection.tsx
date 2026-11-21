@@ -3,6 +3,7 @@ import {
   CheckCircle2,
   Download,
   ExternalLink,
+  FolderOpen,
   RefreshCw,
   ShieldCheck,
   Smartphone,
@@ -112,6 +113,15 @@ export function UpdateSection() {
       setActionError(err instanceof Error ? err.message : String(err));
     } finally {
       setInstalling(false);
+    }
+  };
+
+  const revealInstaller = async () => {
+    setActionError("");
+    try {
+      await api<{ revealed: boolean; localPath: string }>("/app-update/reveal", "POST", {});
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -278,6 +288,14 @@ export function UpdateSection() {
                 >
                   <Download size={14} aria-hidden="true" />
                   <span>{installing ? t("update.installing") : t("update.install")}</span>
+                </button>
+                <button
+                  type="button"
+                  className="quiet-btn sx-update-link"
+                  onClick={() => void revealInstaller()}
+                >
+                  <FolderOpen size={13} aria-hidden="true" />
+                  <span>{t("update.revealFolder")}</span>
                 </button>
                 {dl.sha256Verified && (
                   <span className="sx-update-verified">

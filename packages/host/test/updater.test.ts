@@ -102,7 +102,7 @@ test("AppUpdater checks GitHub Releases, verifies SHA-256 on download, rejects t
             draft: false,
             prerelease: true,
             published_at: "2026-11-19T12:00:00Z",
-            html_url: "https://github.com/sh2001sh/kodo/releases/tag/preview-0.4.0-9",
+            html_url: "https://github.com/sh2001sh/Kooyu/releases/tag/preview-0.4.0-9",
             assets: [],
           },
           {
@@ -112,24 +112,24 @@ test("AppUpdater checks GitHub Releases, verifies SHA-256 on download, rejects t
             draft: false,
             prerelease: false,
             published_at: "2026-11-19T10:00:00Z",
-            html_url: "https://github.com/sh2001sh/kodo/releases/tag/v0.3.0",
+            html_url: "https://github.com/sh2001sh/Kooyu/releases/tag/v0.3.0",
             assets: [
               {
                 name: "Kooyu-Setup-0.3.0.exe",
                 browser_download_url:
-                  "https://github.com/sh2001sh/kodo/releases/download/v0.3.0/Kooyu-Setup-0.3.0.exe",
+                  "https://github.com/sh2001sh/Kooyu/releases/download/v0.3.0/Kooyu-Setup-0.3.0.exe",
                 size: installerPayload.length,
               },
               {
                 name: "Kooyu-0.3.0-android-debug.apk",
                 browser_download_url:
-                  "https://github.com/sh2001sh/kodo/releases/download/v0.3.0/Kooyu-0.3.0-android-debug.apk",
+                  "https://github.com/sh2001sh/Kooyu/releases/download/v0.3.0/Kooyu-0.3.0-android-debug.apk",
                 size: 12345,
               },
               {
                 name: "SHA256SUMS.txt",
                 browser_download_url:
-                  "https://github.com/sh2001sh/kodo/releases/download/v0.3.0/SHA256SUMS.txt",
+                  "https://github.com/sh2001sh/Kooyu/releases/download/v0.3.0/SHA256SUMS.txt",
                 size: 120,
               },
             ],
@@ -197,12 +197,39 @@ test("AppUpdater checks GitHub Releases, verifies SHA-256 on download, rejects t
     assert.equal(ready.download.sha256Verified, true);
     assert.ok(ready.download.localPath && existsSync(ready.download.localPath));
 
-    // Install launches the verified file
+    // Install launches the verified file and keeps state "ready" so user can re-launch if wizard is cancelled
     const installRes = await updater.install();
     assert.equal(installRes.launched, true);
     assert.equal(launched.length, 1);
     assert.equal(launched[0]!.platform, "win32");
     assert.deepEqual(installNotified, ["win32"]);
+    assert.equal(updater.status().download.state, "ready");
+    assert.equal(updater.status().repository, "sh2001sh/Kooyu");
+  } finally {
+    updater.close();
+    store.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("AppUpdater transparently migrates legacy sh2001sh/kodo repository setting to sh2001sh/Kooyu", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "kooyu-updater-repo-"));
+  const store = new Store(":memory:");
+  let requestedUrl = "";
+  store.put("app-settings", "global", {
+    revision: 1,
+    update: { channel: "preview", autoCheck: true, repository: "sh2001sh/kodo" },
+  });
+  const updater = new AppUpdater(store, dir, {
+    fetcher: async (input) => {
+      requestedUrl = typeof input === "string" ? input : input.toString();
+      return new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
+    },
+  });
+  try {
+    assert.equal(updater.status().repository, "sh2001sh/Kooyu");
+    await updater.check({ repository: "sh2001sh/kodo" });
+    assert.match(requestedUrl, /repos\/sh2001sh\/Kooyu\/releases/);
   } finally {
     updater.close();
     store.close();

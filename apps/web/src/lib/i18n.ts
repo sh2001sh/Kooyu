@@ -304,6 +304,7 @@ const STRINGS = {
     ja: "インストーラーを起動しました",
   },
   "update.verified": { "zh-CN": "SHA-256 已校验", en: "SHA-256 verified", ja: "SHA-256 検証済み" },
+  "update.revealFolder": { "zh-CN": "打开所在目录", en: "Show in folder", ja: "フォルダを開く" },
   "update.releaseNotes": { "zh-CN": "更新日志", en: "Release notes", ja: "リリースノート" },
   "update.openRelease": { "zh-CN": "查看发布页", en: "Release page", ja: "リリースページ" },
   "update.androidApk": {

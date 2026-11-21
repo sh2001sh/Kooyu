@@ -32,6 +32,21 @@ test("all launchers share platform directories and support Kooyu default plus le
   assert.ok(env.PATH.includes("/opt/homebrew/bin"));
 });
 
+test("hostDataDirectory keeps legacy Kodo database when Kooyu dir exists without kodo.sqlite", async () => {
+  const root = await mkdtemp(join(tmpdir(), "kooyu-datadir-"));
+  try {
+    await mkdir(join(root, "Kooyu", "host", "kodo"), { recursive: true });
+    await mkdir(join(root, "Kodo", "host"), { recursive: true });
+    await writeFile(join(root, "Kodo", "host", "kodo.sqlite"), "legacy-db");
+    assert.equal(
+      hostDataDirectory("win32", { LOCALAPPDATA: root }, root),
+      join(root, "Kodo", "host"),
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 async function withHostEnvironment(values, work) {
   const keys = ["KODO_HOST_URL", "KODO_HOST_PORT", "KODO_DATA_DIR", "KODO_NODE_PATH"];
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));

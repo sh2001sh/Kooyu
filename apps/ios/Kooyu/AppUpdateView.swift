@@ -118,7 +118,7 @@ struct AppUpdateView: View {
         }
 
         // Fallback directly to GitHub Releases when Host is offline.
-        guard let url = URL(string: "https://api.github.com/repos/sh2001sh/kodo/releases?per_page=10") else { return }
+        guard let url = URL(string: "https://api.github.com/repos/sh2001sh/Kooyu/releases?per_page=10") else { return }
         var req = URLRequest(url: url)
         req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         req.setValue("Kooyu-iOS/\(appVersion)", forHTTPHeaderField: "User-Agent")

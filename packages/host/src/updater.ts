@@ -241,8 +241,85 @@ export interface AppUpdaterOptions {
   currentVersion?: string;
   platform?: string;
   arch?: string;
-  launcher?: (localPath: string, platform: string) => void;
+  launcher?: (localPath: string, platform: string) => void | Promise<void>;
   onInstallLaunched?: (platform: string) => void;
+}
+
+function runShellLauncher(command: string, args: string[], env?: NodeJS.ProcessEnv): Promise<void> {
+  return new Promise((resolveDone, rejectDone) => {
+    const child = spawn(command, args, {
+      windowsHide: true,
+      stdio: ["ignore", "ignore", "pipe"],
+      ...(env ? { env } : {}),
+    });
+    let stderr = "";
+    child.stderr?.on("data", (chunk: Buffer | string) => {
+      if (stderr.length < 2048) stderr += String(chunk);
+    });
+    child.once("error", (err) => rejectDone(err));
+    child.once("close", (code) => {
+      if (code === 0) resolveDone();
+      else
+        rejectDone(new Error(stderr.trim() || `${command} exited with code ${code ?? "unknown"}`));
+    });
+  });
+}
+
+async function launchInstallerByPlatform(resolvedPath: string, platform: string): Promise<void> {
+  if (platform === "win32") {
+    try {
+      await runShellLauncher(
+        "powershell.exe",
+        [
+          "-NoProfile",
+          "-NonInteractive",
+          "-WindowStyle",
+          "Hidden",
+          "-Command",
+          "Start-Process -FilePath $env:KOOYU_INSTALLER_PATH",
+        ],
+        { ...process.env, KOOYU_INSTALLER_PATH: resolvedPath },
+      );
+      return;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException | undefined)?.code;
+      if (code === "ENOENT") {
+        await runShellLauncher("cmd.exe", ["/d", "/c", "start", "", resolvedPath]);
+        return;
+      }
+      const detail = err instanceof Error ? err.message : String(err);
+      throw new KodoError(
+        "UNAVAILABLE",
+        `未能启动 Kooyu 安装程序（${detail.split(/\r?\n/)[0]?.slice(0, 120) || "启动被取消或拦截"}），可点击「打开所在目录」手动运行安装包。`,
+      );
+    }
+  }
+  if (platform === "darwin") {
+    await runShellLauncher("open", [resolvedPath]);
+    return;
+  }
+  if (resolvedPath.toLowerCase().endsWith(".appimage")) {
+    chmodSync(resolvedPath, 0o755);
+  }
+  await runShellLauncher("xdg-open", [dirname(resolvedPath)]);
+}
+
+async function revealPathByPlatform(resolvedPath: string, platform: string): Promise<void> {
+  if (platform === "win32") {
+    const child = spawn("explorer.exe", [`/select,${resolvedPath}`], {
+      detached: true,
+      windowsHide: false,
+      stdio: "ignore",
+    });
+    child.once("error", () => {});
+    child.unref();
+    return;
+  }
+  if (platform === "darwin") {
+    await runShellLauncher("open", ["-R", resolvedPath]);
+    return;
+  }
+  await runShellLauncher("xdg-open", [dirname(resolvedPath)]);
 }
 
 export class AppUpdater {
@@ -254,7 +331,7 @@ export class AppUpdater {
   private readonly platform: string;
   private readonly arch: string;
   private readonly updatesDir: string;
-  private readonly launcher?: (localPath: string, platform: string) => void;
+  private readonly launcher?: (localPath: string, platform: string) => void | Promise<void>;
   private readonly onInstallLaunched?: (platform: string) => void;
 
   private state: AppUpdateStatus["state"] = "idle";
@@ -384,7 +461,8 @@ export class AppUpdater {
     if (this.checkInFlight) return this.checkInFlight;
     const cfg = this.config();
     const channel = overrides?.channel ?? cfg.channel;
-    const repo = (overrides?.repository ?? cfg.repository).trim();
+    const rawRepo = (overrides?.repository ?? cfg.repository).trim();
+    const repo = rawRepo.toLowerCase() === "sh2001sh/kodo" ? "sh2001sh/Kooyu" : rawRepo;
     if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)) {
       throw new KodoError("INVALID_INPUT", "无效的更新仓库地址，格式应为 owner/repo。");
     }
@@ -710,39 +788,23 @@ export class AppUpdater {
       }
     }
 
-    // Only Windows exits Host to unlock resources/runtime/node.exe for NSIS.
-    // macOS DMG and Linux folder launches keep Host running, so they must not freeze dispatch.
-    const shouldPrepare = this.platform === "win32";
+    // Only invoke optional prepareInstall hook on win32 when explicitly supplied.
+    // Packaged Windows NSIS installers handle safe Host quiesce/backup/stop right at install time.
+    const shouldPrepare = this.platform === "win32" && Boolean(this.prepareInstall);
     if (shouldPrepare) await this.prepareInstall?.();
     try {
       if (this.launcher) {
-        this.launcher(resolvedPath, this.platform);
-      } else if (this.platform === "win32") {
-        const child = spawn(resolvedPath, [], {
-          detached: true,
-          windowsHide: false,
-          stdio: "ignore",
-        });
-        child.unref();
-      } else if (this.platform === "darwin") {
-        const child = spawn("open", [resolvedPath], { detached: true, stdio: "ignore" });
-        child.unref();
+        await this.launcher(resolvedPath, this.platform);
       } else {
-        if (resolvedPath.toLowerCase().endsWith(".appimage")) {
-          chmodSync(resolvedPath, 0o755);
-        }
-        const child = spawn("xdg-open", [dirname(resolvedPath)], {
-          detached: true,
-          stdio: "ignore",
-        });
-        child.unref();
+        await launchInstallerByPlatform(resolvedPath, this.platform);
       }
     } catch (err) {
       if (shouldPrepare) this.rollbackInstall?.();
       throw err;
     }
 
-    this.downloadState = { ...this.downloadState, state: "installing" };
+    // Keep download state "ready" so the user can re-launch or reveal the installer if they cancel the wizard.
+    this.downloadState = { ...this.downloadState, state: "ready", error: null };
     if (this.onInstallLaunched) {
       this.onInstallLaunched(this.platform);
     }
@@ -751,11 +813,25 @@ export class AppUpdater {
       localPath: resolvedPath,
       message:
         this.platform === "win32"
-          ? "已启动 Kooyu 安装程序，Host 将自动退出以释放安装目录，请按提示完成升级。"
+          ? "已启动 Kooyu 安装程序，请在弹出的安装向导中按提示完成升级（开始安装时将自动保存进度并重启应用）。"
           : this.platform === "darwin"
             ? "已打开 Kooyu 安装镜像（DMG），请将 Kooyu 拖入「应用程序」覆盖升级。"
             : "已打开更新包目录，请运行或安装新版本。",
     };
+  }
+
+  async revealDownloaded(): Promise<{ revealed: boolean; localPath: string }> {
+    const dl = this.downloadState;
+    if (!dl.localPath) {
+      throw new KodoError("NOT_FOUND", "当前没有已下载的安装包。");
+    }
+    const resolvedPath = resolve(dl.localPath);
+    const resolvedBase = resolve(this.updatesDir);
+    if (!resolvedPath.startsWith(resolvedBase) || !existsSync(resolvedPath)) {
+      throw new KodoError("NOT_FOUND", "已下载的安装包不存在，请重新下载。");
+    }
+    await revealPathByPlatform(resolvedPath, this.platform);
+    return { revealed: true, localPath: resolvedPath };
   }
 
   close() {

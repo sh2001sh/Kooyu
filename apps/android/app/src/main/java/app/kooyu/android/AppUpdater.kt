@@ -64,7 +64,7 @@ private val updateHttp = OkHttpClient.Builder()
 
 suspend fun fetchLatestAndroidRelease(
     channel: String = "stable",
-    repository: String = "sh2001sh/kodo",
+    repository: String = "sh2001sh/Kooyu",
 ): AndroidUpdateRelease? = withContext(Dispatchers.IO) {
     val req = Request.Builder()
         .url("https://api.github.com/repos/$repository/releases?per_page=15")

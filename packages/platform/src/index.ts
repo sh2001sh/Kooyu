@@ -70,6 +70,9 @@ export function hostDataDirectory(
         : (env.XDG_DATA_HOME ?? join(home, ".local", "share"));
   const primary = join(base, "Kooyu", "host");
   const legacy = join(base, "Kodo", "host");
+  if (!existsSync(join(primary, "kodo.sqlite")) && existsSync(join(legacy, "kodo.sqlite"))) {
+    return legacy;
+  }
   if (!existsSync(primary) && existsSync(legacy)) return legacy;
   return primary;
 }

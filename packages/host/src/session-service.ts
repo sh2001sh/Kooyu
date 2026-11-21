@@ -273,14 +273,6 @@ export class SessionService {
     this.updater = new AppUpdater(store, this.dataDir, {
       fetcher: options.providerFetch,
       onInstallLaunched: options.onUpdateInstallLaunched,
-      prepareInstall: () => this.pauseForUpdate(),
-      rollbackInstall: () => {
-        const h = this.health();
-        if (h.frozen) {
-          this.lifecycle.resume(h.processIdentity, h.generation);
-          this.resumeWork();
-        }
-      },
     });
     this.feed = new NotificationService(store, this.notifications);
     this.goals = new GoalService(this, this.feed);
