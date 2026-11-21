@@ -61,8 +61,23 @@ jobs:
           KOOYU_OFFICIAL_RELAY_ORIGIN: ${{ secrets.KOOYU_OFFICIAL_RELAY_ORIGIN }}
         shell: bash
         run: |
-          if [[ "$RUNNER_OS" == "macOS" ]]; then ulimit -n 65536; fi
-          npm run package:desktop -- --publish never
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            ulimit -n 65536
+            sudo mdutil -a -i off || true
+          fi
+          for attempt in 1 2; do
+            if npm run package:desktop -- --publish never; then
+              break
+            fi
+            if [[ "$RUNNER_OS" != "macOS" || "$attempt" -eq 2 ]]; then
+              exit 1
+            fi
+            echo "macOS DMG packaging hit transient hdiutil lock; detaching stale Kooyu volumes and retrying..."
+            while IFS= read -r dev; do
+              [ -n "$dev" ] && hdiutil detach -force "$dev" || true
+            done < <(hdiutil info | awk '/\/Volumes\/Kooyu/{print $1}')
+            sleep 5
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: kooyu-${{ matrix.platform }}

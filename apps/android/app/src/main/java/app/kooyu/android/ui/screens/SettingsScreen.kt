@@ -205,6 +205,7 @@ import java.util.Locale
     }
 
     removing?.let { c ->
+        val k = Kooyu.colors
         AlertDialog(
             onDismissRequest = { removing = null },
             containerColor = k.raised,
