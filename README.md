@@ -373,3 +373,7 @@ Released under the [**MIT License**](LICENSE).
 - Runtime dependencies & third-party licenses: [third-party/runtime-dependencies.md](third-party/runtime-dependencies.md)
 - Model catalog attribution: [third-party/models.dev/NOTICE.md](third-party/models.dev/NOTICE.md)
 - Design token attribution: [third-party/craft-agents/EXTRACTION.md](third-party/craft-agents/EXTRACTION.md)
+
+## Community & Links / 友情链接
+
+- [LINUX DO](https://linux.do) - 新的理想型社区 (Where possible begins)

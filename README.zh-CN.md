@@ -373,3 +373,7 @@ npm run test:ui       # Playwright 全量 UI 回归测试
 - 运行依赖与第三方开源许可：[third-party/runtime-dependencies.md](third-party/runtime-dependencies.md)
 - 模型目录数据声明：[third-party/models.dev/NOTICE.md](third-party/models.dev/NOTICE.md)
 - 设计变量来源说明：[third-party/craft-agents/EXTRACTION.md](third-party/craft-agents/EXTRACTION.md)
+
+## 友情链接
+
+- [LINUX DO](https://linux.do) - 新的理想型社区

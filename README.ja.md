@@ -365,3 +365,7 @@ npm run test:ui       # Playwright UI 回帰テスト
 - ランタイム依存・サードパーティライセンス：[third-party/runtime-dependencies.md](third-party/runtime-dependencies.md)
 - モデルカタログ出典：[third-party/models.dev/NOTICE.md](third-party/models.dev/NOTICE.md)
 - デザイントークン出典：[third-party/craft-agents/EXTRACTION.md](third-party/craft-agents/EXTRACTION.md)
+
+## コミュニティ・リンク
+
+- [LINUX DO](https://linux.do) - 新的理想型社区
