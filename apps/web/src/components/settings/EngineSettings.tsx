@@ -178,6 +178,13 @@ function EngineCard({
       {open && (
         <div className="sx-engine__body">
           <InstallBlock harness={h} installation={installation} run={run} />
+          {h.id === "antigravity" && installation && (
+            <ProxySettings
+              key={installation.proxyUrl ?? ""}
+              saved={installation.proxyUrl ?? ""}
+              run={run}
+            />
+          )}
           {h.health?.launchable && (
             <>
               <ConnectionBlock
@@ -206,6 +213,46 @@ function EngineCard({
         </div>
       )}
     </details>
+  );
+}
+
+function ProxySettings({ saved, run }: { saved: string; run: Action }) {
+  const [value, setValue] = useState(saved);
+  const [saving, setSaving] = useState(false);
+  const local = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname);
+  return (
+    <form
+      className="sx-card"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        setSaving(true);
+        try {
+          await run(() => api("/harnesses/antigravity/proxy", "POST", { proxyUrl: value.trim() }));
+        } finally {
+          setSaving(false);
+        }
+      }}
+    >
+      <SettingsRow
+        label="网络代理"
+        htmlFor="antigravity-proxy"
+        description={
+          local ? "新连接生效。清空并保存可跟随 Host 的代理环境。" : "请在运行 Host 的电脑端修改。"
+        }
+      >
+        <input
+          id="antigravity-proxy"
+          type="url"
+          placeholder="http://127.0.0.1:7890"
+          disabled={!local || saving}
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+        />
+        <button disabled={!local || saving || value.trim() === saved}>
+          {saving ? "保存中…" : "保存代理"}
+        </button>
+      </SettingsRow>
+    </form>
   );
 }
 

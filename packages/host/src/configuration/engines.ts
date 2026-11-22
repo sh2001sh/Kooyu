@@ -11,7 +11,7 @@ import {
 } from "@kodo/protocol";
 import { executable } from "../harnesses/rpc.js";
 import { refreshDesktopInstallations } from "../harnesses/desktop-installations.js";
-import { launchDefaults } from "./config.js";
+import { launchDefaults, normalizeAntigravityProxy } from "./config.js";
 import type { Store } from "../storage/store.js";
 
 const registry: Partial<
@@ -49,12 +49,14 @@ const documentation: Record<HarnessId, string> = {
   zcode: "https://zcode.z.ai/",
   cursor: "https://cursor.com/docs/cli/installation",
   "kimi-code": registry["kimi-code"]!.documentation,
+  antigravity: "https://antigravity.google/docs/cli/overview",
   "grok-build": "https://x.ai/cli",
 };
 type Override = {
   command?: string;
   args?: string[];
   managedVersion?: string;
+  proxyUrl?: string;
   [key: string]: unknown;
 };
 
@@ -101,9 +103,19 @@ export class EngineManager {
       command: entries[harnessId]?.command,
       args: entries[harnessId]?.args,
       managedVersion: entries[harnessId]?.managedVersion,
+      proxyUrl: harnessId === "antigravity" ? entries[harnessId]?.proxyUrl : undefined,
       canRestore: Boolean(this.store.record("engine-install-previous", harnessId)),
       job: this.store.record<EngineInstallJob>("engine-install-job", harnessId),
     }));
+  }
+  setAntigravityProxy(value: string) {
+    const entries = this.read();
+    entries.antigravity = {
+      ...entries.antigravity,
+      proxyUrl: value ? normalizeAntigravityProxy(value) : undefined,
+    };
+    this.write(entries);
+    return this.list();
   }
   configure(harnessId: HarnessId, input: { command: string; args: string[] }) {
     if (this.store.record<EngineInstallJob>("engine-install-job", harnessId)?.state === "running")
@@ -130,6 +142,9 @@ export class EngineManager {
       current = entries[harnessId] ?? null;
     if (previous.value) entries[harnessId] = previous.value;
     else delete entries[harnessId];
+    if (harnessId === "antigravity") {
+      entries.antigravity = { ...entries.antigravity, proxyUrl: current?.proxyUrl };
+    }
     this.write(entries);
     this.store.put("engine-install-previous", harnessId, { value: current });
     return this.list();

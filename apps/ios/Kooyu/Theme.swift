@@ -323,6 +323,7 @@ let harnessVisuals: [String: HarnessVisual] = [
     "gemini": visual("Gemini CLI", "◆", tint: 0x388AD4, tintA: 0.13, ink: 0x1E66A8, darkTint: 0x62AEF5, darkTintA: 0.22, darkInk: 0x9AD0FF),
     "cursor": visual("Cursor", "▸", tint: 0x5C5C66, tintA: 0.13, ink: 0x3E3E48, darkTint: 0xA8A8B8, darkTintA: 0.22, darkInk: 0xD6D6E2),
     "kimi-code": visual("Kimi Code", "K·", tint: 0x2C8EA8, tintA: 0.13, ink: 0x1A6B82, darkTint: 0x52B8D4, darkTintA: 0.22, darkInk: 0x94DCF0),
+    "antigravity": visual("Antigravity", "A", tint: 0x5482CE, tintA: 0.14, ink: 0x234C94, darkTint: 0x5F80B9, darkTintA: 0.22, darkInk: 0xBAD1FF),
     "grok-build": visual("Grok Build", "Ø", tint: 0x806848, tintA: 0.14, ink: 0x664E2E, darkTint: 0xB8986C, darkTintA: 0.22, darkInk: 0xE0C498),
 ]
 

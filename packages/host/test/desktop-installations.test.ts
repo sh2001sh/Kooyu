@@ -47,7 +47,7 @@ function archive(path: string, files: Record<string, string>) {
   writeFileSync(path, Buffer.concat([header, ...chunks]));
 }
 
-test("all ten native harnesses and Kodo recognize desktop-only installation records", () => {
+test("all native harnesses and Kodo recognize desktop-only installation records", () => {
   const f = fixture();
   const names = [
     "Kodo",
@@ -60,6 +60,7 @@ test("all ten native harnesses and Kodo recognize desktop-only installation reco
     "Gemini",
     "Cursor",
     "Kimi Code",
+    "Antigravity",
     "Grok Build",
   ];
   try {

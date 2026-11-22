@@ -110,6 +110,7 @@ export interface EngineInstallationOption {
   command?: string;
   args?: string[];
   managedVersion?: string;
+  proxyUrl?: string;
   canRestore: boolean;
   job?: EngineInstallJob;
 }

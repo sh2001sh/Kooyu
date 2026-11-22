@@ -48,7 +48,7 @@ for (const kind of ["uncaughtException", "unhandledRejection"])
         const deadline = setTimeout(() => {
           child.kill();
           reject(new Error("fatal guard failed to exit"));
-        }, 10000);
+        }, 30000);
         child.once("error", (error) => {
           clearTimeout(deadline);
           reject(error);

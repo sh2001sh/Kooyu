@@ -4589,7 +4589,8 @@ export class SessionService {
   }
   async sessionPermissionOptions(id: string) {
     const session = this.store.session(id);
-    if (!["gemini", "cursor", "kimi-code", "grok-build"].includes(session.harnessId)) return null;
+    if (!["gemini", "cursor", "kimi-code", "grok-build", "antigravity"].includes(session.harnessId))
+      return null;
     return (await this.runtime.get(id)?.permissionOptions?.()) ?? null;
   }
   async updatePermissionMode(id: string, value: Parameters<SessionService["updateSession"]>[1]) {

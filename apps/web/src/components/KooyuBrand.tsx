@@ -134,6 +134,12 @@ export function HarnessGlyph({ harnessId, size = 16 }: { harnessId: HarnessId; s
         </svg>
       );
 
+    case "antigravity":
+      return (
+        <span aria-hidden="true" style={{ fontSize: size }}>
+          A
+        </span>
+      );
     case "grok-build":
       return (
         <svg

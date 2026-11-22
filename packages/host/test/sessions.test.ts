@@ -189,13 +189,13 @@ test("all ten draft types exist without claiming a running native session", asyn
       assert.equal(draft.phase, "draft");
     }
     const snapshot = service.snapshot();
-    assert.equal(snapshot.harnesses.length, 11);
+    assert.equal(snapshot.harnesses.length, 12);
     assert.deepEqual(
       snapshot.harnesses
         .filter((h) => h.implementation === "partial")
         .map((h) => h.id)
         .sort(),
-      ["cursor", "gemini", "grok-build", "kimi-code", "opencode", "zcode"],
+      ["antigravity", "cursor", "gemini", "grok-build", "kimi-code", "opencode", "zcode"],
     );
     assert.ok(snapshot.harnesses.every((item) => item.health?.authentication === "unknown"));
     assert.ok(

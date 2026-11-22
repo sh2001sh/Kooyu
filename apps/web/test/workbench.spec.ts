@@ -33,7 +33,7 @@ test("a temporary initial Host failure recovers the snapshot and live event conn
   await page.goto("/");
   await expect(page.getByText("Host 已连接", { exact: true })).toBeVisible({ timeout: 10000 });
 });
-test("desktop: ten direct draft entries, project workspace, history filters and capability UI", async ({
+test("desktop: native direct draft entries, project workspace, history filters and capability UI", async ({
   page,
 }) => {
   await page.goto("/");
@@ -53,6 +53,7 @@ test("desktop: ten direct draft entries, project workspace, history filters and 
     "Cursor",
     "Kimi Code",
     "Grok Build",
+    "Antigravity",
   ]) {
     await page.getByRole("button", { name: "新建会话", exact: true }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -71,6 +72,7 @@ test("desktop: ten direct draft entries, project workspace, history filters and 
           "Gemini CLI": "gemini",
           Cursor: "cursor",
           "Kimi Code": "kimi-code",
+          Antigravity: "antigravity",
           "Grok Build": "grok-build",
         } as Record<string, string>
       )[harness]!,
@@ -85,7 +87,7 @@ test("desktop: ten direct draft entries, project workspace, history filters and 
   const drafts = snapshot.sessions.filter((s: { title: string }) =>
     s.title.startsWith("UI 验收 · "),
   );
-  expect(drafts).toHaveLength(10);
+  expect(drafts).toHaveLength(11);
   expect(
     drafts.every(
       (s: { phase: string; nativeSessionId: string | null }) =>
@@ -135,7 +137,7 @@ test("Kooyu is the main agent while pi remains an independent direct harness on 
   const options = await page
     .locator('.ios-popover [role="option"][data-value]')
     .evaluateAll((v) => v.map((e) => e.getAttribute("data-value")));
-  expect(options).toHaveLength(11);
+  expect(options).toHaveLength(12);
   expect(options).toContain("kodo");
   expect(options).toContain("pi");
   await page.locator('.ios-popover [role="option"][data-value="pi"]').click();

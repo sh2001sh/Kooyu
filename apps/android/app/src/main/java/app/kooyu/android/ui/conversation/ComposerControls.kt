@@ -107,7 +107,7 @@ fun defaultPermissionLabel(harness: String): String = when (harness) {
         }
     }
 
-    val dynamic = session.harnessId in listOf("gemini", "cursor", "kimi-code", "grok-build")
+    val dynamic = session.harnessId in listOf("gemini", "cursor", "kimi-code", "grok-build", "antigravity")
     val native = permissions?.optJSONArray("options")?.objects()?.map { it.optString("value") to it.optString("label") }.orEmpty()
     val acp = session.harnessId == "kimi-code" && (session.raw.optString("permissionMode").startsWith("acp:") || session.raw.nullableString("nativeSessionId")?.let { !it.startsWith("session_") } == true)
     val choices = if (dynamic && (session.harnessId != "kimi-code" || acp || native.isNotEmpty())) native else permissionChoices(session.harnessId)

@@ -37,7 +37,7 @@ struct NativeComposerControls: View {
         return composerDefaultModel(options?["defaultModel"]) ?? descriptor?.nativeDefaults?["model"].string ?? ""
     }
     private var selected: JSONValue? { selectComposerModel(models, active, inherited: session.model == nil) }
-    private var dynamicPermissions: Bool { ["gemini", "cursor", "kimi-code", "grok-build"].contains(session.harnessId) }
+    private var dynamicPermissions: Bool { ["gemini", "cursor", "kimi-code", "grok-build", "antigravity"].contains(session.harnessId) }
     private var acp: Bool { session.harnessId != "kimi-code" || session.permissionMode?.hasPrefix("acp:") == true || session.nativeSessionId.map { !$0.hasPrefix("session_") } == true }
     private var choices: [(String, String)] {
         let native = permissions?["options"].array.map { ($0["value"].string, $0["label"].string) } ?? []

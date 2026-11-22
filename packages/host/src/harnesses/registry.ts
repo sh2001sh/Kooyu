@@ -9,6 +9,7 @@ import { opencodeAdapter } from "./opencode.js";
 import { geminiAdapter } from "./gemini.js";
 import { cursorAdapter } from "./cursor.js";
 import { kimiCodeAdapter } from "./kimi-code.js";
+import { antigravityAdapter } from "./antigravity.js";
 import { grokBuildAdapter } from "./grok-build.js";
 
 export const adapters = [
@@ -22,6 +23,7 @@ export const adapters = [
   geminiAdapter,
   cursorAdapter,
   kimiCodeAdapter,
+  antigravityAdapter,
   grokBuildAdapter,
 ];
 export function getAdapter(id: HarnessId) {

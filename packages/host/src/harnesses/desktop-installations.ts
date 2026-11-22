@@ -18,6 +18,7 @@ const names: Record<HarnessId, RegExp> = {
   gemini: /^Gemini(?: CLI| Desktop)?(?:\s|$)/i,
   cursor: /^Cursor(?:\s|$)/i,
   "kimi-code": /^Kimi(?: Code| Desktop)?(?:\s|$)/i,
+  antigravity: /^Antigravity(?:\s|$)/i,
   "grok-build": /^Grok(?: Build| Desktop)?(?:\s|$)/i,
 };
 
@@ -32,6 +33,7 @@ const folders: Record<HarnessId, string[]> = {
   gemini: ["Gemini", "Gemini CLI", "Gemini Desktop"],
   cursor: ["Cursor", "cursor"],
   "kimi-code": ["Kimi Code", "Kimi"],
+  antigravity: ["Antigravity", "antigravity"],
   "grok-build": ["Grok Build", "Grok"],
 };
 
@@ -130,6 +132,7 @@ export function desktopInstallations(
           gemini: "Gemini",
           cursor: "Cursor",
           "kimi-code": "Kimi",
+          antigravity: "Antigravity",
           "grok-build": "Grok",
         }[id];
         const evidence =
@@ -196,6 +199,7 @@ export function bundledLaunch(
     gemini: ["gemini"],
     cursor: ["agent", "cursor-agent"],
     "kimi-code": ["kimi"],
+    antigravity: ["agy"],
     "grok-build": ["grok"],
   };
   for (const root of roots) {

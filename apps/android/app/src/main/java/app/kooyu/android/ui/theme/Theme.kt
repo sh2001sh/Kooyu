@@ -633,6 +633,7 @@ val HARNESS_VISUALS = mapOf(
     "gemini" to HarnessVisual("Gemini CLI", "◆", Color(0x21388AD4), Color(0xFF1E66A8), Color(0x3862AEF5), Color(0xFF9AD0FF)),
     "cursor" to HarnessVisual("Cursor", "▸", Color(0x215C5C66), Color(0xFF3E3E48), Color(0x38A8A8B8), Color(0xFFD6D6E2)),
     "kimi-code" to HarnessVisual("Kimi Code", "K·", Color(0x212C8EA8), Color(0xFF1A6B82), Color(0x3852B8D4), Color(0xFF94DCF0)),
+    "antigravity" to HarnessVisual("Antigravity", "A", Color(0x245482CE), Color(0xFF234C94), Color(0x385F80B9), Color(0xFFBAD1FF)),
     "grok-build" to HarnessVisual("Grok Build", "Ø", Color(0x24806848), Color(0xFF664E2E), Color(0x38B8986C), Color(0xFFE0C498)),
 )
 

@@ -868,6 +868,7 @@ for (const id of [
   "cursor",
   "kimi-code",
   "grok-build",
+  "antigravity",
 ] as const)
   test(`${id}: native wire translation against isolated synthetic protocol peer`, async () => {
     const adapter = adapters.find((a) => a.descriptor.id === id)!,
@@ -916,7 +917,10 @@ for (const id of [
       const receipt = await runtime.send("synthetic transport input", randomUUID(), "new");
       assert.equal(receipt.nativeRunId, id === "codex" ? "native-turn-test" : null);
       if (mode === "acp") assert.ok(events.some((e) => e.type === "tool"));
-      if (mode === "acp" && !["gemini", "grok-build", "kimi-code", "cursor"].includes(id))
+      if (
+        mode === "acp" &&
+        !["gemini", "grok-build", "kimi-code", "cursor", "antigravity"].includes(id)
+      )
         assert.equal(runtime.read, undefined, "ACP capabilities are not native history");
       if (id === "grok-build")
         assert.ok(JSON.stringify(await runtime.read!()).includes("Synthetic reply"));

@@ -1,5 +1,6 @@
 import { kodoSecrets } from "../credentials/vault.js";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import {
   KodoError,
@@ -25,6 +26,7 @@ export const launchDefaults: Record<HarnessId, NativeLaunch> = {
   gemini: { command: "gemini", args: ["--acp"] },
   cursor: { command: "agent", args: ["acp"] },
   "kimi-code": { command: "kimi", args: ["acp"] },
+  antigravity: { command: "agy", args: ["acp"] },
   "grok-build": { command: "grok", args: ["agent", "stdio"] },
 };
 export function inspectInstallation(dataDir: string, id: HarnessId) {
@@ -34,8 +36,43 @@ export function inspectInstallation(dataDir: string, id: HarnessId) {
   if (override?.desktopPath !== undefined && typeof override.desktopPath !== "string")
     throw new KodoError("INVALID_INPUT", "desktopPath 需要桌面应用的完整路径。");
   const desktops = desktopInstallations(id, override?.desktopPath);
-  return resolveInstallation(id, override, desktops);
+  const installation = resolveInstallation(id, override, desktops);
+  if (id === "antigravity" && override?.proxyUrl) {
+    const proxy = normalizeAntigravityProxy(override.proxyUrl);
+    const bypass = ["localhost", "127.0.0.1", "::1", process.env.no_proxy ?? process.env.NO_PROXY]
+      .filter(Boolean)
+      .join(",");
+    installation.launch.env = {
+      ...installation.launch.env,
+      HTTP_PROXY: proxy,
+      HTTPS_PROXY: proxy,
+      NO_PROXY: bypass,
+      http_proxy: proxy,
+      https_proxy: proxy,
+      no_proxy: bypass,
+    };
+  }
+  return installation;
 }
+export function normalizeAntigravityProxy(value: string): string {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new KodoError("INVALID_INPUT", "请输入完整的 HTTP 或 HTTPS 代理地址。");
+  }
+  if (
+    !["http:", "https:"].includes(url.protocol) ||
+    url.username ||
+    url.password ||
+    url.pathname !== "/" ||
+    url.search ||
+    url.hash
+  )
+    throw new KodoError("INVALID_INPUT", "代理地址仅支持 HTTP 或 HTTPS 主机和端口。");
+  return url.origin;
+}
+
 /** Resolve independently of the machine scan, so desktop-only selection is deterministic. */
 export function resolveInstallation(
   id: HarnessId,
@@ -60,9 +97,21 @@ export function resolveInstallation(
   const cliCommand =
     id === "cursor"
       ? ["agent", "cursor-agent"].find((command) => findExecutable(command))
-      : findExecutable(fallback.command)
-        ? fallback.command
-        : undefined;
+      : id === "antigravity"
+        ? [
+            "agy",
+            process.platform === "win32"
+              ? join(
+                  process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"),
+                  "agy",
+                  "bin",
+                  "agy.exe",
+                )
+              : join(homedir(), ".local", "bin", "agy"),
+          ].find((command) => findExecutable(command))
+        : findExecutable(fallback.command)
+          ? fallback.command
+          : undefined;
   if (!launch && !override?.preferDesktop && !sdk && cliCommand)
     launch = { ...fallback, command: cliCommand, source: "cli" };
   if (!launch)
@@ -195,6 +244,7 @@ export async function instanceEnv(
     gemini: /^(GEMINI_|GOOGLE_)/,
     cursor: /^CURSOR_/,
     "kimi-code": /^(KIMI_|MOONSHOT_)/,
+    antigravity: /^(ANTIGRAVITY_|GOOGLE_|GEMINI_)/,
     "grok-build": /^(GROK_|XAI_)/,
   };
   const env: NodeJS.ProcessEnv = {};

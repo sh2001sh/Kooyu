@@ -50,6 +50,7 @@ export function nativeConfigLocations(
       ...(env.APPDATA ? [join(env.APPDATA, "Cursor", "User", "settings.json")] : []),
     ],
     "kimi-code": [join(env.KIMI_CODE_HOME ?? join(home, ".kimi-code"), "config.toml")],
+    antigravity: [join(home, ".gemini", "antigravity-cli", "settings.json")],
     "grok-build": [join(env.GROK_HOME ?? join(home, ".grok"), "config.toml")],
   };
   const locations = [...new Set(candidates[harnessId])].map((path) => {

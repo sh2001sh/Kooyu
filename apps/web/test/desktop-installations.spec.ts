@@ -101,7 +101,7 @@ for (const width of [1440, 390])
     await pi.locator(":scope > summary").click();
     await expect(pi.locator(".sx-file")).toHaveCount(0);
     await pi.locator(":scope > summary").click();
-    await expect(page.locator(".sx-engine")).toHaveCount(11);
+    await expect(page.locator(".sx-engine")).toHaveCount(12);
     await expect(
       page.locator(".sx-engine").filter({ hasText: "Grok Build" }).locator(":scope > summary"),
     ).toContainText("未安装");
@@ -124,7 +124,7 @@ test("installation API returns discovery separately from authentication and laun
   const response = await request.get("/api/harnesses/installations?refresh=1");
   expect(response.ok()).toBe(true);
   const { harnesses } = await response.json();
-  expect(harnesses).toHaveLength(11);
+  expect(harnesses).toHaveLength(12);
   for (const h of harnesses) {
     expect(typeof h.health.installed).toBe("boolean");
     expect(typeof h.health.launchable).toBe("boolean");

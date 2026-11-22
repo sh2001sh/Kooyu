@@ -119,7 +119,9 @@ export function PermissionControls({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [nativeModes, setNativeModes] = useState<NativeModes | null>(null);
-  const dynamicModes = ["gemini", "cursor", "kimi-code", "grok-build"].includes(harnessId);
+  const dynamicModes = ["gemini", "cursor", "kimi-code", "grok-build", "antigravity"].includes(
+    harnessId,
+  );
   const acp =
     dynamicModes &&
     (harnessId !== "kimi-code" ||

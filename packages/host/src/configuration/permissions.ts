@@ -43,7 +43,7 @@ const MODES: Partial<Record<HarnessId, [PermissionMode, string][]>> = {
   ],
 };
 export const dynamicPermissions = (id: HarnessId) =>
-  ["gemini", "cursor", "grok-build"].includes(id);
+  ["gemini", "cursor", "grok-build", "antigravity"].includes(id);
 export function permissionCatalog(id: HarnessId) {
   return (MODES[id] ?? []).map(([value, label]) => ({ value, label }));
 }

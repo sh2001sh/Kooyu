@@ -30,6 +30,7 @@ export const HARNESS_NAMES: Record<HarnessId, string> = {
   gemini: "Gemini CLI",
   cursor: "Cursor",
   "kimi-code": "Kimi Code",
+  antigravity: "Antigravity",
   "grok-build": "Grok Build",
 };
 
@@ -122,6 +123,14 @@ export const HARNESS_VISUALS: Record<HarnessId, HarnessVisual> = {
     darkTint: "rgba(82, 184, 212, 0.22)",
     darkInk: "#94DCF0",
     tagline: "Kimi Code · ACP",
+  },
+  antigravity: {
+    monogram: "A",
+    tint: "#e3edff",
+    ink: "#234c94",
+    darkTint: "#253650",
+    darkInk: "#bad1ff",
+    tagline: "Antigravity CLI · ACP",
   },
   "grok-build": {
     monogram: "Ø",

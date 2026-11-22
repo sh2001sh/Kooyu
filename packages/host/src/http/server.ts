@@ -411,6 +411,15 @@ export function createHostHandler(service: SessionService, options: HostHttpOpti
         json(response, 200, service.engines.list());
         return;
       }
+      if (url.pathname === "/api/harnesses/antigravity/proxy" && request.method === "POST") {
+        if (!local) throw new KodoError("UNAUTHORIZED", "请在运行 Host 的电脑端配置代理。");
+        const input = z
+          .object({ proxyUrl: z.string().trim().max(2048) })
+          .strict()
+          .parse(await readBody(request));
+        json(response, 200, service.engines.setAntigravityProxy(input.proxyUrl));
+        return;
+      }
       const engineAction =
         /^\/api\/harnesses\/([^/]+)\/(install|upgrade|installation|restore-installation)$/.exec(
           url.pathname,

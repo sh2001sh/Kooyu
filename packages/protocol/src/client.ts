@@ -11,6 +11,7 @@ export const NATIVE_HARNESS_IDS = [
   "gemini",
   "cursor",
   "kimi-code",
+  "antigravity",
   "grok-build",
 ] as const;
 // Kodo is the product agent. Its use of the pi SDK does not make it the pi harness.
@@ -37,6 +38,7 @@ export const HARNESS_PROVIDER_PROTOCOLS: Record<
     "anthropic-messages",
     "google-generative-ai",
   ],
+  antigravity: [],
   "grok-build": ["openai-completions", "openai-responses", "anthropic-messages"],
 };
 
