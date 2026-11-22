@@ -60,16 +60,33 @@ if (process.argv[2] === "metadata") {
   if (!repo || !sha) throw new Error("Missing repository or commit metadata.");
   const gh = (...args) =>
     execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
+  let changelogSection = "";
+  if (!prerelease) {
+    try {
+      const changelog = (await readFile("CHANGELOG.md", "utf8")).replace(/\r\n/g, "\n");
+      const found = changelog
+        .split(/^## /m)
+        .find((s) => s.startsWith(`v${version} `) || s.startsWith(`v${version}\n`));
+      if (found) {
+        const nl = found.indexOf("\n");
+        if (nl >= 0) changelogSection = found.slice(nl + 1).trim();
+      }
+    } catch {}
+  }
   const body = [
     `Kooyu ${version} — ${prerelease ? "自动构建预览版" : "正式版本"}`,
     "",
     `Source commit: ${sha}`,
+    ...(changelogSection ? ["", changelogSection] : []),
+    "",
+    "### Downloads & Checksums / 安装包与校验",
     "",
     "- Windows: EXE 安装程序（x64）。",
     "- macOS: DMG / ZIP（Intel x64、Apple Silicon arm64）。",
     "- Linux: AppImage / DEB（x64）。",
     "- Android: 保持既有调试签名的 APK，可覆盖同签名版本。",
     "- iOS: 仅供 Apple Silicon Mac 的 iOS 模拟器运行，不能直接安装到 iPhone；真机 IPA 需要 Apple 签名。",
+    "- npm CLI / Web Host: `npx kooyu@latest` 或 `npm install -g kooyu@latest`。",
     "- 桌面安装包暂未配置代码签名或 Apple 公证。",
     "",
     "下载后可使用 SHA256SUMS.txt 校验文件。",
@@ -108,6 +125,14 @@ if (process.argv[2] === "metadata") {
     ...[...assets, "SHA256SUMS.txt"].map((name) => join(dir, name)),
     "--clobber",
   );
-  gh("release", "edit", tag, "--repo", repo, "--draft=false");
+  gh(
+    "release",
+    "edit",
+    tag,
+    "--repo",
+    repo,
+    "--draft=false",
+    ...(prerelease ? [] : ["--latest"]),
+  );
   console.log(gh("release", "view", tag, "--repo", repo, "--json", "url", "--jq", ".url"));
 } else throw new Error("Use metadata or publish.");

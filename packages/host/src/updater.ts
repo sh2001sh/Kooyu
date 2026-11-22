@@ -78,7 +78,7 @@ export function resolveCurrentAppVersion(): string {
     if (parent === dir) break;
     dir = parent;
   }
-  return "0.2.1";
+  return "1.0.0";
 }
 
 export function parseReleaseTag(

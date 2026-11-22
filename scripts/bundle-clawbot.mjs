@@ -46,7 +46,7 @@ try {
           }));
           b.onLoad({ filter: /.*/, namespace: "kooyu" }, (a) => ({
             contents: a.path.endsWith("accounts.js")
-              ? 'export const listIndexedWeixinAccountIds=()=>[], loadWeixinAccount=()=>undefined, loadConfigRouteTag=()=>undefined, loadConfigBotAgent=()=>"Kooyu/0.2.1";'
+              ? 'export const listIndexedWeixinAccountIds=()=>[], loadWeixinAccount=()=>undefined, loadConfigRouteTag=()=>undefined, loadConfigBotAgent=()=>"Kooyu/1.0.0";'
               : "const silent=()=>{}; export const logger={debug:silent,info:silent,warn:silent,error:silent};",
           }));
           b.onLoad({ filter: /[\\/]login-qr\.js$/ }, (a) => ({

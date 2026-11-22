@@ -27,8 +27,8 @@
   <a href="https://www.npmjs.com/package/kooyu">
     <img src="https://img.shields.io/npm/v/kooyu?style=flat-square&label=npm&color=141518" alt="npm CLI" />
   </a>
-  <a href="https://github.com/sh2001sh/Kooyu/releases">
-    <img src="https://img.shields.io/github/v/release/sh2001sh/Kooyu?include_prereleases&style=flat-square&label=Release&color=F17561" alt="Latest Release" />
+  <a href="https://github.com/sh2001sh/Kooyu/releases/latest">
+    <img src="https://img.shields.io/github/v/release/sh2001sh/Kooyu?style=flat-square&label=Release&color=F17561" alt="Latest Release" />
   </a>
   <a href="https://github.com/sh2001sh/Kooyu/actions/workflows/native-apps.yml">
     <img src="https://img.shields.io/github/actions/workflow/status/sh2001sh/Kooyu/native-apps.yml?branch=main&style=flat-square&label=CI%20%26%20Build" alt="CI Status" />
@@ -43,7 +43,8 @@
   🌐 <strong>Official Website</strong>: <a href="https://kooyu.app"><strong>https://kooyu.app</strong></a> ·
   <a href="https://kooyu.app/download">Downloads</a> ·
   <a href="https://kooyu.app/docs">Docs</a> ·
-  <a href="https://kooyu.app/account">Web Workbench</a>
+  <a href="https://kooyu.app/account">Web Workbench</a> ·
+  <a href="CHANGELOG.md">Changelog</a>
 </p>
 
 <p>
@@ -168,18 +169,18 @@ Open **`http://127.0.0.1:4310`** in your browser once started. See [docs/npm-pac
 
 ### 💻 Native Desktop & Mobile Installers (GitHub Releases)
 
-Pre-built installers for all platforms are published automatically to [**GitHub Releases**](https://github.com/sh2001sh/Kooyu/releases) and available on [**kooyu.app/download**](https://kooyu.app/download).
+Pre-built installers for all platforms are published automatically to [**GitHub Releases (Latest)**](https://github.com/sh2001sh/Kooyu/releases/latest) and available on [**kooyu.app/download**](https://kooyu.app/download).
 
 | Platform | Architecture / Format | Download |
 | :--- | :--- | :--- |
-| **Windows** | x64 Installer (`.exe`) | [Latest Releases](https://github.com/sh2001sh/Kooyu/releases) |
-| **macOS** | Apple Silicon M1–M4 & Intel x64 (`.dmg` / `.zip`) | [Latest Releases](https://github.com/sh2001sh/Kooyu/releases) |
-| **Linux** | x64 (`.AppImage` / `.deb`) | [Latest Releases](https://github.com/sh2001sh/Kooyu/releases) |
-| **Android** | Universal APK (`.apk`) | [Latest Releases](https://github.com/sh2001sh/Kooyu/releases) |
-| **iOS** | Apple Silicon Simulator (`.zip`) / Source Build | [Latest Releases](https://github.com/sh2001sh/Kooyu/releases) |
+| **Windows** | x64 Installer (`.exe`) | [Latest Release](https://github.com/sh2001sh/Kooyu/releases/latest) |
+| **macOS** | Apple Silicon M1–M4 & Intel x64 (`.dmg` / `.zip`) | [Latest Release](https://github.com/sh2001sh/Kooyu/releases/latest) |
+| **Linux** | x64 (`.AppImage` / `.deb`) | [Latest Release](https://github.com/sh2001sh/Kooyu/releases/latest) |
+| **Android** | Universal APK (`.apk`) | [Latest Release](https://github.com/sh2001sh/Kooyu/releases/latest) |
+| **iOS** | Apple Silicon Simulator (`.zip`) / Source Build | [Latest Release](https://github.com/sh2001sh/Kooyu/releases/latest) |
 | **Web / CLI** | Local Host + Browser Workbench | `npx kooyu@latest` |
 
-> Use in-app updates (**Settings → General → Software Update**) to switch between **Stable** and **Preview** channels with automatic SHA-256 verification.
+> Use built-in updates (**Settings → General → Software Update**) to check, download with automatic SHA-256 verification, launch the installer (or reveal the downloaded package), and switch between **Stable** and **Preview** channels.
 
 ---
 
@@ -187,7 +188,7 @@ Pre-built installers for all platforms are published automatically to [**GitHub 
 
 ### Windows
 
-1. Download **`Kooyu-Setup-<version>.exe`** from [GitHub Releases](https://github.com/sh2001sh/Kooyu/releases) and run the installer.
+1. Download **`Kooyu-Setup-<version>.exe`** from [GitHub Releases](https://github.com/sh2001sh/Kooyu/releases/latest) and run the installer.
 2. Because desktop builds are currently unsigned, Windows SmartScreen may display *"Windows protected your PC"* — click **More info → Run anyway** (see [docs/windows-installation.md](docs/windows-installation.md)).
 3. Press **`Alt + Space`** anywhere after launch to summon the Kooyu Quick-Capture HUD. Upgrading automatically preserves your local data and settings.
 
@@ -225,7 +226,7 @@ shasum -a 256 -c SHA256SUMS.txt --ignore-missing
 
 ```powershell
 # Windows PowerShell
-Get-FileHash .\Kooyu-Setup-0.2.1.exe -Algorithm SHA256
+Get-FileHash .\Kooyu-Setup-1.0.0.exe -Algorithm SHA256
 ```
 
 ---

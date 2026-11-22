@@ -27,8 +27,8 @@
   <a href="https://www.npmjs.com/package/kooyu">
     <img src="https://img.shields.io/npm/v/kooyu?style=flat-square&label=npm&color=141518" alt="npm CLI" />
   </a>
-  <a href="https://github.com/sh2001sh/Kooyu/releases">
-    <img src="https://img.shields.io/github/v/release/sh2001sh/Kooyu?include_prereleases&style=flat-square&label=Release&color=F17561" alt="最新リリース" />
+  <a href="https://github.com/sh2001sh/Kooyu/releases/latest">
+    <img src="https://img.shields.io/github/v/release/sh2001sh/Kooyu?style=flat-square&label=Release&color=F17561" alt="最新安定版リリース" />
   </a>
   <a href="https://github.com/sh2001sh/Kooyu/actions/workflows/native-apps.yml">
     <img src="https://img.shields.io/github/actions/workflow/status/sh2001sh/Kooyu/native-apps.yml?branch=main&style=flat-square&label=CI%20%26%20Build" alt="CI ステータス" />
@@ -43,7 +43,8 @@
   🌐 <strong>公式サイト</strong>：<a href="https://kooyu.app"><strong>https://kooyu.app</strong></a> ·
   <a href="https://kooyu.app/download">ダウンロード</a> ·
   <a href="https://kooyu.app/docs">ドキュメント</a> ·
-  <a href="https://kooyu.app/account">Web ワークベンチ</a>
+  <a href="https://kooyu.app/account">Web ワークベンチ</a> ·
+  <a href="CHANGELOG.md">変更履歴</a>
 </p>
 
 <p>
@@ -163,25 +164,65 @@ kooyu --help                         # ヘルプ表示
 
 ### 💻 ネイティブインストーラー
 
-全プラットフォーム向けインストーラーは [**GitHub Releases**](https://github.com/sh2001sh/Kooyu/releases) および [**kooyu.app/download**](https://kooyu.app/download) から取得できます。
+全プラットフォーム向けインストーラーは [**GitHub Releases（最新安定版）**](https://github.com/sh2001sh/Kooyu/releases/latest) および [**kooyu.app/download**](https://kooyu.app/download) から取得できます。
 
 | プラットフォーム | アーキテクチャ / 形式 | ダウンロード |
 | :--- | :--- | :--- |
-| **Windows** | x64 インストーラー（`.exe`） | [GitHub Releases](https://github.com/sh2001sh/Kooyu/releases) |
-| **macOS** | Apple Silicon M1–M4 / Intel x64（`.dmg` / `.zip`） | [GitHub Releases](https://github.com/sh2001sh/Kooyu/releases) |
-| **Linux** | x64（`.AppImage` / `.deb`） | [GitHub Releases](https://github.com/sh2001sh/Kooyu/releases) |
-| **Android** | ユニバーサル APK（`.apk`） | [GitHub Releases](https://github.com/sh2001sh/Kooyu/releases) |
-| **iOS** | Apple Silicon シミュレーター（`.zip`） / Xcode ビルド | [GitHub Releases](https://github.com/sh2001sh/Kooyu/releases) |
+| **Windows** | x64 インストーラー（`.exe`） | [最新安定版](https://github.com/sh2001sh/Kooyu/releases/latest) |
+| **macOS** | Apple Silicon M1–M4 / Intel x64（`.dmg` / `.zip`） | [最新安定版](https://github.com/sh2001sh/Kooyu/releases/latest) |
+| **Linux** | x64（`.AppImage` / `.deb`） | [最新安定版](https://github.com/sh2001sh/Kooyu/releases/latest) |
+| **Android** | ユニバーサル APK（`.apk`） | [最新安定版](https://github.com/sh2001sh/Kooyu/releases/latest) |
+| **iOS** | Apple Silicon シミュレーター（`.zip`） / Xcode ビルド | [最新安定版](https://github.com/sh2001sh/Kooyu/releases/latest) |
 | **Web / CLI** | ローカル Host + ブラウザワークベンチ | `npx kooyu@latest` |
+
+> アプリ内の **設定 → 一般 → ソフトウェア更新** から、SHA-256 自動検証付きダウンロード・インストーラー起動（または保存フォルダを開く）・**安定版 / プレビュー版** チャンネル切替が行えます。
 
 ---
 
 ## 🚀 インストール手順
 
-- **Windows**：`Kooyu-Setup-<version>.exe` を実行（SmartScreen が表示された場合は「詳細情報 → 実行」、詳細は [docs/windows-installation.md](docs/windows-installation.md)）。起動後は **`Alt + Space`** でクイックカプセルを呼び出せます。
-- **macOS**：`.dmg` を開いて `Kooyu.app` を Applications へ配置し、初回起動前に `xattr -cr /Applications/Kooyu.app` を実行。起動後は **`Cmd + Shift + K`** でクイックカプセルを呼び出せます。
-- **Linux**：`chmod +x Kooyu-*.AppImage && ./Kooyu-*.AppImage` または `sudo apt install ./kooyu_*_amd64.deb`。
-- **Android / iOS**：Android は APK をインストールして QR またはアカウントで接続。iOS 実機ビルドは [apps/ios/README.md](apps/ios/README.md) を参照してください。
+### Windows
+
+1. [GitHub Releases](https://github.com/sh2001sh/Kooyu/releases/latest) から **`Kooyu-Setup-<version>.exe`** をダウンロードして実行します。
+2. デスクトップ版は未署名のため、初回起動時に SmartScreen が表示された場合は **「詳細情報 → 実行」** を選択してください（詳細は [docs/windows-installation.md](docs/windows-installation.md)）。
+3. 起動後はどの画面からでも **`Alt + Space`** でクイックカプセルを呼び出せます。上書き更新してもローカル履歴と設定は自動で保持されます。
+
+### macOS
+
+1. 対応アーキテクチャの `.dmg`（Apple Silicon は `arm64`、Intel は x64）を開き、**Kooyu.app** を **Applications** へドラッグします。
+2. Apple 公証は未設定のため、初回起動前にターミナルで隔離属性を解除してください：
+   ```bash
+   xattr -cr /Applications/Kooyu.app
+   ```
+3. 起動後はどの画面からでも **`Cmd + Shift + K`** でクイックカプセルを呼び出せます。
+
+### Linux
+
+```bash
+# AppImage
+chmod +x Kooyu-*.AppImage
+./Kooyu-*.AppImage
+
+# Debian / Ubuntu (.deb)
+sudo apt install ./kooyu_*_amd64.deb
+```
+
+### Android & iOS
+
+- **Android**：`Kooyu-*-android-debug.apk` をインストール（一貫した署名鍵によりペアリング設定を保持したまま上書き更新可能）。Kooyu アカウントまたはデスクトップの QR コードで接続します。
+- **iOS**：Apple Silicon Mac では `Kooyu-*-ios-simulator.zip` をシミュレーターで実行でき、実機ビルドは Xcode から自身の Apple 開発者アカウントで署名できます（詳細は [apps/ios/README.md](apps/ios/README.md)）。
+
+### ダウンロード検証（SHA-256）
+
+```bash
+# macOS / Linux
+shasum -a 256 -c SHA256SUMS.txt --ignore-missing
+```
+
+```powershell
+# Windows PowerShell
+Get-FileHash .\Kooyu-Setup-1.0.0.exe -Algorithm SHA256
+```
 
 ---
 
@@ -225,9 +266,32 @@ flowchart LR
   API --> Storage
 ```
 
+### リポジトリ構成
+
+| パス | 説明 |
+| :--- | :--- |
+| `apps/desktop` | Electron デスクトップシェル、常駐トレイ、クイックカプセル HUD、リモート接続・自動更新 |
+| `apps/web` | クロスプラットフォーム Web ワークベンチ UI、確認カード、Git/PR 交付、ライブプレビュー、内蔵端末、Playwright テスト |
+| `apps/android` | Android ネイティブアプリ（Kotlin / Jetpack Compose / Material 3 / APK アップデーター） |
+| `apps/ios` | iOS ネイティブアプリ（Swift / SwiftUI / XcodeGen） |
+| `packages/host` | 独立ローカル Session Host、文書・記憶蒸留、スキル蓄積、ローカル KB、ルーティング/競技場、Git チェックポイント、管理ブラウザ、IM・プロバイダーハブ |
+| `packages/protocol` | 全クライアントと Host 間で共有されるプロトコル Schema と TypeScript 型定義 |
+| `packages/platform` | クロスプラットフォームディレクトリ規約（`Kooyu/host`、旧 `Kodo/host` 互換）・Host 検出ユーティリティ |
+| `services/relay` | セルフホスト可能な軽量 HTTPS/WSS E2EE ペアリング・オフライン信箱リレー |
+| `deploy/` | Docker / Compose / Caddy / systemd セルフホスト用テンプレート |
+| `brand/` | Kooyu 公式 SVG ロゴ・アプリアイコン・デザイントークン |
+| `docs/` | アーキテクチャ・対応エンジン一覧・プロバイダー設定・セルフホスト・リリースガイド |
+
 ---
 
 ## 🛠️ ソースからビルド
+
+### 動作要件
+
+- **Node.js `>= 24.13.0`** および **npm `11+`**
+- 対応コーディングエージェントのいずれか（または Kooyu 内で直接 API プロバイダーを設定）
+
+### ローカル開発と起動
 
 ```bash
 git clone https://github.com/sh2001sh/Kooyu.git
@@ -235,11 +299,39 @@ cd Kooyu
 npm ci
 npm run build
 
-# デスクトップアプリ起動
+# デスクトップアプリ起動（独立ローカル Host を自動起動・再利用）
 npm run start:desktop
 
 # Web ワークベンチのみ起動 (http://127.0.0.1:4310)
 npm run start:host
+# フロントエンドのホットリロード開発：
+npm run dev:web
+```
+
+### インストーラーのパッケージング
+
+```bash
+# 現在の OS 向けデスクトップインストーラー（出力先: release/desktop/）
+npm run package:desktop -- --publish never
+
+# Android APK（JDK 17 + Android SDK 36 が必要）
+cd apps/android && ./gradlew testDebugUnitTest lintDebug assembleDebug
+
+# iOS シミュレーター（macOS + Xcode 16 + XcodeGen が必要）
+cd apps/ios && xcodegen generate
+xcodebuild -project Kooyu.xcodeproj -scheme Kooyu -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+```
+
+### テストと検証スイート
+
+```bash
+npm run lint
+npm run format:check
+npm run typecheck
+npm test              # Host ユニット・統合テスト
+npm run test:relay    # リレーセキュリティ・信箱テスト
+npm run test:platform # Host 検出・ランチャーテスト
+npm run test:ui       # Playwright UI 回帰テスト
 ```
 
 ### データディレクトリと環境変数
@@ -263,6 +355,12 @@ npm run start:host
 
 ---
 
-## 📄 ライセンス
+## 📄 ライセンスと謝辞
 
-[**MIT License**](LICENSE) のもとで公開されています。公式サイト：[https://kooyu.app](https://kooyu.app) · サードパーティ表記：[`third-party/runtime-dependencies.md`](third-party/runtime-dependencies.md)
+[**MIT License**](LICENSE) のもとで公開されています。
+
+- 公式サイト・ドキュメント：[https://kooyu.app](https://kooyu.app)
+- 変更履歴：[CHANGELOG.md](CHANGELOG.md)
+- ランタイム依存・サードパーティライセンス：[third-party/runtime-dependencies.md](third-party/runtime-dependencies.md)
+- モデルカタログ出典：[third-party/models.dev/NOTICE.md](third-party/models.dev/NOTICE.md)
+- デザイントークン出典：[third-party/craft-agents/EXTRACTION.md](third-party/craft-agents/EXTRACTION.md)

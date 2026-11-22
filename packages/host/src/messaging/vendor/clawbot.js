@@ -34,7 +34,7 @@ import crypto from "node:crypto";
 
 // kooyu:../auth/accounts.js
 var loadConfigRouteTag = () => void 0;
-var loadConfigBotAgent = () => "Kooyu/0.2.1";
+var loadConfigBotAgent = () => "Kooyu/1.0.0";
 
 // kooyu:../util/logger.js
 var silent = () => {

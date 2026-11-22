@@ -176,7 +176,7 @@ export function UpdateSection() {
           </span>
           <div className="sx-update-hero__meta">
             <div className="sx-update-hero__title-row">
-              <strong>Kooyu v{status?.currentVersion ?? "0.2.1"}</strong>
+              <strong>Kooyu v{status?.currentVersion ?? "1.0.0"}</strong>
               {status?.updateAvailable && latest ? (
                 <span className="sx-update-badge is-new">
                   <Sparkles size={11} aria-hidden="true" />

@@ -27,8 +27,8 @@
   <a href="https://www.npmjs.com/package/kooyu">
     <img src="https://img.shields.io/npm/v/kooyu?style=flat-square&label=npm&color=141518" alt="npm CLI" />
   </a>
-  <a href="https://github.com/sh2001sh/Kooyu/releases">
-    <img src="https://img.shields.io/github/v/release/sh2001sh/Kooyu?include_prereleases&style=flat-square&label=Release&color=F17561" alt="最新版本" />
+  <a href="https://github.com/sh2001sh/Kooyu/releases/latest">
+    <img src="https://img.shields.io/github/v/release/sh2001sh/Kooyu?style=flat-square&label=Release&color=F17561" alt="最新正式版" />
   </a>
   <a href="https://github.com/sh2001sh/Kooyu/actions/workflows/native-apps.yml">
     <img src="https://img.shields.io/github/actions/workflow/status/sh2001sh/Kooyu/native-apps.yml?branch=main&style=flat-square&label=CI%20%26%20Build" alt="构建状态" />
@@ -43,7 +43,8 @@
   🌐 <strong>官方网站</strong>：<a href="https://kooyu.app"><strong>https://kooyu.app</strong></a> ·
   <a href="https://kooyu.app/download">下载中心</a> ·
   <a href="https://kooyu.app/docs">在线文档</a> ·
-  <a href="https://kooyu.app/account">网页工作台</a>
+  <a href="https://kooyu.app/account">网页工作台</a> ·
+  <a href="CHANGELOG.md">更新日志</a>
 </p>
 
 <p>
@@ -168,18 +169,18 @@ kooyu --help                         # 查看全部命令与参数说明
 
 ### 💻 各平台原生安装包
 
-所有平台安装包均由 GitHub Actions 自动构建并发布至 [**GitHub Releases**](https://github.com/sh2001sh/Kooyu/releases)，也可直接前往官网 [**kooyu.app/download**](https://kooyu.app/download) 下载。
+所有平台安装包均由 GitHub Actions 自动构建并发布至 [**GitHub Releases（最新正式版）**](https://github.com/sh2001sh/Kooyu/releases/latest)，也可直接前往官网 [**kooyu.app/download**](https://kooyu.app/download) 下载。
 
 | 平台 | 架构 / 格式 | 下载地址 |
 | :--- | :--- | :--- |
-| **Windows** | x64 安装程序（`.exe`） | [GitHub Releases](https://github.com/sh2001sh/Kooyu/releases) |
-| **macOS** | Apple Silicon M1–M4 / Intel x64（`.dmg` / `.zip`） | [GitHub Releases](https://github.com/sh2001sh/Kooyu/releases) |
-| **Linux** | x64（`.AppImage` / `.deb`） | [GitHub Releases](https://github.com/sh2001sh/Kooyu/releases) |
-| **Android** | 通用安装包（`.apk`） | [GitHub Releases](https://github.com/sh2001sh/Kooyu/releases) |
-| **iOS** | Apple Silicon 模拟器包（`.zip`） / 源码签名构建 | [GitHub Releases](https://github.com/sh2001sh/Kooyu/releases) |
+| **Windows** | x64 安装程序（`.exe`） | [最新正式版](https://github.com/sh2001sh/Kooyu/releases/latest) |
+| **macOS** | Apple Silicon M1–M4 / Intel x64（`.dmg` / `.zip`） | [最新正式版](https://github.com/sh2001sh/Kooyu/releases/latest) |
+| **Linux** | x64（`.AppImage` / `.deb`） | [最新正式版](https://github.com/sh2001sh/Kooyu/releases/latest) |
+| **Android** | 通用安装包（`.apk`） | [最新正式版](https://github.com/sh2001sh/Kooyu/releases/latest) |
+| **iOS** | Apple Silicon 模拟器包（`.zip`） / 源码签名构建 | [最新正式版](https://github.com/sh2001sh/Kooyu/releases/latest) |
 | **Web / CLI** | 本地 Host + 浏览器工作台 | `npx kooyu@latest` |
 
-> 在软件内打开 **设置 → 通用 → 软件更新** 即可在 **正式版** 与 **预览版** 通道间切换并自动校验 SHA-256 升级。
+> 在软件内打开 **设置 → 通用 → 软件更新** 即可一键检查、自动校验 SHA-256、拉起安装程序（或打开安装包目录），并在 **正式版** 与 **预览版** 通道间自由切换。
 
 ---
 
@@ -187,7 +188,7 @@ kooyu --help                         # 查看全部命令与参数说明
 
 ### Windows
 
-1. 前往 [GitHub Releases](https://github.com/sh2001sh/Kooyu/releases) 下载并运行 **`Kooyu-Setup-<version>.exe`**。
+1. 前往 [GitHub Releases](https://github.com/sh2001sh/Kooyu/releases/latest) 下载并运行 **`Kooyu-Setup-<version>.exe`**。
 2. 由于桌面安装包暂未配置商业代码签名证书，首次运行若弹出 Windows SmartScreen 提示，点击 **「更多信息 → 仍要运行」** 即可（详见 [docs/windows-installation.md](docs/windows-installation.md)）。
 3. 启动后可在任意界面按 **`Alt + Space`** 呼出全局悬浮胶囊；覆盖安装新版会自动保留本地历史对话与配置数据。
 
@@ -225,7 +226,7 @@ shasum -a 256 -c SHA256SUMS.txt --ignore-missing
 
 ```powershell
 # Windows PowerShell
-Get-FileHash .\Kooyu-Setup-0.2.1.exe -Algorithm SHA256
+Get-FileHash .\Kooyu-Setup-1.0.0.exe -Algorithm SHA256
 ```
 
 ---

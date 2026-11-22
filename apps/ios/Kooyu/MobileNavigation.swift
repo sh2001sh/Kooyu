@@ -5,7 +5,7 @@ struct NativeSettingsView: View {
     var inboxCount: Int = 0
     var onOpenInbox: (() -> Void)? = nil
     private var appVersion: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.2.1"
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
     }
     var body: some View {
         let _ = LanguageStore.shared.revision
