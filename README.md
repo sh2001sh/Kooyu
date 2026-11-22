@@ -17,7 +17,7 @@
 <h3>Your Local-First Personal AI Assistant Commanding Every Coding Harness</h3>
 
 <p>
-  Unify <strong>Claude Code</strong>, <strong>Codex</strong>, <strong>DeepSeek</strong>, <strong>Gemini CLI</strong>, <strong>OpenCode</strong>, <strong>Cursor</strong>, <strong>ZCode</strong>, <strong>Kimi Code</strong>, and more under one personal AI assistant. Route tasks intelligently, race engines side-by-side in isolated Git worktrees, keep persistent local memory and zero-token background watches, and approve from Desktop, Web, iOS, Android, or IM — while your code, memory, and keys stay strictly on your own machine.
+  Unify <strong>Claude Code</strong>, <strong>Codex</strong>, <strong>DeepSeek</strong>, <strong>Gemini CLI</strong>, <strong>Google Antigravity</strong>, <strong>OpenCode</strong>, <strong>Cursor</strong>, <strong>ZCode</strong>, <strong>Kimi Code</strong>, and more under one personal AI assistant. Route tasks intelligently, race engines side-by-side in isolated Git worktrees, keep persistent local memory and zero-token background watches, and approve from Desktop, Web, iOS, Android, or IM — while your code, memory, and keys stay strictly on your own machine.
 </p>
 
 <p>
@@ -77,7 +77,7 @@
 ## ✨ Highlights
 
 ### Multi-Harness Orchestration & Engineering Moat
-- **One Supervisor, 10+ Coding Harnesses** — Chat directly with **Claude Code**, **Codex**, **DeepSeek Harness**, **Gemini CLI**, **OpenCode**, **ZCode**, **Cursor**, **Kimi Code**, **Grok Build**, and **pi**, or delegate complex goals to the built-in **Kooyu Supervisor**. Launch ready-made **Playbooks** (implement & cross-review, parallel split, CI/test guard, deep research) and step in or hand back control with one click.
+- **One Supervisor, 11+ Coding Harnesses** — Chat directly with **Claude Code**, **Codex**, **DeepSeek Harness**, **Gemini CLI**, **Google Antigravity**, **OpenCode**, **ZCode**, **Cursor**, **Kimi Code**, **Grok Build**, and **pi**, or delegate complex goals to the built-in **Kooyu Supervisor**. Launch ready-made **Playbooks** (implement & cross-review, parallel split, CI/test guard, deep research) and step in or hand back control with one click.
 - **Smart Routing & Seamless 429 Quota Handoff (`ROUTING.md`)** — Route tasks automatically to the best available Harness by intent and local availability. When an engine hits HTTP `429`, rate limits, or subscription exhaustion, Kooyu packages live progress and workspace context for seamless fallback handoff to the next engine in your chain.
 - **Multi-Harness Arena** — Pit 2–3 Harnesses against the same tough problem in parallel isolated Git worktrees, run real `git diff` + test/benchmark commands (`checkCommand`), inspect the side-by-side scorecard, and accept the winning branch with one click.
 - **Zero-Pollution Git Checkpoints & One-Click Git / PR Delivery** — Capture instant tracked + untracked snapshots in hidden refs (`refs/kooyu/checkpoints/*`) without touching your branch, stash, or `git log` (with automatic pre-restore safety snapshots). Review diffs hunk-by-hunk, merge safely, or open Pull Requests right inside your workspace.
@@ -123,6 +123,7 @@ Kooyu automatically discovers your installed CLI tools and desktop coding apps w
 | **Codex** | Native Coding Agent | ✅ | ✅ |
 | **DeepSeek Harness** | Native Coding Agent | ✅ | ✅ |
 | **Gemini CLI** | Native Coding Agent | ✅ | ✅ |
+| **Google Antigravity** | Native Coding Agent (`agy acp`) | Native account (Dedicated proxy) | ✅ |
 | **OpenCode** | Native Coding Agent | ✅ | ✅ |
 | **ZCode** | Native Coding Agent | ✅ | ✅ |
 | **Cursor** | Native Coding Agent | Native account | ✅ |
@@ -226,7 +227,7 @@ shasum -a 256 -c SHA256SUMS.txt --ignore-missing
 
 ```powershell
 # Windows PowerShell
-Get-FileHash .\Kooyu-Setup-1.0.0.exe -Algorithm SHA256
+Get-FileHash .\Kooyu-Setup-1.0.1.exe -Algorithm SHA256
 ```
 
 ---
@@ -258,7 +259,7 @@ flowchart LR
     API["Workspace API & Live Stream"]
     Supervisor["Kooyu Personal Assistant\n(Workspace Docs · Memory · Skills · Watch Radar)"]
     Router["Smart Router · 429 Handoff · Arena"]
-    Adapters["10+ Native Coding Harnesses"]
+    Adapters["11+ Native Coding Harnesses"]
     Tools["Worktrees · Git Checkpoints · Preview\nPTY Terminal · Shared-Login Browser · Local KB"]
     Storage[("Local SQLite · Markdown Docs · OS Vault")]
   end

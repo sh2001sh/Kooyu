@@ -17,7 +17,7 @@
 <h3>掌控全部编程引擎的本地优先个人 AI 助手</h3>
 
 <p>
-  将 <strong>Claude Code</strong>、<strong>Codex</strong>、<strong>DeepSeek</strong>、<strong>Gemini CLI</strong>、<strong>OpenCode</strong>、<strong>Cursor</strong>、<strong>ZCode</strong>、<strong>Kimi Code</strong> 等多款编程 Harness 收归同一私人 AI 助手。支持智能路由与限流无感接力、隔离分支同题竞技场、本地持久记忆与零 Token 定时值守，并可随时通过桌面端、网页工作台、iOS / Android 与微信/飞书/Telegram 拍板接管——所有代码、记忆与密钥始终留在你自己的设备。
+  将 <strong>Claude Code</strong>、<strong>Codex</strong>、<strong>DeepSeek</strong>、<strong>Gemini CLI</strong>、<strong>Google Antigravity</strong>、<strong>OpenCode</strong>、<strong>Cursor</strong>、<strong>ZCode</strong>、<strong>Kimi Code</strong> 等多款编程 Harness 收归同一私人 AI 助手。支持智能路由与限流无感接力、隔离分支同题竞技场、本地持久记忆与零 Token 定时值守，并可随时通过桌面端、网页工作台、iOS / Android 与微信/飞书/Telegram 拍板接管——所有代码、记忆与密钥始终留在你自己的设备。
 </p>
 
 <p>
@@ -77,7 +77,7 @@
 ## ✨ 核心特性
 
 ### 多 Harness 统一编排与工程护城河
-- **一个主控，统筹 10+ 编程引擎** — 可直接与 **Claude Code**、**Codex**、**DeepSeek Harness**、**Gemini CLI**、**OpenCode**、**ZCode**、**Cursor**、**Kimi Code**、**Grok Build**、**pi** 对话，也可把复杂任务交给内置 **Kooyu 主控助手**统一拆解。内置多套**工作剧本**（实现+跨引擎审查、并行拆分、测试与 CI 守卫、深度调研），实时查看进度卡片，一键下钻接管或交还主控。
+- **一个主控，统筹 11+ 编程引擎** — 可直接与 **Claude Code**、**Codex**、**DeepSeek Harness**、**Gemini CLI**、**Google Antigravity**、**OpenCode**、**ZCode**、**Cursor**、**Kimi Code**、**Grok Build**、**pi** 对话，也可把复杂任务交给内置 **Kooyu 主控助手**统一拆解。内置多套**工作剧本**（实现+跨引擎审查、并行拆分、测试与 CI 守卫、深度调研），实时查看进度卡片，一键下钻接管或交还主控。
 - **智能路由与 429 限流自动接力（`ROUTING.md`）** — 按任务类型与本机可用引擎自动路由最佳 Harness；当某一引擎触发 HTTP `429`、速率限制或订阅配额耗尽时，Kooyu 自动汇总当前进展与工作区改动，无感移交备用链中的下一个引擎续跑。
 - **多引擎同题竞技场（Multi-Harness Arena）** — 面对核心性能或重构难题，一键在 2～3 组隔离 Git Worktree 中向不同引擎并行派发同一任务，自动运行真实 `git diff` 与测试/基准命令（`checkCommand`）输出记分卡，一键采纳胜出方案。
 - **无痕 Git Checkpoints（「后悔药」时间轴）与一键 PR 交付** — 通过独立临时索引将已追踪与未追踪文件快照写入隐藏引用 `refs/kooyu/checkpoints/*`，零 `git log` / stash 污染，回滚前自动保留安全点；配合逐块 Hunk Diff 审查与工作台内直接合入 / 发 PR，大胆并发零心理负担。
@@ -123,6 +123,7 @@ Kooyu 自动发现本机已安装的 CLI 工具与桌面编程应用，完整保
 | **Codex** | 原生编程代理 | ✅ | ✅ |
 | **DeepSeek Harness** | 原生编程代理 | ✅ | ✅ |
 | **Gemini CLI** | 原生编程代理 | ✅ | ✅ |
+| **Google Antigravity** | 原生编程代理（`agy acp`） | 原生账号（支持独立代理） | ✅ |
 | **OpenCode** | 原生编程代理 | ✅ | ✅ |
 | **ZCode** | 原生编程代理 | ✅ | ✅ |
 | **Cursor** | 原生编程代理 | 原生账号 | ✅ |
@@ -226,7 +227,7 @@ shasum -a 256 -c SHA256SUMS.txt --ignore-missing
 
 ```powershell
 # Windows PowerShell
-Get-FileHash .\Kooyu-Setup-1.0.0.exe -Algorithm SHA256
+Get-FileHash .\Kooyu-Setup-1.0.1.exe -Algorithm SHA256
 ```
 
 ---
@@ -258,7 +259,7 @@ flowchart LR
     API["工作台 API 与实时事件流"]
     Supervisor["Kooyu 个人 AI 助手\n(工作区文档 · 持久记忆 · 技能沉淀 · 值守雷达)"]
     Router["智能路由 · 429 接力 · 同题竞技场"]
-    Adapters["10+ 原生编程代理"]
+    Adapters["11+ 原生编程代理"]
     Tools["隔离分支 · Git 无痕快照 · 实时预览\n内置终端 · 共享登录浏览器 · 本地知识库"]
     Storage[("本地 SQLite · Markdown 文档 · 系统密钥库")]
   end

@@ -357,7 +357,7 @@ private fun SettingsRow(
     val versionName = remember(context) {
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }
             .getOrNull()
-            ?.takeIf { it.isNotBlank() } ?: "1.0.0"
+            ?.takeIf { it.isNotBlank() } ?: "1.0.1"
     }
     var detail by rememberSaveable { mutableStateOf<String?>(null) }
     var showDeleteDeviceDialog by remember { mutableStateOf(false) }

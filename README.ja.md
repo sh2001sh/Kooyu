@@ -17,7 +17,7 @@
 <h3>すべてのコーディングエンジンを操る、ローカルファーストのパーソナル AI アシスタント</h3>
 
 <p>
-  <strong>Claude Code</strong>、<strong>Codex</strong>、<strong>DeepSeek</strong>、<strong>Gemini CLI</strong>、<strong>OpenCode</strong>、<strong>Cursor</strong>、<strong>ZCode</strong>、<strong>Kimi Code</strong> などの開発エンジンをひとつのパーソナル AI アシスタントに統合。スマートルーティング・制限時自動リレー、隔離 Worktree 競技場、ローカル永続記憶、ゼロトークン見守りを備え、デスクトップ・Web・iOS・Android・IM からいつでも制御できます。
+  <strong>Claude Code</strong>、<strong>Codex</strong>、<strong>DeepSeek</strong>、<strong>Gemini CLI</strong>、<strong>Google Antigravity</strong>、<strong>OpenCode</strong>、<strong>Cursor</strong>、<strong>ZCode</strong>、<strong>Kimi Code</strong> などの開発エンジンをひとつのパーソナル AI アシスタントに統合。スマートルーティング・制限時自動リレー、隔離 Worktree 競技場、ローカル永続記憶、ゼロトークン見守りを備え、デスクトップ・Web・iOS・Android・IM からいつでも制御できます。
 </p>
 
 <p>
@@ -77,7 +77,7 @@
 ## ✨ 主な特徴
 
 ### マルチ Harness 指揮とエンジニアリング基盤
-- **1 つの主控で 10+ コーディングエンジンを統括** — **Claude Code**、**Codex**、**DeepSeek Harness**、**Gemini CLI**、**OpenCode**、**ZCode**、**Cursor**、**Kimi Code**、**Grok Build**、**pi** と直接対話でき、複雑な要件は内蔵の **Kooyu スーパーバイザー**へ委譲可能。実装＋別エンジンレビュー、並列分割、CI ガード、深掘り調査などのプレイブックを搭載。
+- **1 つの主控で 11+ コーディングエンジンを統括** — **Claude Code**、**Codex**、**DeepSeek Harness**、**Gemini CLI**、**Google Antigravity**、**OpenCode**、**ZCode**、**Cursor**、**Kimi Code**、**Grok Build**、**pi** と直接対話でき、複雑な要件は内蔵の **Kooyu スーパーバイザー**へ委譲可能。実装＋別エンジンレビュー、並列分割、CI ガード、深掘り調査などのプレイブックを搭載。
 - **スマートルーティング & 429 レート制限自動リレー（`ROUTING.md`）** — タスク種別に応じて最適なエンジンを自動選択。`429` やクォータ上限に達した場合、進捗と差分をまとめて次の予備エンジンへシームレスに引き継ぎます。
 - **マルチエンジン競技場（Multi-Harness Arena）** — 2〜3 種類のエンジンへ隔離 Git Worktree 上で同一課題を並列出題。実 `git diff` とテストコマンド（`checkCommand`）によるスコアカードを比較し、勝者ブランチをワンクリック採用できます。
 - **無痕 Git チェックポイント & ワンクリック PR 交付** — 隠し参照（`refs/kooyu/checkpoints/*`）へ追跡・未追跡ファイルのスナップショットを保存し、`git log` や stash を汚さず即座に復元可能（復元前の保護スナップショット自動作成）。Hunk 単位の差分確認からマージ・PR 作成まで完結します。
@@ -123,6 +123,7 @@
 | **Codex** | ネイティブエージェント | ✅ | ✅ |
 | **DeepSeek Harness** | ネイティブエージェント | ✅ | ✅ |
 | **Gemini CLI** | ネイティブエージェント | ✅ | ✅ |
+| **Google Antigravity** | ネイティブエージェント（`agy acp`） | ネイティブ認証（専用プロキシ対応） | ✅ |
 | **OpenCode** | ネイティブエージェント | ✅ | ✅ |
 | **ZCode** | ネイティブエージェント | ✅ | ✅ |
 | **Cursor** | ネイティブエージェント | ネイティブ認証 | ✅ |
@@ -221,7 +222,7 @@ shasum -a 256 -c SHA256SUMS.txt --ignore-missing
 
 ```powershell
 # Windows PowerShell
-Get-FileHash .\Kooyu-Setup-1.0.0.exe -Algorithm SHA256
+Get-FileHash .\Kooyu-Setup-1.0.1.exe -Algorithm SHA256
 ```
 
 ---
@@ -252,7 +253,7 @@ flowchart LR
     API["ワークスペース API & ライブストリーム"]
     Supervisor["Kooyu パーソナル AI アシスタント\n(文書 · 永続記憶 · スキル · 見守りレーダー)"]
     Router["スマートルーティング · 429 リレー · 競技場"]
-    Adapters["10+ ネイティブエージェント"]
+    Adapters["11+ ネイティブエージェント"]
     Tools["Worktree · Git スナップショット · プレビュー\n内蔵端末 · 共有セッションブラウザ · ローカル KB"]
     Storage[("ローカル SQLite · Markdown 文書 · OS 鍵ストア")]
   end

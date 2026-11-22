@@ -2,6 +2,16 @@
 
 All notable releases of **Kooyu** are documented in this file.
 
+## v1.0.1 — 2026-11-22
+
+Adds native **Google Antigravity** harness integration across Desktop, Web, Android, and iOS, along with dedicated proxy configuration and CI hardening.
+
+### Highlights / 核心更新
+
+- **Google Antigravity Harness Support (`agy acp`)**: Added full native ACP integration for **Google Antigravity**, including automatic CLI discovery, runtime model & permission negotiation, session history reading and listing, and native visual badges/controls across Desktop, Web Workbench, Android, and iOS (now supporting **12 harnesses** under one personal AI assistant).
+- **Dedicated Antigravity Proxy Configuration**: Added independent HTTP/HTTPS/SOCKS proxy settings for Antigravity in **Settings → Engines**, with live validation, persistence, and clean clearing without affecting other harnesses.
+- **Reliability & CI Stability**: Increased `process-guard` cold-start tolerance for loaded macOS runners and verified the full 12-harness test suite across Ubuntu, macOS, Windows, Android, and iOS.
+
 ## v1.0.0 — 2026-11-22
 
 First official stable release of **Kooyu** across Desktop (Windows, macOS Apple Silicon & Intel, Linux), Mobile (Android & iOS), and Web / npm CLI (`npx kooyu@latest`).
