@@ -133,7 +133,7 @@ private struct TerminalSurface: UIViewRepresentable {
         let owner: TerminalSurface
         init(_ owner: TerminalSurface) { self.owner = owner }
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
-                     decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+                     decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void) {
             let page = Bundle.main.url(forResource: "index", withExtension: "html", subdirectory: "TerminalAssets")
             decisionHandler(page != nil && action.request.url == page && action.targetFrame?.isMainFrame == true ? .allow : .cancel)
         }

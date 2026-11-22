@@ -200,7 +200,7 @@ private struct WorkPlanEditor: View {
     @State private var timing = PlanTiming(.null)
     @State private var preview: [JSONValue] = []
     private func bodyFields() throws -> [String: JSONValue] {
-        guard !name.isEmpty, !prompt.isEmpty, !zone.isEmpty, maxRuns.isEmpty || (Int(maxRuns) ?? -1) >= 0, maxCost.isEmpty || Double(maxCost).map { $0.isFinite && $0 >= 0 } == true else { throw APIError(message: "请填写名称、内容与时区；次数须为非负整数，预算须为非负数；0 表示不限制。", status: 400) }
+        guard !name.isEmpty, !prompt.isEmpty, !zone.isEmpty, maxRuns.isEmpty || (Int(maxRuns) ?? -1) >= 0, maxCost.isEmpty || Double(maxCost).map({ $0.isFinite && $0 >= 0 }) == true else { throw APIError(message: "请填写名称、内容与时区；次数须为非负整数，预算须为非负数；0 表示不限制。", status: 400) }
         var fields = plan.object
         for key in ["id", "revision", "dispatchGeneration", "effectiveAt", "nextDueAt", "createdAt", "updatedAt"] { fields.removeValue(forKey: key) }
         fields["expectedRevision"] = plan["revision"]; fields["name"] = .string(name); fields["promptTemplate"] = .string(prompt); fields["timeZone"] = .string(zone); fields["enabled"] = .bool(true)

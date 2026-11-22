@@ -60,7 +60,9 @@ actor CloudDevice {
     private func endpoint(_ path: String) -> URL { issuer.appendingPathComponent("api/device-auth/v1/" + path) }
     func beginLogin() async throws -> (String, String, URL) {
         let point = try P256.Signing.PrivateKey(x963Representation: stored.key).publicKey.x963Representation
-        let jwk = ["crv": "P-256", "kty": "EC", "x": b64(Data(point[1..<33])), "y": b64(Data(point[33..<65]))]
+        let x = b64(point.subdata(in: 1..<33))
+        let y = b64(point.subdata(in: 33..<65))
+        let jwk: [String: String] = ["crv": "P-256", "kty": "EC", "x": x, "y": y]
         let canonical = try JSONSerialization.data(withJSONObject: jwk, options: [.sortedKeys])
         let result = try await call(endpoint("discovery/start"), ["name": "Kooyu iOS", "jkt": b64(Data(SHA256.hash(data: canonical)))])
         guard let device = result["deviceCode"]?.string, let code = result["userCode"]?.string else { throw SecureTunnel.invalid }
@@ -109,7 +111,9 @@ actor CloudDevice {
     private func proof(_ url:URL,_ method:String,_ nonce:String,_ token:String)throws->String {
         let privateKey=try P256.Signing.PrivateKey(x963Representation:stored.key)
         let point=privateKey.publicKey.x963Representation
-        let jwk=["kty":"EC","crv":"P-256","x":b64(Data(point[1..<33])),"y":b64(Data(point[33..<65]))]
+        let x = b64(point.subdata(in: 1..<33))
+        let y = b64(point.subdata(in: 33..<65))
+        let jwk: [String: String] = ["kty": "EC", "crv": "P-256", "x": x, "y": y]
         let attrs:[CFString:Any]=[kSecAttrKeyType:kSecAttrKeyTypeECSECPrimeRandom,kSecAttrKeyClass:kSecAttrKeyClassPrivate]
         guard let secKey=SecKeyCreateWithData(stored.key as CFData,attrs as CFDictionary,nil),
               let signer=Signer(signatureAlgorithm:.ES256,key:secKey) else {throw SecureTunnel.invalid}

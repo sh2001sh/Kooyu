@@ -57,7 +57,7 @@ struct RootView: View {
         }
         .task(id: "\(phase == .active)-\(model.book.devices.map { $0.hostId + $0.deviceId }.joined())") {
             guard phase == .active else { return }
-            model.push.isVisible = { [weak model] target in await model?.notificationIsVisible(target) ?? false }
+            model.push.isVisible = { [weak weakModel = model] target in await weakModel?.notificationIsVisible(target) ?? false }
             await model.push.sync(model.book.devices)
         }
         .task(id: "\(phase == .active)-\(model.connection?.token ?? "")") {
